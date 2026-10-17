@@ -10,12 +10,14 @@ from __future__ import annotations
 import inspect
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 import numpy as np
-from mcp.server.mcpserver import MCPServer
 
 from soundthing.events.tuning import bootstrap, space, sweep
+
+if TYPE_CHECKING:
+    from mcp.server.mcpserver import MCPServer
 
 OBJECTIVE_NAME: str = "f0.5_conditioned_micro"  # mirror of objective.OBJECTIVE, dedupe when Track A lands
 
@@ -264,7 +266,6 @@ class TuningTools:
             }
             if is_shared:
                 reply["note"] = "use propose_shared_change; promote will refuse"
-                reply["message"] = "use propose_shared_change; promote will refuse"
             return reply
 
     def sweep(
@@ -352,6 +353,8 @@ def build_server(tools: TuningTools | None = None) -> MCPServer:
     """Build and configure the soundthing tuning MCP server."""
     if tools is None:
         tools = TuningTools()
+
+    from mcp.server.mcpserver import MCPServer  # optional `tuning` extra
 
     server = MCPServer(name="soundthing-tuning", instructions=INSTRUCTIONS)
 
