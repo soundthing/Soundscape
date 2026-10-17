@@ -618,6 +618,30 @@ def append_tuning_log(
         f.write(new_content)
 
 
+def _refuse(
+    ledger: Any,
+    run_id: str,
+    reason: str,
+    git_info: dict[str, Any],
+    holdout_pass: bool | None = None,
+    ci: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    ledger.append({
+        "kind": "promote",
+        "run_id": run_id,
+        "promoted": False,
+        "reason": reason,
+        "holdout_pass": holdout_pass,
+        "bootstrap": ci,
+        "git": git_info,
+    })
+    return {
+        "run_id": run_id,
+        "promoted": False,
+        "reason": reason,
+    }
+
+
 def promote(
     run_id: str,
     *,
@@ -674,21 +698,7 @@ def promote(
 
     # 1. overrides empty -> reason "no overrides"
     if not overrides:
-        reason = "no overrides"
-        ledger.append({
-            "kind": "promote",
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-            "holdout_pass": None,
-            "bootstrap": None,
-            "git": git_info,
-        })
-        return {
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-        }
+        return _refuse(ledger, run_id, "no overrides", git_info)
 
     # 2. Any shared key -> reason mentions propose_shared_change.
     # Any key failing split_target -> reason with PromoteError message.
@@ -707,38 +717,11 @@ def promote(
                 break
 
     if reason is not None:
-        ledger.append({
-            "kind": "promote",
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-            "holdout_pass": None,
-            "bootstrap": None,
-            "git": git_info,
-        })
-        return {
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-        }
+        return _refuse(ledger, run_id, reason, git_info)
 
     # 3. entry["passed"] not True -> "limits not passed"
     if not candidate.get("passed", False):
-        reason = "limits not passed"
-        ledger.append({
-            "kind": "promote",
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-            "holdout_pass": None,
-            "bootstrap": None,
-            "git": git_info,
-        })
-        return {
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-        }
+        return _refuse(ledger, run_id, "limits not passed", git_info)
 
     # 4. Bootstrap: comparator per_clip = ledger.best()["per_clip"] if a best exists,
     # else score_fn(overrides={}, split="dev", cfg=cfg).per_clip (current config).
@@ -759,61 +742,23 @@ def promote(
             comparator = getattr(cur_res, "per_clip")
             before = getattr(cur_res, "objective")
 
-    ci = bootstrap.paired_bootstrap(candidate["per_clip"], comparator, n=n_boot, seed=seed)
+    try:
+        ci = bootstrap.paired_bootstrap(candidate["per_clip"], comparator, n=n_boot, seed=seed)
+    except ValueError:
+        return _refuse(ledger, run_id, "bootstrap: no common clips with comparator", git_info)
+
     if not bootstrap.accepts(ci):
-        reason = "bootstrap lower bound <= 0"
-        ledger.append({
-            "kind": "promote",
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-            "holdout_pass": None,
-            "bootstrap": ci,
-            "git": git_info,
-        })
-        return {
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-        }
+        return _refuse(ledger, run_id, "bootstrap lower bound <= 0", git_info, ci=ci)
 
     # 5. holdout_fn(overrides) False -> "holdout failed".
     # If it raises PromoteError -> reason with its message.
     try:
         passed_holdout = holdout_fn(overrides)
     except PromoteError as e:
-        reason = str(e)
-        ledger.append({
-            "kind": "promote",
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-            "holdout_pass": None,
-            "bootstrap": ci,
-            "git": git_info,
-        })
-        return {
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-        }
+        return _refuse(ledger, run_id, str(e), git_info, ci=ci)
 
     if not passed_holdout:
-        reason = "holdout failed"
-        ledger.append({
-            "kind": "promote",
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-            "holdout_pass": False,
-            "bootstrap": ci,
-            "git": git_info,
-        })
-        return {
-            "run_id": run_id,
-            "promoted": False,
-            "reason": reason,
-        }
+        return _refuse(ledger, run_id, "holdout failed", git_info, holdout_pass=False, ci=ci)
 
     # On success:
     space_idx = space.space_index(space.describe_space(cfg, None))
@@ -821,7 +766,11 @@ def promote(
     for k in overrides:
         old[k] = _get_old_value(k, space_idx, config_dir)
 
-    changed = write_overrides(overrides, config_dir)
+    try:
+        changed = write_overrides(overrides, config_dir)
+    except PromoteError as e:
+        return _refuse(ledger, run_id, f"write failed: {e}", git_info, holdout_pass=True, ci=ci)
+
     git_sha = str(git_info.get("sha", ""))
     ledger.set_best({**candidate, "git_sha": git_sha})
     append_tuning_log(tuning_log_path, candidate, old, ci, before, git_sha)

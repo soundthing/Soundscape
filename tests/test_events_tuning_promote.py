@@ -518,6 +518,13 @@ def test_promote_refusals(repo_root: Path):
         ("shared_key", {"overrides": {"vocabulary.gunshot.clap": ["woof"]}}, lambda ov: True, "propose_shared_change", None),
         ("limits_not_passed", {"passed": False}, lambda ov: True, "limits not passed", None),
         ("bootstrap_fail", {"per_clip": best_per_clip}, lambda ov: True, "bootstrap lower bound <= 0", None),
+        (
+            "bootstrap_no_common_clips",
+            {"per_clip": {"disjoint_clip_1": {"conditioned": {"tp_fine": 10, "tp_coarse": 0, "fp": 0, "fn": 1}}}},
+            lambda ov: True,
+            "bootstrap: no common clips with comparator",
+            None,
+        ),
         ("holdout_failed", {}, lambda ov: False, "holdout failed", False),
         ("holdout_error", {}, raise_holdout, "holdout set not available", None),
         ("no_overrides", {"overrides": {}}, lambda ov: True, "no overrides", None),
@@ -721,3 +728,64 @@ def test_append_tuning_log_formatting(tmp_path: Path):
     idx2 = content2.index("promote run_test_2")
     assert idx2 < idx1
 
+
+def test_promote_write_failure_refusal(repo_root: Path, monkeypatch: pytest.MonkeyPatch):
+    cand_per_clip, best_per_clip = make_per_clip_data(30, fp_cand=0, fp_best=5)
+
+    cand_entry = {
+        "run_id": "cand_write_fail",
+        "kind": "score",
+        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "objective": 0.88,
+        "baseline": 0.70,
+        "wrong_env": 0.65,
+        "passed": True,
+        "per_clip": cand_per_clip,
+    }
+    best_entry = {
+        "run_id": "best_000",
+        "kind": "score",
+        "objective": 0.72,
+        "passed": True,
+        "per_clip": best_per_clip,
+    }
+
+    ledger = FakeLedger(entries=[best_entry, cand_entry], best_entry=best_entry)
+
+    import soundthing.events.tuning.promote as promote_mod
+
+    def mock_write_overrides(overrides, config_dir):
+        raise PromoteError("Config validation failed after editing: simulated test error")
+
+    monkeypatch.setattr(promote_mod, "write_overrides", mock_write_overrides)
+
+    tuning_log_path = repo_root / "src" / "soundthing" / "events" / "references" / "tuning-log.md"
+    orig_log_text = tuning_log_path.read_text(encoding="utf-8")
+
+    res = promote(
+        "cand_write_fail",
+        ledger=ledger,
+        holdout_fn=lambda ov: True,
+        root=repo_root,
+        n_boot=100,
+        seed=42,
+    )
+
+    # Returns refusal
+    assert res["promoted"] is False
+    assert res["reason"] == "write failed: Config validation failed after editing: simulated test error"
+
+    # Exactly one promote entry in ledger
+    promote_entries = [e for e in ledger.entries if e.get("kind") == "promote"]
+    assert len(promote_entries) == 1
+    pe = promote_entries[0]
+    assert pe["promoted"] is False
+    assert pe["reason"] == res["reason"]
+    assert pe["holdout_pass"] is True
+    assert pe["bootstrap"] is not None
+
+    # set_best was NOT called
+    assert ledger.set_best_called is None
+
+    # tuning-log was NOT written
+    assert tuning_log_path.read_text(encoding="utf-8") == orig_log_text

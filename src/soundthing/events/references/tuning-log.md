@@ -4,8 +4,8 @@ One entry per eval run that informed a decision, newest first. Record the change
 clips used, and the numbers from `soundthing eval` (fine/coarse F1, FP/min) for both
 baseline and conditioned. Note what was kept or reverted and why.
 
-Entries titled `promote <run_id>` are appended automatically by `promote` (format above,
-holdout shown as pass only). Keep the manual format block below for hand-run evals.
+Entries titled `promote <run_id>` are written automatically by the tuning harness's `promote`
+(holdout reported as pass only). The format below is for hand-run evals.
 
 Format:
 
