@@ -16,6 +16,7 @@ import soundfile as sf
 
 from soundthing.config import load_config
 from soundthing.contracts import ClipLabels, LabeledEvent, load_labels, save_labels
+import soundthing.events.tuning as tuning_pkg
 from soundthing.events.tuning import datasets
 from soundthing.events.tuning.datasets import (
     _load_mono_16k,
@@ -583,6 +584,7 @@ def test_build_dev_caches_workflow(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     fake_cache.save_cache = fake_save_cache
 
     monkeypatch.setitem(sys.modules, "soundthing.events.tuning.cache", fake_cache)
+    monkeypatch.setattr(tuning_pkg, "cache", fake_cache, raising=False)
 
     labels_dir = tmp_path / "labels"
     audio_dir = tmp_path / "audio"
@@ -694,3 +696,11 @@ def test_no_hardcoded_ids_in_datasets_py():
                 found_ids.append(f"env_id: {val} at line {node.lineno}")
 
     assert not found_ids, f"Hardcoded vocabulary or environment ids found in datasets.py: {found_ids}"
+
+
+def test_fsd50k_map_has_no_parent_of_another_mapped_class():
+    """Parent labels co-occur with child labels on every child clip (FSD50K propagates)."""
+    fsd_map = datasets.load_datasets_yaml()["fsd50k"]["map"]
+    for parent in ("Alarm", "Door", "Glass"):
+        assert parent not in fsd_map
+

@@ -62,10 +62,12 @@ esc50:
     - water_drops
 
 fsd50k:
+  # FSD50K labels are hierarchy-propagated: never map a parent label (Alarm, Door,
+  # Glass, ...) whose children map to other classes, or every child clip becomes
+  # two-class and is dropped (or mislabeled).
   map:
     Accelerating_and_revving_and_vroom: engine_rev
     Aircraft: aircraft
-    Alarm: alarm_ringing
     Applause: applause
     Bark: dog_bark
     Bird_vocalization_and_bird_call_and_bird_song: birdsong
@@ -82,14 +84,12 @@ fsd50k:
     Crowd: crowd_murmur
     Cutlery_and_silverware: dishes
     Dishes_and_pots_and_pans: dishes
-    Door: door_open_close
     Doorbell: doorbell
     Engine_starting: engine_start
     Explosion: explosion
     Fireworks: fireworks
     Fixed-wing_aircraft_and_airplane: aircraft
     Frying_(food): sizzling
-    Glass: glass_break
     Gunshot_and_gunfire: gunshot
     Helicopter: helicopter
     Insect: insects

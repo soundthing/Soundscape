@@ -313,6 +313,18 @@ def _merge_manifest(
     return manifest_path
 
 
+def _validate_maps(datasets_cfg: dict[str, Any], cfg: Config) -> None:
+    """Every class id a dataset label maps to must exist in the vocabulary."""
+    valid_class_ids = set(cfg.class_ids)
+    for section_val in datasets_cfg.values():
+        if isinstance(section_val, dict) and "map" in section_val:
+            for cat, cid in (section_val["map"] or {}).items():
+                if cid not in valid_class_ids:
+                    raise ValueError(
+                        f"Mapped class id {cid!r} (for category {cat!r}) is not in cfg.class_ids"
+                    )
+
+
 def esc50_mixes(
     esc50_dir: Path,
     cfg: Config,
@@ -326,14 +338,7 @@ def esc50_mixes(
     datasets_cfg = load_datasets_yaml()
     mix_cfg = datasets_cfg.get("mix", {})
 
-    valid_class_ids = set(cfg.class_ids)
-    for section_name, section_val in datasets_cfg.items():
-        if isinstance(section_val, dict) and "map" in section_val:
-            for cat, cid in section_val["map"].items():
-                if cid not in valid_class_ids:
-                    raise ValueError(
-                        f"Mapped class id {cid!r} (for category {cat!r}) is not in cfg.class_ids"
-                    )
+    _validate_maps(datasets_cfg, cfg)
 
     esc_section = datasets_cfg.get("esc50", {})
     esc_map = esc_section.get("map", {})
@@ -438,14 +443,7 @@ def fsd50k_mixes(
     datasets_cfg = load_datasets_yaml()
     mix_cfg = datasets_cfg.get("mix", {})
 
-    valid_class_ids = set(cfg.class_ids)
-    for section_name, section_val in datasets_cfg.items():
-        if isinstance(section_val, dict) and "map" in section_val:
-            for cat, cid in section_val["map"].items():
-                if cid not in valid_class_ids:
-                    raise ValueError(
-                        f"Mapped class id {cid!r} (for category {cat!r}) is not in cfg.class_ids"
-                    )
+    _validate_maps(datasets_cfg, cfg)
 
     fsd_section = datasets_cfg.get("fsd50k", {})
     fsd_map = fsd_section.get("map", {})

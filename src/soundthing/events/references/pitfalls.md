@@ -47,4 +47,5 @@ cause is gone.
   `Domestic_animals_and_pets`) appear alongside specific leaf labels on every clip.
   Filtering for clips that reach exactly one distinct mapped class prevents multi-source
   contamination while allowing clips with multiple ontology tags that map to the same
-  target class.
+  target class. So never map a parent label (`Alarm`, `Door`, `Glass`) whose children
+  map to other classes: every siren/knock clip would turn two-class and be dropped.
