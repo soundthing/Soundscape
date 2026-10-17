@@ -21,7 +21,6 @@ from soundthing.events.tuning import ledger as ledger_module
 from soundthing.events.tuning.score import score as score_func
 
 
-
 WRITABLE_PREFIXES = ("events.", "thresholds.")
 
 
@@ -509,7 +508,6 @@ def holdout_check(
     return bool(passed)
 
 
-
 def _format_tuning_log_entry(
     entry: dict[str, Any],
     old: dict[str, Any],
@@ -670,7 +668,6 @@ def promote(
 
     if ledger is None:
         ledger = ledger_module
-
 
     if holdout_fn is None:
         holdout_fn = lambda ov: holdout_check(ov, score_fn=score_fn, cfg=cfg)

@@ -35,7 +35,6 @@ INSTRUCTIONS: str = (
 )
 
 
-
 def _make_json_safe(obj: Any) -> Any:
     """Convert numpy scalars and non-standard types to JSON-serialisable Python types."""
     if isinstance(obj, (np.floating, float)):
@@ -137,7 +136,6 @@ class TuningTools:
     @propose_fn.setter
     def propose_fn(self, value: Any) -> None:
         self._propose_fn = value
-
 
     @property
     def recache_fn(self) -> Any:
@@ -321,7 +319,6 @@ class TuningTools:
             path_str = str(path)
             self.ledger.append({"kind": "proposal", "path": path_str, "run_id": run_id})
             return {"path": path_str, "run_id": run_id}
-
 
     def request_recache(self, window: float, hop: float, model: str) -> dict[str, Any]:
         """Request audio feature cache rebuilding via Kaggle GPU kernel."""

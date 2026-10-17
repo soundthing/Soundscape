@@ -686,7 +686,6 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
 
 
-
 def test_append_tuning_log_formatting(tmp_path: Path):
     log_file = tmp_path / "tuning-log.md"
     log_file.write_text(

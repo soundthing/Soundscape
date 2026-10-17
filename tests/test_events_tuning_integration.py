@@ -254,7 +254,8 @@ def test_tuning_integration_end_to_end(
                 if "holdout" in k and k != "holdout_pass":
                     pytest.fail(f"Promote entry contains holdout field: {k}={entry[k]}")
         else:
-            assert "holdout" not in entry or entry.get("split") == "holdout"
+            assert entry.get("split") != "holdout"
+            assert not any("holdout" in k for k in entry)
 
     # d. A second tools.score after promotion returns a bootstrap dict (best exists)
     res_d = tools.score(

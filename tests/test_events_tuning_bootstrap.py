@@ -14,7 +14,6 @@ from soundthing.events.tuning.bootstrap import (
 from soundthing.events.tuning.objective import ClipMatch, f_beta
 
 
-
 def test_pooled_f_beta_hand_computed_cases():
     """Verify pooled_f_beta hand-computed boundary and reference cases."""
     # 1. All zero -> 0.0

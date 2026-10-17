@@ -217,7 +217,6 @@ def is_shared(key: str) -> bool:
     return overrides.touches_shared({key: None})
 
 
-
 def dev_event_counts(labels_dir: Path | None = None) -> dict[str, int]:
     """Count events per class_id over all *.json in labels_dir.
 

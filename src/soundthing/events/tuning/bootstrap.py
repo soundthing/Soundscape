@@ -11,7 +11,6 @@ from typing import Any
 
 import numpy as np
 
-
 from soundthing.events.tuning.objective import ClipMatch, f_beta
 
 
@@ -28,7 +27,6 @@ def pooled_f_beta(
         fn=fn,
     )
     return f_beta([m], beta=beta)
-
 
 
 def _get_counts(entry: Any, mode: str) -> tuple[float, float, float, float]:

@@ -539,4 +539,3 @@ def test_8_request_recache(tuning_env: dict[str, Any], monkeypatch: pytest.Monke
     with pytest.raises(RuntimeError) as exc_info:
         tools_no_recache.request_recache(window=1.0, hop=0.5, model="panns")
     assert "kaggle_io" in str(exc_info.value)
-

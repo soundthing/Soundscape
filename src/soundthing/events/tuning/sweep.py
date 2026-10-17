@@ -31,7 +31,6 @@ def result_as_dict(result: Any) -> dict[str, Any]:
     return dict(result)
 
 
-
 def log_result(result: Any, hypothesis: str, ledger: Any) -> dict[str, Any]:
     """Build and append a score result entry to the ledger."""
     entry = {
@@ -242,7 +241,6 @@ def sweep(
 
         if budget > 1:
             study.optimize(objective_fn, n_trials=budget - 1)
-
 
     return {
         "strategy": strategy,
