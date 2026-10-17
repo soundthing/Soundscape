@@ -85,3 +85,18 @@ predict official evaluation results.
 
 ## Split detection into cached model stage and replay — events
 Detection is split into a cached model stage (`ClipCache`) and a replayable post-model stage (`replay`). Known accepted behaviour changes: tagger and CLAP audio embeddings pass through float16 to conserve memory (~1 MB/min); VAD regions come from per-chunk probs. Production detector and tuning harness share the exact same replay path. In-process memo in `detector.detect` caches the single most recent `ClipCache` by audio path, mtime, size, cache_key and models_cache_key so conditioned runs on the same file avoid recomputation.
+
+## Tuning acceptance uses limits vs current best plus paired bootstrap — events
+Acceptance requires passing limits vs the current best (safety recall, FP/min, above baseline, wrong-environment robustness) plus a paired bootstrap over clips where the lower 95% confidence bound of F0.5 gain is strictly positive (> 0). Single-number metric improvements on a few dozen clips are mostly noise and risk promoting random fluctuations.
+
+## Holdout test set is pass/fail only and checked only at promotion — events
+Hand-labeled holdout clips evaluate candidate vs current config on objective, safety recall, and FP/min only during promotion, returning a binary pass/fail result with no metric numbers revealed. Keeping holdout scores confidential prevents agents from hill-climbing against the holdout set.
+
+## Per-class thresholds require at least 20 dev events — events
+Per-class threshold tuning is restricted to classes with at least 20 dev events (`MIN_CLASS_EVENTS`) to limit overfitting to sparse sample outliers. Classes with fewer occurrences fall back to default thresholds.
+
+## Promotion edits YAML by line and routes shared files via proposals — events
+Promotion updates `config/pipeline.yaml` (`events:` section) and `config/thresholds.yaml` via line-by-line splicing rather than whole-file re-dumping, preserving comments, formatting, and ownership notes. Shared files (`vocabulary.yaml`, `priors.yaml`, `environments.yaml`) cannot be promoted directly; variants must be submitted as human-reviewed proposals.
+
+## Every MCP and CLI call is logged to the shared ledger — events
+All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) under `data/tuning/`, so parallel agents across worktrees have full visibility into past hypotheses, parameters, and results without repeating experiments.

@@ -62,3 +62,5 @@ cause is gone.
   (e.g. safety vs non-safety) will have the non-safety event suppressed by `priority_filter`.
   When synthesizing multi-event test clips, space activations across non-overlapping time
   windows so both events are preserved.
+- **MCP 2.x server import path.** MCP 2.x renamed `FastMCP` to `mcp.server.mcpserver.MCPServer`; importing from `mcp.server.fastmcp` fails. Use `from mcp.server.mcpserver import MCPServer`.
+- **YAML line endings may be CRLF.** Config YAML files checked out on Windows may have CRLF line endings, so line edits must preserve the existing newline style to avoid corrupting git diffs.
