@@ -34,29 +34,41 @@ them. Details and rationale: [references/stack.md](references/stack.md).
 
 ## Status
 
-**Done:** prior conditioning, AudioSet → vocabulary mapping, speech-mask helper,
-sliding-window loop, the overall `detect` flow, stub detector, thresholds and
-post-processing config.
+**Done (code, tested with fake models):** prior conditioning, AudioSet → vocabulary
+mapping, tagger (PANNs CNN14) and CLAP loading and window scoring, Silero VAD speech
+masking, all post-processing steps, modifiers, the end-to-end `detect` flow with models
+and raw scores shared across both modes, and the wrong-environment experiment
+(`python -m soundthing.events.experiments`).
 
-**To build:** tagger loading, CLAP scoring, window scoring, model loading, VAD, and the
-post-processing steps.
+**Not done:** nothing has run on real models yet (the `events` extra isn't installed),
+and there are no labeled clips, so there are no F1 / FP-per-minute numbers. CLAP
+calibration and all thresholds are untuned placeholders.
+
+**Next:** install the `events` extra, run the real backend end to end via a local
+`--config` copy, verify AudioSet names (`check-config --audioset`), label clips, then
+milestones 5–7.
 
 ## Milestones
 
 1. **Baseline detection:** load the tagger, score windows with it alone, threshold into
    events. Get the first event F1 and false-positives-per-minute numbers.
+   *Code done (`events.clap.enabled: false` gives tagger-only); numbers pending.*
 2. **CLAP:** add zero-shot scores so classes AudioSet covers poorly (or not at all) get
    detected. Calibrate them to sit alongside tagger scores. Re-measure.
-3. **Speech masking:** add VAD so dialogue stops triggering false events.
+   *Code done; calibration and measurement pending.*
+3. **Speech masking:** add VAD so dialogue stops triggering false events. *Code done.*
 4. **Post-processing:** smoothing, merging, coarse fallback when unsure between similar
    sounds, once-only captions for sustained sounds, and a cap on captions on screen.
+   *Done.*
 5. **Conditioned vs baseline:** compare both modes on the eval clips, including clips
-   where the environment is deliberately wrong.
+   where the environment is deliberately wrong. *Tooling done (`soundthing eval` plus the
+   wrong-env experiment); needs labeled clips.*
 6. **Tuning:** calibrate thresholds and parameters on the labeled clips without
    overfitting a small set.
 7. **Go live:** switch `events.backend` to `real` once the stage runs end to end
    (use a local `--config` copy until then).
-8. **Modifiers (nice to have):** left/right, approaching/receding, loud/quiet.
+8. **Modifiers (nice to have):** left/right, approaching/receding, loud/quiet. *Done;
+   thresholds untuned.*
 9. **Stretch:** few-shot custom sounds. This needs an interface discussion first.
 
 ## Approach
