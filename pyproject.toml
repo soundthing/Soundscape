@@ -17,7 +17,7 @@ dependencies = [
 # Person 1: sound events
 events = ["torch>=2.1", "torchaudio>=2.1", "panns-inference>=0.1.1", "transformers>=4.40", "silero-vad>=5.1"]
 # Person 2: environment classifier
-environment = ["torch>=2.1", "transformers>=4.40", "pillow>=10", "scenedetect[opencv]>=0.6.4", "sentencepiece>=0.2"]
+environment = ["torch>=2.1", "transformers>=4.40", "pillow>=10", "scenedetect[opencv]>=0.6.4", "sentencepiece>=0.2", "protobuf>=4"]
 # Person 3: demo server
 server = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
 dev = ["pytest>=8", "httpx>=0.27"]
