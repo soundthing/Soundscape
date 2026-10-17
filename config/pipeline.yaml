@@ -31,7 +31,11 @@ events:             # Person 1
   tagger:
     model: panns_cnn14        # panns_cnn14 | beats | yamnet
   clap:
+    enabled: true
     model: laion/clap-htsat-unfused
+    calibration:              # placeholders until tuned on labeled clips
+      center: 0.2
+      scale: 20.0
   vad:
     model: silero
     suppress_under_speech: 0.3  # multiply non-safety scores by this inside speech regions
