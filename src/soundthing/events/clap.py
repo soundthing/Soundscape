@@ -129,25 +129,6 @@ def calibrate(
     return scores.astype(np.float32)
 
 
-def combine_scores(
-    tagger_scores: np.ndarray,
-    clap_scores: np.ndarray | None,
-    mode: str = "max",
-    has_audioset: np.ndarray | None = None,
-) -> np.ndarray:
-    """Combine tagger and CLAP scores per mode ('max' or 'fallback')."""
-    if mode not in ("max", "fallback"):
-        raise ValueError(f"Unknown clap combine mode: {mode!r}. Must be 'max' or 'fallback'.")
-    if clap_scores is None:
-        return tagger_scores
-    if mode == "max":
-        return np.maximum(tagger_scores, clap_scores)
-    elif mode == "fallback":
-        if has_audioset is None:
-            raise ValueError("has_audioset boolean mask required for 'fallback' combine mode")
-        return np.where(has_audioset, tagger_scores, clap_scores)
-
-
 def clap_scores(
     clap: Any,
     audio: np.ndarray,
