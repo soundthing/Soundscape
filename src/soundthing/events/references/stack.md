@@ -20,6 +20,10 @@ a VAD alternative if Silero misses speech under music.
   there's no scipy.
 - **`events` extra:** torch, torchaudio, panns-inference, transformers, silero-vad. Import
   these lazily so the stub path and CI run without them.
+- **`tuning` extra:** mcp (2.x server SDK), optuna (TPE for sweeps), kaggle CLI. Imported
+  lazily so the base package and standard pipeline run without them. Note that mcp 2.x is
+  required by the server code (pyproject still says `mcp>=1.2`; the floor should be raised
+  to `>=2.0`).
 - **Testing:** pytest. Real-model tests skip when the extra isn't installed.
 
 ## Runtime
