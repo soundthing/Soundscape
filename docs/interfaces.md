@@ -68,6 +68,35 @@ List of `{start, end, label, class_id, confidence, modifiers}`.
 `{video_id, duration, labeler, segments: [{start, end, env}], events: [{start, end, class_id, note?}]}`
 with fine class ids only. See [`labels/README.md`](../labels/README.md).
 
+## Direction track — Person 3 analyzer → server/extension (`runs/<id>/direction.json`)
+
+Independent of event/environment models. Uses the existing schema-version-1 envelope
+with `kind: "direction"`. This additive artifact does not change existing payloads.
+
+`DirectionTrack = {duration: float, mode: str, channels: list[str], frames: list[DirectionFrame]}`;
+`DirectionFrame = {time: float, levels: dict[str, float]}`.
+
+- `mode`: `stereo`, `surround51`, or `unavailable`.
+- Channels in order: stereo `[FL, FR]`; surround `[FL, FR, FC, SL, SR]`;
+  unavailable `[]`, with no frames. LFE never contributes direction.
+- `5.1` back and `5.1(side)` side feeds normalize to `SL`/`SR`. These are nominal
+  5.1 playback feeds, not measured source angles; use center 0°, fronts ±30°,
+  surrounds ±110° for the top-down display. Stereo indicates lateral balance only.
+- Duration is finite and nonnegative. Available frames start at zero, have strictly
+  increasing finite times below duration, and contain exactly the declared channels.
+- Levels are finite `[0,1]` strengths: RMS over 50 ms, linearly map -60..0 dBFS to
+  0..1, then smooth with 50 ms attack / 200 ms release. No per-channel normalization.
+- Mono/unknown layouts and analysis failures use `unavailable`. Existing captions
+  remain usable independently. The analyzer reads original media, not downmixed WAVs.
+- `GET /api/videos/{id}/direction` returns the validated **bare track** (no envelope)
+  when present; 404 when absent. The extension retries independently of captions.
+- Stored tracks cache analysis, including unavailable results. Missing tracks in older
+  YouTube runs trigger queued analysis; the downloader checks available audio formats
+  and may reacquire a channel-preserving source under `uploads/youtube/`.
+
+See `docs/examples/direction.json` for a deterministic fake track usable without
+audio tools or real models. Use `load_direction` / `save_direction` for on-disk IO.
+
 ## Python stage interfaces ([`stages.py`](../src/soundthing/stages.py))
 
 ```python

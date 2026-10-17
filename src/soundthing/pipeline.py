@@ -20,18 +20,26 @@ import sys
 from pathlib import Path
 
 from . import contracts as C
-from .captions import write_captions
+from .captions import merge_subtitle_files, read_subtitles, write_captions
 from .config import Config, ConfigError, load_config, read_audioset_labels
 from .evaluate import EventCounts, check_labels, env_accuracy, score_events
 from .extract import extract, video_id_for
+from .direction import ensure_direction
 from .stages import get_environment_classifier, get_event_detector
 
 MODES = ("baseline", "conditioned")
 
 
-def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES) -> Path:
+def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES,
+              speech_subtitles: str | Path | None = None) -> Path:
     """`source` is a video file, or an existing inputs.json to skip extraction."""
     source = Path(source)
+    if speech_subtitles is not None:
+        planned_run = source.parent if source.suffix == ".json" else Path(runs_dir) / video_id_for(source)
+        generated = {planned_run / f"captions.{mode}{merged}.vtt" for mode in MODES for merged in ("", ".merged")}
+        if Path(speech_subtitles).resolve() in {path.resolve() for path in generated}:
+            raise ValueError("Speech input must use a different filename from this run's generated caption tracks")
+        read_subtitles(speech_subtitles)  # Validate before extraction/model work.
     if source.suffix == ".json":
         inputs = C.load_inputs(source)
         run_dir = source.parent
@@ -51,7 +59,12 @@ def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES
     for mode in modes:
         events = detect(inputs, segments if mode == "conditioned" else None, cfg)
         C.save_events(events, run_dir / f"events.{mode}.json")
-        write_captions(events, run_dir / f"captions.{mode}.vtt", ccfg["min_cue_sec"], ccfg["max_cue_sec"])
+        caption_path = run_dir / f"captions.{mode}.vtt"
+        write_captions(events, caption_path, ccfg["min_cue_sec"], ccfg["max_cue_sec"])
+        if speech_subtitles is not None:
+            # Keep canonical sound-only captions intact for the YouTube overlay.
+            merge_subtitle_files(caption_path, speech_subtitles, run_dir / f"captions.{mode}.merged.vtt")
+    ensure_direction(inputs.video_path, run_dir, inputs.duration)
     return run_dir
 
 
@@ -99,6 +112,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("source", nargs="+")
     p.add_argument("--runs", default="runs")
     p.add_argument("--mode", choices=[*MODES, "both"], default="both")
+    p.add_argument("--speech", help="existing .srt/.vtt speech subtitles (one source only); also writes .merged.vtt tracks")
+
+    p = sub.add_parser("merge-captions", help="merge existing sound and speech subtitle files without running models")
+    p.add_argument("sounds", help="sound caption .vtt/.srt")
+    p.add_argument("speech", help="speech subtitle .vtt/.srt")
+    p.add_argument("--out", required=True, help="combined output .vtt/.srt; different from the inputs")
+
+    sub.add_parser("doctor", help="check local server, downloader, and cookie-file setup")
+    p = sub.add_parser("sync-extension", help="copy extension runtime files into a Windows/Chrome folder")
+    p.add_argument("--destination", default=None, help="target folder; WSL defaults to Windows Downloads/soundthing-extension")
 
     p = sub.add_parser("eval", help="score runs against hand labels")
     p.add_argument("--runs", default="runs")
@@ -111,8 +134,42 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="run the web demo")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--cookies", help="exported YouTube cookie file; overrides SOUNDTHING_YOUTUBE_COOKIES for this process")
 
     args = ap.parse_args(argv)
+
+    if args.cmd == "merge-captions":
+        try:
+            merge_subtitle_files(args.sounds, args.speech, args.out)
+        except (OSError, ValueError) as exc:
+            print(f"Cannot merge captions: {exc}", file=sys.stderr)
+            return 1
+        print(args.out)
+        return 0
+    if args.cmd in {"doctor", "sync-extension", "serve"}:
+        from .server.development import prepare_local_path, doctor, sync_extension
+        prepare_local_path()
+        if args.cmd == "doctor":
+            return doctor()
+        if args.cmd == "sync-extension":
+            try:
+                print(sync_extension(args.destination))
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(f"Cannot sync extension: {exc}", file=sys.stderr)
+                return 1
+            return 0
+        if args.cookies is not None:
+            import os
+            os.environ["SOUNDTHING_YOUTUBE_COOKIES"] = str(Path(args.cookies).expanduser().resolve())
+            from .server.youtube import _cookie_arguments
+            try:
+                with _cookie_arguments():
+                    pass
+            except (OSError, RuntimeError) as exc:
+                print(f"Cannot start server: {exc}", file=sys.stderr)
+                return 1
+    if args.cmd == "run" and args.speech and len(args.source) != 1:
+        ap.error("--speech requires exactly one video or inputs.json source")
 
     if args.cmd == "check-config":
         cfg = load_config(args.config, validate=False)
@@ -132,7 +189,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "run":
         modes = MODES if args.mode == "both" else (args.mode,)
         for src in args.source:
-            print(run_video(src, args.runs, cfg, modes))
+            try:
+                print(run_video(src, args.runs, cfg, modes, speech_subtitles=args.speech))
+            except (OSError, ValueError) as exc:
+                print(f"Cannot process {src}: {exc}", file=sys.stderr)
+                return 1
     elif args.cmd == "eval":
         report = evaluate_runs(args.runs, args.labels, cfg)
         text = json.dumps(report, indent=2)

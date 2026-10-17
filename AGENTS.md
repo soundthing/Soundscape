@@ -18,10 +18,16 @@ before editing anything. Then only edit that role's area:
 | Person 1 | `src/soundthing/events/`, `config/thresholds.yaml`, the `events:` section of `config/pipeline.yaml`, `tests/` for events |
 | Person 2 | `src/soundthing/environment/`, the `environment:` section of `config/pipeline.yaml`, `tests/` for environment |
 | Person 3 | `extract.py`, `captions.py`, `evaluate.py`, `pipeline.py`, `server/`, the `extract:`/`captions:`/`eval:` sections of `config/pipeline.yaml`, their `tests/` |
+| Person 3 (direction and extension) | `extension/`, `src/soundthing/direction.py`, and direction-analysis tests |
 | Anyone | `labels/*.json`, their own scratch files outside the repo |
 
 Editing another role's area needs the user's explicit OK. Tell them it belongs to
 someone else so they can coordinate.
+
+Person 3 owns soundtrack direction analysis and its caption-border visualization.
+Person 1 retains ownership of `events/`, including event detection and modifiers;
+Person 2 retains ownership of environment analysis. Direction analysis is independent
+of those components and must use documented shared contracts.
 
 ## 2. Shared interfaces need confirmation every time
 
