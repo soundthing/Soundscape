@@ -64,7 +64,8 @@ milestones 5–7.
    where the environment is deliberately wrong. *Tooling done (`soundthing eval` plus the
    wrong-env experiment); needs labeled clips.*
 6. **Tuning:** calibrate thresholds and parameters on the labeled clips without
-   overfitting a small set.
+   overfitting a small set. *Planned as an agent hill-climbing harness:
+   [tuning-plan.md](tuning-plan.md).*
 7. **Go live:** switch `events.backend` to `real` once the stage runs end to end
    (use a local `--config` copy until then).
 8. **Modifiers (nice to have):** left/right, approaching/receding, loud/quiet. *Done;
@@ -81,8 +82,9 @@ milestones 5–7.
   through the priors table.
 - **Post-processing:** offline, so it can look at future context. Precision over recall:
   when in doubt, don't caption, except for safety sounds.
-- **Tuning:** driven entirely by `soundthing eval` numbers, one change at a time, recorded
-  in [references/tuning-log.md](references/tuning-log.md).
+- **Tuning:** agents hill-climb one fixed objective through an MCP harness over cached
+  model scores ([tuning-plan.md](tuning-plan.md)); results are recorded in
+  [references/tuning-log.md](references/tuning-log.md).
 - **Tests:** post-processing and scoring are tested with synthetic scores and fake models;
   real-model tests skip when the `events` extra isn't installed.
 
