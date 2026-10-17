@@ -30,3 +30,7 @@ cause is gone.
 - **Silero VAD expects 16 kHz mono float32.** Multi-channel audio or other sample rates must
   be averaged to mono and resampled; feeding raw multi-channel audio leads to silent failures
   or shape mismatches.
+- **Coarse group ids are not in `cfg.classes`.** Calling `cfg.sound_class()` or
+  `cfg.coarse_of()` with a coarse group id raises `KeyError`. Coarse groups are neither
+  safety classes nor sustained.
+

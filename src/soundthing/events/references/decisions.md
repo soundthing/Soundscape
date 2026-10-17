@@ -41,3 +41,8 @@ are untouched. Loud events during dialogue can still surface.
 ## VAD spans are padded and merged before masking — events
 Raw Silero spans are padded by `pad_sec`, clipped to [0, duration], and merged across gaps
 under `merge_gap_sec` so brief pauses in dialogue don't leak false events.
+
+## Merge runs before dropping short events — events
+Runs within merge_gap_sec are merged before filtering by min_event_sec so that
+split detections of a single continuous sound are not erased as isolated blips.
+
