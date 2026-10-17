@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from soundthing.events.tuning.__main__ import main
+from soundthing.events.tuning.promote import PromoteError
 
 
 class FakeTools:
@@ -190,7 +191,6 @@ def test_cli_tool_exception_handling(
     err = capsys.readouterr().err
     assert "error: runtime failure" in err
 
-    from soundthing.events.tuning.promote import PromoteError
 
     fake.should_raise = PromoteError("promotion failed reason")
     code = main(["promote", "r_fail"], tools=fake)

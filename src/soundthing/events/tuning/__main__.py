@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from soundthing.config import load_config
+from soundthing.events.tuning import paths
 from soundthing.events.tuning.promote import PromoteError
 
 
@@ -113,9 +115,6 @@ def _handle_build_dev(args: argparse.Namespace, tools: Any) -> int:
             file=sys.stderr,
         )
         return 2
-
-    from soundthing.config import load_config
-    from soundthing.events.tuning import paths
 
     cfg = load_config()
     out = Path(args.out) if args.out is not None else (paths.tuning_home() / "dev")
