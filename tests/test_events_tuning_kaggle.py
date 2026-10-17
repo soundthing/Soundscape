@@ -14,7 +14,14 @@ import pytest
 import soundfile as sf
 
 from soundthing.config import load_config
+import soundthing.events.tuning as tuning_pkg
 from soundthing.events.tuning import kaggle_io, paths
+
+
+def _inject(monkeypatch: pytest.MonkeyPatch, name: str, fake: types.ModuleType) -> None:
+    """Fake a tuning submodule; the package attribute wins over sys.modules once imported."""
+    monkeypatch.setitem(sys.modules, f"soundthing.events.tuning.{name}", fake)
+    monkeypatch.setattr(tuning_pkg, name, fake, raising=False)
 
 
 @pytest.fixture
@@ -90,7 +97,7 @@ def test_push_cache_kernel(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
 
     fake_ledger = types.ModuleType("soundthing.events.tuning.ledger")
     fake_ledger.git_state = lambda cwd=None: {"sha": "sha_feedcafe", "dirty": False, "branch": "main"}
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.ledger", fake_ledger)
+    _inject(monkeypatch, "ledger", fake_ledger)
 
     recorded_files: dict[str, str] = {}
 
@@ -200,7 +207,7 @@ def test_verify_cache_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
 
     fake_cache = types.ModuleType("soundthing.events.tuning.cache")
     fake_cache.cache_key = lambda c: "expected_key_abc"
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.cache", fake_cache)
+    _inject(monkeypatch, "cache", fake_cache)
 
     # 1. Matching meta in root
     cache_dir = tmp_path / "dl1"
@@ -239,7 +246,7 @@ def test_install_cache_holdout_overlap_raises(monkeypatch: pytest.MonkeyPatch, t
 
     fake_cache = types.ModuleType("soundthing.events.tuning.cache")
     fake_cache.cache_key = lambda c: "cache_123"
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.cache", fake_cache)
+    _inject(monkeypatch, "cache", fake_cache)
 
     fake_holdout = types.ModuleType("soundthing.events.tuning.holdout")
 
@@ -247,7 +254,7 @@ def test_install_cache_holdout_overlap_raises(monkeypatch: pytest.MonkeyPatch, t
         raise ValueError(f"Holdout overlap detected: {ids}")
 
     fake_holdout.assert_disjoint = raise_overlap
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", fake_holdout)
+    _inject(monkeypatch, "holdout", fake_holdout)
 
     src = tmp_path / "source_cache"
     (src / "tuning" / "cache" / "cache_123").mkdir(parents=True)
@@ -272,12 +279,12 @@ def test_install_cache_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
     fake_cache = types.ModuleType("soundthing.events.tuning.cache")
     fake_cache.cache_key = lambda c: "cache_123"
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.cache", fake_cache)
+    _inject(monkeypatch, "cache", fake_cache)
 
     disjoint_calls: list[list[str]] = []
     fake_holdout = types.ModuleType("soundthing.events.tuning.holdout")
     fake_holdout.assert_disjoint = lambda ids: disjoint_calls.append(ids)
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", fake_holdout)
+    _inject(monkeypatch, "holdout", fake_holdout)
 
     src = tmp_path / "source_cache"
     (src / "tuning" / "cache" / "cache_123").mkdir(parents=True)
@@ -302,16 +309,16 @@ def test_request_recache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
     fake_cache = types.ModuleType("soundthing.events.tuning.cache")
     fake_cache.cache_key = lambda c: "key_expected_456"
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.cache", fake_cache)
+    _inject(monkeypatch, "cache", fake_cache)
 
     fake_overrides = types.ModuleType("soundthing.events.tuning.overrides")
     fake_overrides.apply_overrides = lambda c, o: c
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.overrides", fake_overrides)
+    _inject(monkeypatch, "overrides", fake_overrides)
 
     # 1. Dirty state
     fake_ledger = types.ModuleType("soundthing.events.tuning.ledger")
     fake_ledger.git_state = lambda cwd=None: {"sha": "sha_dirty_999", "dirty": True, "branch": "dev"}
-    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.ledger", fake_ledger)
+    _inject(monkeypatch, "ledger", fake_ledger)
 
     class FakeApi:
         def kernels_push(self, folder: str) -> dict[str, str]:

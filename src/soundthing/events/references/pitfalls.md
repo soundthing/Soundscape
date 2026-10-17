@@ -45,3 +45,7 @@ cause is gone.
   so import refuses overlaps and enforces disjoint sets.
 - **`import kaggle` authenticates at import time.** Importing `kaggle` or any of its submodules without valid credentials immediately raises; import lazily inside client accessors only.
 - **Kaggle builds only committed and pushed code.** The cache kernel clones the repo at a specified git SHA; uncommitted local edits or unpushed commits will not be in the remote build.
+- **Faking a tuning submodule needs the package attribute too.** Once the real module has
+  been imported, `import soundthing.events.tuning.x as m` resolves through the package
+  attribute, so a fake placed only in `sys.modules` is silently bypassed (tests pass alone,
+  fail in the full suite). Patch both.
