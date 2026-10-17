@@ -26,3 +26,5 @@ a VAD alternative if Silero misses speech under music.
 
 Offline only. CPU must work; CUDA is used when available. Model weights download on first
 use (PANNs checkpoint ~300 MB, CLAP ~600 MB).
+
+Dev mixes resample with torchaudio (events extra), keeping scipy out.
