@@ -11,36 +11,22 @@ from typing import Any
 
 import numpy as np
 
+from soundthing.events.tuning.objective import ClipMatch, f_beta
+
 
 def pooled_f_beta(
     tp_fine: float, tp_coarse: float, fp: float, fn: float, beta: float = 0.5
 ) -> float:
-    """Compute pooled micro F_beta score.
-
-    Local copy until objective.py (Track A) lands; dedupe then.
-    Semantics:
-      credit = tp_fine + 0.5 * tp_coarse
-      fp' = fp + 0.5 * tp_coarse
-      fn' = fn + 0.5 * tp_coarse
-      P = credit / (credit + fp')
-      R = credit / (credit + fn')
-      F = (1 + beta^2) * P * R / (beta^2 * P + R)
-    """
-    credit = tp_fine + 0.5 * tp_coarse
-    fp_prime = fp + 0.5 * tp_coarse
-    fn_prime = fn + 0.5 * tp_coarse
-
-    prec_denom = credit + fp_prime
-    p = credit / prec_denom if prec_denom > 0 else 0.0
-
-    rec_denom = credit + fn_prime
-    r = credit / rec_denom if rec_denom > 0 else 0.0
-
-    b2 = beta ** 2
-    f_denom = b2 * p + r
-    if p + r == 0 or f_denom == 0:
-        return 0.0
-    return float((1.0 + b2) * p * r / f_denom)
+    """Compute pooled micro F_beta score."""
+    m = ClipMatch(
+        video_id="",
+        minutes=0.0,
+        tp_fine=tp_fine,
+        tp_coarse=tp_coarse,
+        fp=fp,
+        fn=fn,
+    )
+    return f_beta([m], beta=beta)
 
 
 def _get_counts(entry: Any, mode: str) -> tuple[float, float, float, float]:

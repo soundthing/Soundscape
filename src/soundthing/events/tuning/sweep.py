@@ -13,7 +13,8 @@ from typing import Any
 import numpy as np
 
 from soundthing.config import load_config
-from soundthing.events.tuning import space
+from soundthing.events.tuning import ledger as ledger_module, space
+from soundthing.events.tuning.score import score as score_func
 
 
 def result_as_dict(result: Any) -> dict[str, Any]:
@@ -28,13 +29,6 @@ def result_as_dict(result: Any) -> dict[str, Any]:
     if hasattr(result, "__dict__"):
         return dict(vars(result))
     return dict(result)
-
-
-def _get_res_attr(res: Any, attr: str) -> Any:
-    """Helper to access an attribute from a result object or dict."""
-    if isinstance(res, dict):
-        return res[attr]
-    return getattr(res, attr)
 
 
 def log_result(result: Any, hypothesis: str, ledger: Any) -> dict[str, Any]:
@@ -89,9 +83,9 @@ def sweep(
         raise ValueError(f"budget must be >= 1, got {budget}")
 
     if score_fn is None:
-        from soundthing.events.tuning.score import score as score_fn
+        score_fn = score_func
     if ledger is None:
-        from soundthing.events.tuning import ledger
+        ledger = ledger_module
     if cfg is None:
         cfg = load_config()
 
@@ -122,9 +116,9 @@ def sweep(
     evaluations = 1
     log_result(init_result, "sweep", ledger)
 
-    init_run_id = _get_res_attr(init_result, "run_id")
-    init_obj = float(_get_res_attr(init_result, "objective"))
-    init_passed = bool(_get_res_attr(init_result, "passed"))
+    init_run_id = init_result.run_id
+    init_obj = float(init_result.objective)
+    init_passed = bool(init_result.passed)
 
     history: list[dict[str, Any]] = [
         {
@@ -175,9 +169,9 @@ def sweep(
                     evaluations += 1
                     log_result(result, "sweep", ledger)
 
-                    r_run_id = _get_res_attr(result, "run_id")
-                    r_obj = float(_get_res_attr(result, "objective"))
-                    r_passed = bool(_get_res_attr(result, "passed"))
+                    r_run_id = result.run_id
+                    r_obj = float(result.objective)
+                    r_passed = bool(result.passed)
 
                     history.append({
                         "run_id": r_run_id,
@@ -189,15 +183,15 @@ def sweep(
                     if r_passed and r_obj > incumbent_objective:
                         if (
                             best_candidate_for_param is None
-                            or r_obj > float(_get_res_attr(best_candidate_for_param[1], "objective"))
+                            or r_obj > float(best_candidate_for_param[1].objective)
                         ):
                             best_candidate_for_param = (cand_overrides, result)
 
                 if best_candidate_for_param is not None:
                     cand_overrides, cand_result = best_candidate_for_param
                     incumbent_overrides = cand_overrides
-                    incumbent_objective = float(_get_res_attr(cand_result, "objective"))
-                    incumbent_run_id = _get_res_attr(cand_result, "run_id")
+                    incumbent_objective = float(cand_result.objective)
+                    incumbent_run_id = cand_result.run_id
                     improved_in_this_pass = True
 
             if not improved_in_this_pass:
@@ -227,9 +221,9 @@ def sweep(
             evaluations += 1
             log_result(result, "sweep", ledger)
 
-            r_run_id = _get_res_attr(result, "run_id")
-            r_obj = float(_get_res_attr(result, "objective"))
-            r_passed = bool(_get_res_attr(result, "passed"))
+            r_run_id = result.run_id
+            r_obj = float(result.objective)
+            r_passed = bool(result.passed)
 
             history.append({
                 "run_id": r_run_id,
