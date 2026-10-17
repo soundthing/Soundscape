@@ -60,3 +60,18 @@ weight vector over vocabulary classes has lowest cosine similarity to the true e
 Sharing masked scores across baseline and conditioned modes halves scoring and VAD cost.
 Caching only the most recent entry bounded by audio path, mtime, size, and config keys
 prevents unbounded memory growth during batch runs.
+
+## Tuning objective is micro F0.5 with coarse-only matches at half credit — events
+The fixed tuning objective uses micro-pooled F0.5 because precision is prioritized over recall
+(false-positive captions are more jarring than missed non-safety events). Coarse-only matches
+receive half credit (0.5 TP + 0.5 FP + 0.5 FN), rewarding coarse detections while preserving
+an incentive for fine-grained accuracy.
+
+## Safety recall includes coarse-level matches — agreed
+For safety-critical classes, coarse captions (such as "alarm" for a siren) still alert the
+viewer to danger. Safety recall therefore counts coarse matches toward true positives.
+
+## Tuning matching replicates evaluate greedy semantics — events
+Harness matching uses the identical greedy nearest-onset iteration and tie-breaking order
+(<= distance favoring the later truth) as soundthing.evaluate so tuning metrics directly
+predict official evaluation results.
