@@ -128,3 +128,82 @@ environments:
       phone_ring: 0.6
       keys_jingle: 0.7
       train: 0.4
+
+  lecture_hall:
+    default: 0.5
+    classes:
+      applause: 1.0
+      crowd_murmur: 0.9
+      footsteps: 0.7
+      laughter: 0.7
+      cough: 0.7
+      door_open_close: 0.6
+      typing: 0.6
+
+  restaurant:
+    default: 0.5
+    classes:
+      dishes: 1.0
+      crowd_murmur: 1.0
+      laughter: 0.9
+      footsteps: 0.8
+      sizzling: 0.8
+      chopping: 0.7
+      door_open_close: 0.7
+      faucet: 0.7
+
+  cafe:
+    default: 0.5
+    classes:
+      dishes: 1.0
+      blender: 0.9
+      crowd_murmur: 0.9
+      laughter: 0.8
+      typing: 0.7
+      footsteps: 0.7
+      door_open_close: 0.7
+      faucet: 0.7
+
+  public_transportation:
+    default: 0.5
+    classes:
+      train: 1.0
+      traffic: 0.9
+      door_open_close: 0.9
+      crowd_murmur: 0.8
+      footsteps: 0.8
+      car_passing: 0.7
+      engine_start: 0.7
+      engine_rev: 0.7
+      reversing_beep: 0.7
+      train_horn: 0.7
+
+  factory:
+    default: 0.5
+    classes:
+      reversing_beep: 0.9
+      engine_rev: 0.8
+      crash: 0.8
+      thud: 0.8
+      footsteps: 0.7
+      door_open_close: 0.7
+
+  construction:
+    default: 0.5
+    classes:
+      thud: 1.0
+      crash: 0.9
+      engine_rev: 0.8
+      reversing_beep: 0.8
+      footsteps: 0.7
+
+  classroom:
+    default: 0.5
+    classes:
+      crowd_murmur: 0.9
+      laughter: 0.9
+      footsteps: 0.8
+      door_open_close: 0.8
+      door_knock: 0.7
+      typing: 0.7
+      applause: 0.7
