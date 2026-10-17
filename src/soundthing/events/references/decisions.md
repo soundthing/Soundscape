@@ -50,3 +50,13 @@ split detections of a single continuous sound are not erased as isolated blips.
 A wrong spatial or loudness modifier is worse than none. Left/right, approaching/receding,
 and loud/quiet use conservative physical thresholds on RMS balance, dB trends, and clip
 median levels; when audio is mono, short, or ambiguous, no modifier is attached.
+
+## Wrong-environment experiment uses lowest prior cosine similarity — events
+To stress-test conditioning under an adversarial environment without hard-coding
+environment pairs, the wrong environment is selected per segment as the one whose prior
+weight vector over vocabulary classes has lowest cosine similarity to the true environment's.
+
+## Raw-score cache keeps only the most recent file — events
+Sharing masked scores across baseline and conditioned modes halves scoring and VAD cost.
+Caching only the most recent entry bounded by audio path, mtime, size, and config keys
+prevents unbounded memory growth during batch runs.

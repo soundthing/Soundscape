@@ -36,3 +36,7 @@ cause is gone.
 - **Clip median for loudness must exclude digital silence.** Pure-silence frames
   skew the whole-clip median downwards, falsely making baseline-level sounds appear
   loud. Filtering out frames below 1e-6 RMS avoids this.
+- **Windowed events can overhang clip duration.** Sliding windows extending past audio
+  boundaries or at the clip edge can produce detections ending after `inputs.duration`
+  or starting at/after it. Dropping start >= duration and clipping ends to duration
+  ensures all events satisfy contract validation.
