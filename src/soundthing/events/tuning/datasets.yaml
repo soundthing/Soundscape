@@ -62,7 +62,77 @@ esc50:
     - water_drops
 
 fsd50k:
-  map: {}                     # placeholder, filled by a later milestone
+  # FSD50K labels are hierarchy-propagated: never map a parent label (Alarm, Door,
+  # Glass, ...) whose children map to other classes, or every child clip becomes
+  # two-class and is dropped (or mislabeled).
+  map:
+    Accelerating_and_revving_and_vroom: engine_rev
+    Aircraft: aircraft
+    Applause: applause
+    Bark: dog_bark
+    Bird_vocalization_and_bird_call_and_bird_song: birdsong
+    Blender: blender
+    Boiling: boiling
+    Car_passing_by: car_passing
+    Cheering: cheering
+    Chopping_(food): chopping
+    Clapping: applause
+    Clock: clock_ticking
+    Computer_keyboard: typing
+    Cough: cough
+    Cricket: insects
+    Crowd: crowd_murmur
+    Cutlery_and_silverware: dishes
+    Dishes_and_pots_and_pans: dishes
+    Doorbell: doorbell
+    Engine_starting: engine_start
+    Explosion: explosion
+    Fireworks: fireworks
+    Fixed-wing_aircraft_and_airplane: aircraft
+    Frying_(food): sizzling
+    Gunshot_and_gunfire: gunshot
+    Helicopter: helicopter
+    Insect: insects
+    Keys_jangling: keys_jingle
+    Knock: door_knock
+    Laughter: laughter
+    Meow: cat_meow
+    Microwave_oven: microwave_beep
+    Motorcycle: motorcycle
+    Ocean: waves
+    Printer: printer
+    Rain: rain
+    Raindrop: rain
+    Ringtone: phone_ring
+    Screaming: scream
+    Shatter: glass_break
+    Sink_(filling_or_washing): faucet
+    Siren: siren
+    Slam: door_slam
+    Stream: stream
+    Telephone: phone_ring
+    Thunder: thunder
+    Thunderstorm: thunder
+    Thump_and_thud: thud
+    Tick-tock: clock_ticking
+    Traffic_noise_and_roadway_noise: traffic
+    Train: train
+    Typing: typing
+    Vehicle_horn_and_car_horn_and_honking: car_horn
+    Walk_and_footsteps: footsteps
+    Water_tap_and_faucet: faucet
+    Waves_and_surf: waves
+    Whistle: whistle
+    Wind: wind
+  background:
+    - Crackle
+    - Hiss
+    - Hum
+    - Mechanical_fan
+    - Rustle
+
+audioset:
+  clip_sec: 10.0
 
 mix:
   sample_rate: 16000

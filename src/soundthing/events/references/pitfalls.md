@@ -49,3 +49,9 @@ cause is gone.
   been imported, `import soundthing.events.tuning.x as m` resolves through the package
   attribute, so a fake placed only in `sys.modules` is silently bypassed (tests pass alone,
   fail in the full suite). Patch both.
+- **FSD50K labels are hierarchy-propagated.** Parent ontology labels (e.g. `Animal`,
+  `Domestic_animals_and_pets`) appear alongside specific leaf labels on every clip.
+  Filtering for clips that reach exactly one distinct mapped class prevents multi-source
+  contamination while allowing clips with multiple ontology tags that map to the same
+  target class. So never map a parent label (`Alarm`, `Door`, `Glass`) whose children
+  map to other classes: every siren/knock clip would turn two-class and be dropped.
