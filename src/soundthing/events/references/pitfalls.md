@@ -40,3 +40,6 @@ cause is gone.
   boundaries or at the clip edge can produce detections ending after `inputs.duration`
   or starting at/after it. Dropping start >= duration and clipping ends to duration
   ensures all events satisfy contract validation.
+- **Holdout clips must never appear in dev.** Hand-labeled holdout clips evaluate models
+  strictly on promotion; allowing holdout ids into dev risks tuning against the test split,
+  so import refuses overlaps and enforces disjoint sets.
