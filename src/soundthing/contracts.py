@@ -207,6 +207,50 @@ class ClipLabels:
 # JSON IO
 # ---------------------------------------------------------------------------
 
+@dataclass
+class DirectionFrame:
+    """Soundtrack channel strengths at a video time, independent of caption events."""
+
+    time: float
+    levels: dict[str, float]
+
+    def validate(self) -> None:
+        _check(math.isfinite(self.time) and self.time >= 0, "DirectionFrame: invalid time")
+        for channel, level in self.levels.items():
+            _check(channel in {"FL", "FR", "FC", "SL", "SR"}, "DirectionFrame: unknown channel")
+            _check(math.isfinite(level), "DirectionFrame: non-finite level")
+            _check_unit(level, f"DirectionFrame.levels[{channel}]")
+
+
+@dataclass
+class DirectionTrack:
+    """Stereo/5.1 speaker-feed activity, not physical source localization.
+
+    LFE is deliberately excluded. Back and side 5.1 surround feeds are named SL/SR.
+    Frames use media timestamps; levels map -60..0 dBFS to 0..1 with smoothing.
+    """
+
+    duration: float
+    mode: str
+    channels: list[str]
+    frames: list[DirectionFrame]
+
+    def validate(self) -> None:
+        _check(math.isfinite(self.duration) and self.duration >= 0, "DirectionTrack: invalid duration")
+        layouts = {"stereo": ["FL", "FR"], "surround51": ["FL", "FR", "FC", "SL", "SR"], "unavailable": []}
+        _check(self.mode in layouts, "DirectionTrack: invalid mode")
+        _check(self.channels == layouts[self.mode], "DirectionTrack: invalid channels for mode")
+        if self.mode == "unavailable":
+            _check(not self.frames, "DirectionTrack: unavailable track has frames")
+            return
+        _check(bool(self.frames) and self.frames[0].time == 0, "DirectionTrack: frames must start at zero")
+        previous = -1.0
+        for frame in self.frames:
+            frame.validate()
+            _check(previous < frame.time < self.duration, "DirectionTrack: frame outside duration or unordered")
+            _check(set(frame.levels) == set(self.channels), "DirectionTrack: channel keys do not match")
+            previous = frame.time
+
 T = TypeVar("T")
 
 
@@ -304,3 +348,17 @@ def load_labels(path: Path) -> ClipLabels:
     )
     labels.validate()
     return labels
+
+
+def save_direction(track: DirectionTrack, path: Path) -> None:
+    track.validate()
+    _write(path, _envelope("direction", asdict(track)))
+
+
+def load_direction(path: Path) -> DirectionTrack:
+    data = _unwrap(_read(path), "direction")
+    track = DirectionTrack(duration=data["duration"], mode=data["mode"],
+                           channels=data["channels"],
+                           frames=[DirectionFrame(**frame) for frame in data["frames"]])
+    track.validate()
+    return track
