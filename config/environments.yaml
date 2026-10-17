@@ -29,9 +29,13 @@ environments:
     visual_prompts:
       - a photo of a kitchen
       - a photo of someone cooking at a stove
+      - a photo inside a commercial restaurant kitchen with stainless steel equipment and food prep stations
+      - a photo of cooks preparing food on a grill and fryer in a fast food kitchen
     audio_prompts:
       - the sound of cooking in a kitchen
       - dishes clinking and food sizzling in a kitchen
+      - the sound of a busy commercial kitchen with a sizzling grill and fryer
+      - food preparation and kitchen equipment operating behind a restaurant counter
 
   - id: office
     display: Office / indoor workplace
@@ -83,10 +87,10 @@ environments:
     display: Restaurant
     visual_prompts:
       - a photo of a restaurant dining room with tables and diners
-      - a photo of waitstaff serving food in a restaurant
+      - a photo of customers eating at tables in a restaurant dining room
     audio_prompts:
       - restaurant dining ambience with plates and conversation
-      - cutlery clinking and people talking in a restaurant
+      - cutlery and conversation among diners in a restaurant dining room
 
   - id: cafe
     display: Cafe
