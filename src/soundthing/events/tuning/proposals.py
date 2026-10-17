@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from soundthing.config import load_config
 from soundthing.events.tuning import paths
 
 
@@ -67,7 +68,6 @@ def propose_shared_change(
             )
 
     if cfg is None:
-        from soundthing.config import load_config
         cfg = load_config()
 
     target_files: list[str] = []

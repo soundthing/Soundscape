@@ -14,6 +14,8 @@ from typing import Any
 
 import yaml
 
+from soundthing.config import load_config
+
 
 WRITABLE_PREFIXES = ("events.", "thresholds.")
 
@@ -260,9 +262,7 @@ def set_yaml_value(text: str, path: list[str], value: Any) -> str:
                 new_lines.append(f"{ind}{k}: {val_str}")
             else:
                 new_lines.append(f"{ind}{k}:")
-        res = newline.join(new_lines)
-        if ends_with_newline or True:
-            res += newline
+        res = newline.join(new_lines) + newline
         return res
 
     curr_parent_idx: int | None = None
@@ -411,7 +411,6 @@ def write_overrides(overrides: dict, config_dir: Path) -> list[Path]:
     if not changed_files:
         return []
 
-    from soundthing.config import load_config
     try:
         load_config(config_dir)
     except Exception as e:
