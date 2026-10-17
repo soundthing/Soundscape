@@ -18,6 +18,8 @@ python -m venv .venv
 
 Add `events` and/or `environment` extras for the model components you work on.
 
+Agent rules for everyone (Claude Code, Codex, Antigravity) are in [AGENTS.md](AGENTS.md).
+
 ## Usage
 
 ```bash
