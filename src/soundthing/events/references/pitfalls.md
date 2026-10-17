@@ -23,3 +23,7 @@ cause is gone.
   prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail
   wherever the `events` extra isn't installed, including CI.
+- **Clip median for loudness must exclude digital silence.** Pure-silence frames
+  skew the whole-clip median downwards, falsely making baseline-level sounds appear
+  loud. Filtering out frames below 1e-6 RMS avoids this.
+

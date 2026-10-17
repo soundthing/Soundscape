@@ -37,3 +37,9 @@ variants.
 ## Speech masking scales scores down, doesn't remove them — agreed
 Non-safety scores are multiplied by `suppress_under_speech` inside speech; safety classes
 are untouched. Loud events during dialogue can still surface.
+
+## Caption modifiers prioritize precision over recall — events
+A wrong spatial or loudness modifier is worse than none. Left/right, approaching/receding,
+and loud/quiet use conservative physical thresholds on RMS balance, dB trends, and clip
+median levels; when audio is mono, short, or ambiguous, no modifier is attached.
+
