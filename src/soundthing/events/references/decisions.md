@@ -37,3 +37,8 @@ variants.
 ## Speech masking scales scores down, doesn't remove them — agreed
 Non-safety scores are multiplied by `suppress_under_speech` inside speech; safety classes
 are untouched. Loud events during dialogue can still surface.
+
+## Merge runs before dropping short events — events
+Runs within merge_gap_sec are merged before filtering by min_event_sec so that
+split detections of a single continuous sound are not erased as isolated blips.
+

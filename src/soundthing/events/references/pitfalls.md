@@ -23,3 +23,7 @@ cause is gone.
   prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail
   wherever the `events` extra isn't installed, including CI.
+- **Coarse group ids are not in `cfg.classes`.** Calling `cfg.sound_class()` or
+  `cfg.coarse_of()` with a coarse group id raises `KeyError`. Coarse groups are neither
+  safety classes nor sustained.
+
