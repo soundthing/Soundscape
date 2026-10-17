@@ -43,3 +43,8 @@ cause is gone.
 - **Holdout clips must never appear in dev.** Hand-labeled holdout clips evaluate models
   strictly on promotion; allowing holdout ids into dev risks tuning against the test split,
   so import refuses overlaps and enforces disjoint sets.
+- **FSD50K labels are hierarchy-propagated.** Parent ontology labels (e.g. `Animal`,
+  `Domestic_animals_and_pets`) appear alongside specific leaf labels on every clip.
+  Filtering for clips that reach exactly one distinct mapped class prevents multi-source
+  contamination while allowing clips with multiple ontology tags that map to the same
+  target class.
