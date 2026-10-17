@@ -32,10 +32,18 @@ events:             # Person 1
   tagger:
     model: panns_cnn14        # panns_cnn14 | beats | yamnet
   clap:
+    enabled: true
     model: laion/clap-htsat-unfused
+    calibration:              # placeholders until tuned on labeled clips
+      center: 0.2
+      scale: 20.0
   vad:
     model: silero
     suppress_under_speech: 0.3  # multiply non-safety scores by this inside speech regions
+    threshold: 0.5
+    min_speech_sec: 0.25
+    pad_sec: 0.1
+    merge_gap_sec: 0.3
   postprocess:
     smoothing_sec: 0.5          # two-sided median filter width
     min_event_sec: 0.3
@@ -43,6 +51,14 @@ events:             # Person 1
     coarse_margin: 0.1          # top-2 within this margin and same coarse group -> coarse label
     sustained_repeat_sec: 60.0  # re-caption a sustained sound at most this often
     max_on_screen: 2
+  modifiers:
+    enabled: true
+    side_balance: 0.35
+    trend_db: 6.0
+    min_trend_sec: 1.5
+    loud_db: 12.0
+    quiet_db: -12.0
+    frame_sec: 0.1
 
 captions:           # Person 3
   min_cue_sec: 1.0              # extend very short events so they are readable
