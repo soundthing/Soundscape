@@ -40,3 +40,5 @@ cause is gone.
   boundaries or at the clip edge can produce detections ending after `inputs.duration`
   or starting at/after it. Dropping start >= duration and clipping ends to duration
   ensures all events satisfy contract validation.
+- **`import kaggle` authenticates at import time.** Importing `kaggle` or any of its submodules without valid credentials immediately raises; import lazily inside client accessors only.
+- **Kaggle builds only committed and pushed code.** The cache kernel clones the repo at a specified git SHA; uncommitted local edits or unpushed commits will not be in the remote build.
