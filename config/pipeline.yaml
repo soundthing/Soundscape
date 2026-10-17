@@ -50,6 +50,14 @@ events:             # Person 1
     coarse_margin: 0.1          # top-2 within this margin and same coarse group -> coarse label
     sustained_repeat_sec: 60.0  # re-caption a sustained sound at most this often
     max_on_screen: 2
+  modifiers:
+    enabled: true
+    side_balance: 0.35
+    trend_db: 6.0
+    min_trend_sec: 1.5
+    loud_db: 12.0
+    quiet_db: -12.0
+    frame_sec: 0.1
 
 captions:           # Person 3
   min_cue_sec: 1.0              # extend very short events so they are readable

@@ -46,3 +46,7 @@ under `merge_gap_sec` so brief pauses in dialogue don't leak false events.
 Runs within merge_gap_sec are merged before filtering by min_event_sec so that
 split detections of a single continuous sound are not erased as isolated blips.
 
+## Caption modifiers prioritize precision over recall — events
+A wrong spatial or loudness modifier is worse than none. Left/right, approaching/receding,
+and loud/quiet use conservative physical thresholds on RMS balance, dB trends, and clip
+median levels; when audio is mono, short, or ambiguous, no modifier is attached.

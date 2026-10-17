@@ -33,4 +33,6 @@ cause is gone.
 - **Coarse group ids are not in `cfg.classes`.** Calling `cfg.sound_class()` or
   `cfg.coarse_of()` with a coarse group id raises `KeyError`. Coarse groups are neither
   safety classes nor sustained.
-
+- **Clip median for loudness must exclude digital silence.** Pure-silence frames
+  skew the whole-clip median downwards, falsely making baseline-level sounds appear
+  loud. Filtering out frames below 1e-6 RMS avoids this.
