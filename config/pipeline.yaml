@@ -33,6 +33,7 @@ events:             # Person 1
   clap:
     enabled: true
     model: laion/clap-htsat-unfused
+    combine: max                # max | fallback
     calibration:              # placeholders until tuned on labeled clips
       center: 0.2
       scale: 20.0
@@ -50,6 +51,7 @@ events:             # Person 1
     coarse_margin: 0.1          # top-2 within this margin and same coarse group -> coarse label
     sustained_repeat_sec: 60.0  # re-caption a sustained sound at most this often
     max_on_screen: 2
+    onset_shift_sec: 0.0        # seconds added to every event's start/end; positive = later
   modifiers:
     enabled: true
     side_balance: 0.35

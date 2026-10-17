@@ -263,6 +263,7 @@ def test_load_models_with_clap_enabled(cfg: Config, monkeypatch: pytest.MonkeyPa
     assert models.clap_text_emb.shape == (len(cfg.classes), 8)
     assert models.class_ids == cfg.class_ids
     assert models.tagger_map.shape == (len(cfg.classes), len(audioset_names))
+    assert models.audioset_names == audioset_names
 
 
 def test_load_models_with_clap_disabled(cfg: Config, monkeypatch: pytest.MonkeyPatch):
@@ -286,6 +287,7 @@ def test_load_models_with_clap_disabled(cfg: Config, monkeypatch: pytest.MonkeyP
     assert models.clap is None
     assert models.clap_text_emb is None
     assert models.class_ids == cfg.class_ids
+    assert models.audioset_names == audioset_names
 
 
 def test_load_models_tagger_map_keyerror(cfg: Config, monkeypatch: pytest.MonkeyPatch):

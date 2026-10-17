@@ -51,6 +51,8 @@ def fake_env(cfg: Config, monkeypatch):
 
     load_calls = 0
 
+    from soundthing.events import vad
+
     def fake_load_models(c: Config) -> EventModels:
         nonlocal load_calls
         load_calls += 1
@@ -60,10 +62,11 @@ def fake_env(cfg: Config, monkeypatch):
             class_ids=list(c.class_ids),
             tagger_map=tagger_map,
             clap_text_emb=None,
+            audioset_names=audioset_names,
         )
 
     monkeypatch.setattr(detector, "load_models", fake_load_models)
-    monkeypatch.setattr(detector, "speech_regions", lambda audio, sr, c: [])
+    monkeypatch.setattr(vad, "speech_probs", lambda audio, sr, c: np.array([], dtype=np.float32))
 
     class Helper:
         @property
