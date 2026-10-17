@@ -1,0 +1,102 @@
+# Caption vocabulary. OWNER: Person 1.
+#
+# Each class:
+#   id       stable snake_case id. Used in priors.yaml, thresholds.yaml, eval labels.
+#   caption  text shown on screen, without brackets.
+#   audioset AudioSet ontology display names whose tagger scores map to this class
+#            (class score = max over listed labels). Must match the tagger's label
+#            CSV exactly; `soundthing check-config --audioset <csv>` verifies this.
+#   clap     zero-shot CLAP prompts, used for classes AudioSet covers poorly or
+#            as a second opinion. A class needs at least one of audioset/clap.
+#   coarse   optional coarse group id; used when the detector is unsure between
+#            confusable fine classes (e.g. door_slam vs gunshot -> impact).
+#   safety   true = safety-critical: bypasses environment conditioning.
+#   sustained true = background/continuous sound; captioned once, not repeatedly.
+#
+# NOTE: starter list — the AudioSet names still need checking against the
+# checkpoint's class_labels_indices.csv.
+
+coarse_groups:
+  impact: { caption: loud impact }
+  alarm: { caption: alarm }
+  vehicle: { caption: vehicle }
+  animal: { caption: animal sounds }
+  crowd_noise: { caption: crowd noise }
+  water: { caption: water running }
+  beeping: { caption: beeping }
+
+classes:
+  # --- safety set (always active) ---------------------------------------------
+  - { id: siren, caption: siren wailing, audioset: [Siren, "Police car (siren)", "Ambulance (siren)", "Fire engine, fire truck (siren)", Civil defense siren], coarse: alarm, safety: true }
+  - { id: smoke_alarm, caption: smoke alarm beeping, audioset: ["Smoke detector, smoke alarm", Fire alarm], coarse: alarm, safety: true }
+  - { id: alarm_ringing, caption: alarm ringing, audioset: [Alarm, Alarm clock, Buzzer], coarse: alarm, safety: true }
+  - { id: car_alarm, caption: car alarm, audioset: [Car alarm], coarse: alarm, safety: true }
+  - { id: car_horn, caption: car horn honks, audioset: ["Vehicle horn, car horn, honking"], coarse: vehicle, safety: true }
+  - { id: glass_break, caption: glass shatters, audioset: [Shatter, Glass], clap: [glass shattering], coarse: impact, safety: true }
+  - { id: scream, caption: someone screams, audioset: [Screaming], safety: true }
+  - { id: gunshot, caption: gunshot, audioset: ["Gunshot, gunfire"], coarse: impact, safety: true }
+  - { id: explosion, caption: explosion, audioset: [Explosion], coarse: impact, safety: true }
+  - { id: baby_cry, caption: baby crying, audioset: ["Baby cry, infant cry"], safety: true }
+
+  # --- household / indoor ------------------------------------------------------
+  - { id: door_slam, caption: door slams, audioset: [Slam], clap: [a door slamming shut], coarse: impact }
+  - { id: door_knock, caption: knocking on door, audioset: [Knock], coarse: impact }
+  - { id: doorbell, caption: doorbell rings, audioset: [Doorbell, Ding-dong] }
+  - { id: door_open_close, caption: door opens, audioset: [Door], clap: [a door creaking open] }
+  - { id: footsteps, caption: footsteps, audioset: ["Walk, footsteps"] }
+  - { id: phone_ring, caption: phone ringing, audioset: [Telephone bell ringing, Ringtone], coarse: beeping }
+  - { id: keys_jingle, caption: keys jingling, audioset: [Keys jangling] }
+  - { id: clock_ticking, caption: clock ticking, audioset: [Tick-tock, Clock], sustained: true }
+  - { id: thud, caption: thud, audioset: ["Thump, thud"], coarse: impact }
+  - { id: crash, caption: crash, audioset: ["Smash, crash", Breaking], coarse: impact }
+
+  # --- kitchen -----------------------------------------------------------------
+  - { id: microwave_beep, caption: microwave beeps, audioset: [Microwave oven], clap: [a microwave oven beeping], coarse: beeping }
+  - { id: sizzling, caption: food sizzling, audioset: ["Frying (food)"], sustained: true }
+  - { id: faucet, caption: water running, audioset: ["Water tap, faucet", "Sink (filling or washing)"], coarse: water, sustained: true }
+  - { id: dishes, caption: dishes clattering, audioset: ["Dishes, pots, and pans", "Cutlery, silverware"] }
+  - { id: blender, caption: blender whirring, audioset: [Blender] }
+  - { id: chopping, caption: chopping, audioset: ["Chopping (food)"] }
+  - { id: kettle_whistle, caption: kettle whistling, clap: [a tea kettle whistling] }
+  - { id: boiling, caption: water boiling, audioset: [Boiling], coarse: water, sustained: true }
+
+  # --- office ------------------------------------------------------------------
+  - { id: typing, caption: typing, audioset: [Typing, Computer keyboard], sustained: true }
+  - { id: printer, caption: printer running, audioset: [Printer] }
+  - { id: mouse_click, caption: mouse clicking, clap: [a computer mouse clicking] }
+
+  # --- street / vehicles -------------------------------------------------------
+  - { id: car_passing, caption: car passes by, audioset: [Car passing by], coarse: vehicle }
+  - { id: traffic, caption: traffic, audioset: ["Traffic noise, roadway noise"], coarse: vehicle, sustained: true }
+  - { id: motorcycle, caption: motorcycle revving, audioset: [Motorcycle], coarse: vehicle }
+  - { id: tire_screech, caption: tires screech, audioset: [Skidding, Tire squeal], coarse: vehicle }
+  - { id: engine_start, caption: engine starts, audioset: [Engine starting], coarse: vehicle }
+  - { id: engine_rev, caption: engine revving, audioset: ["Accelerating, revving, vroom"], coarse: vehicle }
+  - { id: reversing_beep, caption: reversing beeps, audioset: [Reversing beeps], coarse: beeping }
+  - { id: turn_signal, caption: turn signal ticking, clap: [a car turn signal clicking] }
+  - { id: seatbelt, caption: seatbelt clicks, clap: [a car seatbelt buckling] }
+  - { id: train, caption: train passing, audioset: [Train], coarse: vehicle }
+  - { id: train_horn, caption: train horn, audioset: [Train horn], coarse: vehicle }
+  - { id: helicopter, caption: helicopter overhead, audioset: [Helicopter], coarse: vehicle }
+  - { id: aircraft, caption: plane overhead, audioset: [Aircraft], coarse: vehicle }
+
+  # --- nature / weather / animals ---------------------------------------------
+  - { id: dog_bark, caption: dog barking, audioset: [Bark, Dog], coarse: animal }
+  - { id: cat_meow, caption: cat meows, audioset: [Meow, Cat], coarse: animal }
+  - { id: birdsong, caption: birds chirping, audioset: ["Bird vocalization, bird call, bird song", Bird], coarse: animal, sustained: true }
+  - { id: insects, caption: insects buzzing, audioset: [Insect, Cricket], coarse: animal, sustained: true }
+  - { id: rain, caption: rain, audioset: [Rain, Raindrop, Rain on surface], coarse: water, sustained: true }
+  - { id: thunder, caption: thunder rumbles, audioset: [Thunder, Thunderstorm], coarse: impact }
+  - { id: wind, caption: wind blowing, audioset: [Wind], sustained: true }
+  - { id: stream, caption: stream flowing, audioset: [Stream, Waterfall], coarse: water, sustained: true }
+  - { id: waves, caption: waves crashing, audioset: ["Waves, surf", Ocean], coarse: water, sustained: true }
+
+  # --- people / crowd / sports -------------------------------------------------
+  - { id: applause, caption: applause, audioset: [Applause, Clapping], coarse: crowd_noise }
+  - { id: cheering, caption: crowd cheering, audioset: [Cheering], coarse: crowd_noise }
+  - { id: crowd_murmur, caption: crowd murmuring, audioset: [Crowd], coarse: crowd_noise, sustained: true }
+  - { id: laughter, caption: laughter, audioset: [Laughter] }
+  - { id: whistle, caption: whistle blows, audioset: [Whistle] }
+  - { id: ball_bounce, caption: ball bouncing, clap: [a basketball bouncing on a court] }
+  - { id: cough, caption: coughing, audioset: [Cough] }
+  - { id: fireworks, caption: fireworks, audioset: [Fireworks], coarse: impact }

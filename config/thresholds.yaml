@@ -1,0 +1,16 @@
+# Per-class detection thresholds on the (conditioned) score. OWNER: Person 1.
+# Precision over recall: when in doubt, raise a threshold.
+# Lookup: classes[id] -> safety_default (if class is safety) -> default.
+
+default: 0.5
+safety_default: 0.6   # safety classes bypass priors, so they need a higher bar against false alarms
+
+classes:
+  gunshot: 0.75
+  explosion: 0.75
+  scream: 0.7
+  glass_break: 0.65
+  door_slam: 0.55
+  thud: 0.6
+  crash: 0.6
+  footsteps: 0.55

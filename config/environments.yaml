@@ -1,0 +1,71 @@
+# Environment list. OWNER: Person 2.
+#
+# Adding an environment = add an entry here + a block in priors.yaml. No code changes.
+# `general` is the low-confidence fallback and must always exist; it is never
+# predicted directly by the zero-shot classifier (no prompts).
+#
+# visual_prompts -> CLIP/SigLIP text prompts, scored against sampled frames
+# audio_prompts  -> CLAP text prompts, scored against segment audio
+# Multiple prompts per env are averaged (prompt ensembling).
+
+environments:
+  - id: general
+    display: General / unknown
+    visual_prompts: []
+    audio_prompts: []
+
+  - id: street
+    display: Street / outdoors urban
+    visual_prompts:
+      - a photo of a busy city street
+      - a photo of a sidewalk with cars and buildings
+      - a photo of an intersection with traffic
+    audio_prompts:
+      - the sound of traffic on a busy street
+      - city street ambience with cars passing
+
+  - id: kitchen
+    display: Kitchen
+    visual_prompts:
+      - a photo of a kitchen
+      - a photo of someone cooking at a stove
+    audio_prompts:
+      - the sound of cooking in a kitchen
+      - dishes clinking and food sizzling in a kitchen
+
+  - id: office
+    display: Office / indoor workplace
+    visual_prompts:
+      - a photo of an office with desks and computers
+      - a photo of a meeting room
+    audio_prompts:
+      - the quiet ambience of an office with keyboard typing
+      - indoor office room tone
+
+  - id: nature
+    display: Nature / outdoors rural
+    visual_prompts:
+      - a photo of a forest
+      - a photo of a field, river, or mountains
+      - a photo of a beach
+    audio_prompts:
+      - birds singing in a forest
+      - wind and water sounds in nature
+
+  - id: sports_venue
+    display: Sports venue
+    visual_prompts:
+      - a photo of a sports stadium
+      - a photo of a basketball court or soccer field with players
+    audio_prompts:
+      - a cheering crowd at a sports game
+      - the sound of a referee whistle and crowd in a stadium
+
+  - id: vehicle_interior
+    display: Inside a vehicle
+    visual_prompts:
+      - a photo taken inside a car
+      - a photo of the interior of a bus or train
+    audio_prompts:
+      - engine hum heard from inside a car
+      - the inside of a moving vehicle

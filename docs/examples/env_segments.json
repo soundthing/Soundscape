@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "kind": "env_segments",
+  "data": [
+    {
+      "start": 0.0, "end": 12.4, "env": "kitchen", "confidence": 0.82,
+      "probs": { "kitchen": 0.82, "office": 0.1, "street": 0.03, "nature": 0.02, "sports_venue": 0.02, "vehicle_interior": 0.01 }
+    },
+    {
+      "start": 12.4, "end": 30.0, "env": "general", "confidence": 0.38,
+      "probs": { "street": 0.1444, "vehicle_interior": 0.114, "kitchen": 0.0456, "office": 0.038, "nature": 0.0228, "sports_venue": 0.0152, "general": 0.62 }
+    }
+  ]
+}

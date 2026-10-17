@@ -1,0 +1,130 @@
+# P(event | environment) soft priors. SINGLE OWNER: Person 2 (edits from Person 1
+# go through them). This is the shared hotspot between the two components.
+#
+# Semantics (implemented in soundthing.events.conditioning.prior_weights):
+#   For every environment e, class c has weight w[e][c] in [0, 1]:
+#     w[e][c] = environments[e].classes[c]  if listed
+#             = environments[e].default     otherwise
+#   At time t, with env distribution p(e|t) from env_segments.json:
+#     weight(c, t) = sum_e p(e|t) * w[e][c]
+#     conditioned_score(c, t) = raw_score(c, t) * (floor + (1 - floor) * weight(c, t))
+#   Safety classes (vocabulary.yaml `safety: true`) always get weight 1.
+#   `floor` keeps unlikely-but-loud events from being zeroed entirely, so a
+#   misclassified environment degrades gracefully instead of hiding everything.
+#
+# Every environment in environments.yaml must have a block here.
+
+floor: 0.25
+
+environments:
+  general:
+    default: 1.0   # no conditioning
+    classes: {}
+
+  street:
+    default: 0.2
+    classes:
+      car_passing: 1.0
+      traffic: 1.0
+      motorcycle: 1.0
+      tire_screech: 0.8
+      engine_start: 0.7
+      engine_rev: 0.8
+      reversing_beep: 0.7
+      footsteps: 0.9
+      dog_bark: 0.7
+      birdsong: 0.5
+      rain: 0.6
+      wind: 0.6
+      thunder: 0.4
+      crowd_murmur: 0.6
+      helicopter: 0.5
+      aircraft: 0.4
+      train: 0.5
+      train_horn: 0.5
+      door_slam: 0.4
+
+  kitchen:
+    default: 0.2
+    classes:
+      microwave_beep: 1.0
+      sizzling: 1.0
+      faucet: 1.0
+      dishes: 1.0
+      blender: 1.0
+      chopping: 1.0
+      kettle_whistle: 1.0
+      boiling: 1.0
+      door_open_close: 0.8
+      door_slam: 0.6
+      footsteps: 0.7
+      phone_ring: 0.6
+      laughter: 0.5
+      cat_meow: 0.4
+      dog_bark: 0.4
+      clock_ticking: 0.4
+      crash: 0.6
+      doorbell: 0.6
+      thud: 0.6
+
+  office:
+    default: 0.2
+    classes:
+      typing: 1.0
+      printer: 1.0
+      mouse_click: 1.0
+      phone_ring: 1.0
+      door_open_close: 0.9
+      door_knock: 0.9
+      doorbell: 0.5
+      thud: 0.5
+      door_slam: 0.6
+      footsteps: 0.8
+      laughter: 0.6
+      cough: 0.6
+      applause: 0.4
+      clock_ticking: 0.5
+
+  nature:
+    default: 0.15
+    classes:
+      birdsong: 1.0
+      insects: 1.0
+      wind: 1.0
+      stream: 1.0
+      waves: 1.0
+      rain: 1.0
+      thunder: 1.0
+      dog_bark: 0.6
+      footsteps: 0.6
+      aircraft: 0.3
+      helicopter: 0.3
+
+  sports_venue:
+    default: 0.15
+    classes:
+      cheering: 1.0
+      applause: 1.0
+      crowd_murmur: 1.0
+      whistle: 1.0
+      ball_bounce: 1.0
+      footsteps: 0.7
+      laughter: 0.5
+      fireworks: 0.4
+
+  vehicle_interior:
+    default: 0.15
+    classes:
+      engine_start: 1.0
+      engine_rev: 1.0
+      turn_signal: 1.0
+      seatbelt: 1.0
+      door_slam: 0.8
+      door_open_close: 0.8
+      traffic: 0.8
+      car_passing: 0.7
+      tire_screech: 0.6
+      rain: 0.6
+      phone_ring: 0.6
+      keys_jingle: 0.7
+      train: 0.4

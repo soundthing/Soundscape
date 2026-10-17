@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soundthing"
+version = "0.1.0"
+description = "Environment-conditioned non-speech captions for video"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "pyyaml>=6",
+  "soundfile>=0.12",
+]
+
+[project.optional-dependencies]
+# Person 1: sound events
+events = ["torch>=2.1", "torchaudio>=2.1", "panns-inference>=0.1.1", "transformers>=4.40", "silero-vad>=5.1"]
+# Person 2: environment classifier
+environment = ["torch>=2.1", "transformers>=4.40", "pillow>=10", "scenedetect[opencv]>=0.6.4"]
+# Person 3: demo server
+server = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+soundthing = "soundthing.pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+soundthing = ["server/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

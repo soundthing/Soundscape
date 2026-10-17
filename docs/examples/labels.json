@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "kind": "clip_labels",
+  "data": {
+    "video_id": "clip01",
+    "duration": 30.0,
+    "labeler": "person2",
+    "segments": [
+      { "start": 0.0, "end": 12.4, "env": "kitchen" },
+      { "start": 12.4, "end": 30.0, "env": "street" }
+    ],
+    "events": [
+      { "start": 3.1, "end": 3.6, "class_id": "door_slam" },
+      { "start": 5.8, "end": 12.0, "class_id": "sizzling" },
+      { "start": 14.0, "end": 14.4, "class_id": "car_horn", "note": "short, under dialogue" },
+      { "start": 19.5, "end": 30.0, "class_id": "siren", "note": "off-screen, gets louder" }
+    ]
+  }
+}

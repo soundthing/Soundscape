@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "kind": "extracted_inputs",
+  "data": {
+    "video_id": "clip01",
+    "video_path": "../../data/clips/clip01.mp4",
+    "audio_path": "audio.wav",
+    "frames_dir": "frames",
+    "fps": 1.0,
+    "duration": 30.0,
+    "sample_rate": 16000,
+    "audio_stereo_path": "audio_stereo.wav"
+  }
+}

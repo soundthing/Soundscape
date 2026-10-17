@@ -1,1 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
 
+# pipeline outputs and media (share clips out of band)
+runs/
+uploads/
+data/
+*.mp4
+*.mov
+*.webm
+*.wav
+
+# model checkpoints
+checkpoints/
+*.pt
+*.pth
+*.ckpt
