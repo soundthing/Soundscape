@@ -55,3 +55,10 @@ cause is gone.
   contamination while allowing clips with multiple ontology tags that map to the same
   target class. So never map a parent label (`Alarm`, `Door`, `Glass`) whose children
   map to other classes: every siren/knock clip would turn two-class and be dropped.
+- **VAD hysteresis state across chunk boundaries.** Silero VAD per-chunk probabilities
+  require maintaining hysteresis state (on at threshold, off below threshold - 0.15)
+  and resetting model states between files.
+- **Overlapping events under priority filter.** Overlapping events of different priorities
+  (e.g. safety vs non-safety) will have the non-safety event suppressed by `priority_filter`.
+  When synthesizing multi-event test clips, space activations across non-overlapping time
+  windows so both events are preserved.

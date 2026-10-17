@@ -38,9 +38,8 @@ variants.
 Non-safety scores are multiplied by `suppress_under_speech` inside speech; safety classes
 are untouched. Loud events during dialogue can still surface.
 
-## VAD spans are padded and merged before masking — events
-Raw Silero spans are padded by `pad_sec`, clipped to [0, duration], and merged across gaps
-under `merge_gap_sec` so brief pauses in dialogue don't leak false events.
+## VAD regions derived from cached per-chunk probabilities — events
+VAD regions are now derived from cached Silero per-chunk probabilities (our hysteresis + min_speech + pad/merge) in BOTH production and replay, replacing get_speech_timestamps, so VAD threshold and suppression are tunable from the cache. Differs from get_speech_timestamps: no internal Silero speech_pad/min_silence; our pad/merge covers it. Raw spans are padded by `pad_sec`, clipped to [0, duration], and merged across gaps under `merge_gap_sec`.
 
 ## Merge runs before dropping short events — events
 Runs within merge_gap_sec are merged before filtering by min_event_sec so that
@@ -56,11 +55,6 @@ To stress-test conditioning under an adversarial environment without hard-coding
 environment pairs, the wrong environment is selected per segment as the one whose prior
 weight vector over vocabulary classes has lowest cosine similarity to the true environment's.
 
-## Raw-score cache keeps only the most recent file — events
-Sharing masked scores across baseline and conditioned modes halves scoring and VAD cost.
-Caching only the most recent entry bounded by audio path, mtime, size, and config keys
-prevents unbounded memory growth during batch runs.
-
 ## Synthetic dev mixes keep folds isolated, sample by prior, and gate onsets — events
 Each mix draws sources from a single dataset fold so cross-validation splits remain
 leak-free. Foreground event classes are sampled proportional to the environment's prior
@@ -74,3 +68,20 @@ FSD50K clips are multi-labeled and ontology-propagated; admitting clips mapping 
 vocabulary classes would inject unintended overlapping events into synthetic mixes, so sources
 must reach exactly one distinct mapped class. AudioSet strong-label clips have unknown environments,
 so their annotations are generated with empty segments and evaluated exclusively in baseline mode.
+## Tuning objective is micro F0.5 with coarse-only matches at half credit — events
+The fixed tuning objective uses micro-pooled F0.5 because precision is prioritized over recall
+(false-positive captions are more jarring than missed non-safety events). Coarse-only matches
+receive half credit (0.5 TP + 0.5 FP + 0.5 FN), rewarding coarse detections while preserving
+an incentive for fine-grained accuracy.
+
+## Safety recall includes coarse-level matches — events
+For safety-critical classes, coarse captions (such as "alarm" for a siren) still alert the
+viewer to danger. Safety recall therefore counts coarse matches toward true positives.
+
+## Tuning matching replicates evaluate greedy semantics — events
+Harness matching uses the identical greedy nearest-onset iteration and tie-breaking order
+(<= distance favoring the later truth) as soundthing.evaluate so tuning metrics directly
+predict official evaluation results.
+
+## Split detection into cached model stage and replay — events
+Detection is split into a cached model stage (`ClipCache`) and a replayable post-model stage (`replay`). Known accepted behaviour changes: tagger and CLAP audio embeddings pass through float16 to conserve memory (~1 MB/min); VAD regions come from per-chunk probs. Production detector and tuning harness share the exact same replay path. In-process memo in `detector.detect` caches the single most recent `ClipCache` by audio path, mtime, size, cache_key and models_cache_key so conditioned runs on the same file avoid recomputation.
