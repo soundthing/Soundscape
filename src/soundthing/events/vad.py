@@ -1,4 +1,4 @@
-"""Speech masking (Silero VAD or Whisper timestamps)."""
+"""Speech masking (Silero VAD per-chunk probabilities and speech regions)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import numpy as np
 
 from ..config import Config
 
+VAD_CHUNK_SEC: float = 512 / 16000
+
 
 @functools.lru_cache(maxsize=1)
 def _load_silero() -> Any:
@@ -18,33 +20,30 @@ def _load_silero() -> Any:
     return load_silero_vad()
 
 
-def _silero_timestamps(
-    model: Any,
-    audio16k: np.ndarray,
-    threshold: float,
-    min_speech_sec: float,
-) -> list[tuple[float, float]]:
-    """Run Silero VAD to get speech timestamps in seconds."""
+def _silero_probs(model: Any, audio16k: np.ndarray) -> np.ndarray:
+    """Run Silero VAD over audio16k in 512-sample chunks, returning probabilities."""
     import torch
-    from silero_vad import get_speech_timestamps
 
-    tensor = torch.from_numpy(audio16k)
-    min_ms = int(min_speech_sec * 1000)
-    stamps = get_speech_timestamps(
-        tensor,
-        model,
-        sampling_rate=16000,
-        threshold=threshold,
-        min_speech_duration_ms=min_ms,
-        return_seconds=True,
-    )
-    res: list[tuple[float, float]] = []
-    for item in stamps:
-        if isinstance(item, dict):
-            res.append((float(item["start"]), float(item["end"])))
-        else:
-            res.append((float(item[0]), float(item[1])))
-    return res
+    if hasattr(model, "reset_states"):
+        model.reset_states()
+
+    chunk_size = 512
+    n_samples = len(audio16k)
+    if n_samples == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    n_chunks = (n_samples + chunk_size - 1) // chunk_size
+    probs = np.zeros(n_chunks, dtype=np.float32)
+
+    with torch.no_grad():
+        for i in range(n_chunks):
+            chunk = audio16k[i * chunk_size : (i + 1) * chunk_size]
+            if len(chunk) < chunk_size:
+                chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
+            t_chunk = torch.from_numpy(chunk)
+            probs[i] = float(model(t_chunk, 16000))
+
+    return probs
 
 
 def _resample(audio: np.ndarray, orig_sr: int, target_sr: int = 16000) -> np.ndarray:
@@ -98,17 +97,17 @@ def _postprocess_spans(
     return result
 
 
-def speech_regions(audio: np.ndarray, sr: int, cfg: Config) -> list[tuple[float, float]]:
-    """Return sorted (start, end) speech spans in seconds."""
+def speech_probs(audio: np.ndarray, sr: int, cfg: Config) -> np.ndarray:
+    """(V,) float32 per-chunk speech probability."""
     vad_cfg = cfg.pipeline.get("events", {}).get("vad", {})
     model_name = vad_cfg.get("model", "silero")
     if model_name == "none":
-        return []
+        return np.zeros(0, dtype=np.float32)
     if model_name != "silero":
         raise ValueError(f"Unknown VAD model: {model_name!r}")
 
     if audio is None or audio.size == 0:
-        return []
+        return np.zeros(0, dtype=np.float32)
 
     if audio.ndim == 2:
         if audio.shape[0] < audio.shape[1] and audio.shape[0] <= 8:
@@ -120,24 +119,81 @@ def speech_regions(audio: np.ndarray, sr: int, cfg: Config) -> list[tuple[float,
 
     audio = np.ascontiguousarray(audio, dtype=np.float32)
 
-    duration = float(len(audio)) / float(sr)
-    if duration <= 0:
-        return []
+    if len(audio) == 0:
+        return np.zeros(0, dtype=np.float32)
 
     if sr != 16000:
         audio16k = _resample(audio, sr, 16000)
     else:
         audio16k = audio
 
+    model = _load_silero()
+    probs = _silero_probs(model, audio16k)
+    return probs.astype(np.float32)
+
+
+def speech_regions_from_probs(
+    probs: np.ndarray,
+    chunk_sec: float,
+    duration: float,
+    cfg: Config,
+) -> list[tuple[float, float]]:
+    """Convert per-chunk speech probabilities to padded, merged speech spans."""
+    vad_cfg = cfg.pipeline.get("events", {}).get("vad", {})
+    model_name = vad_cfg.get("model", "silero")
+    if model_name == "none" or probs is None or len(probs) == 0:
+        return []
+    if model_name != "silero":
+        raise ValueError(f"Unknown VAD model: {model_name!r}")
+
     threshold = float(vad_cfg.get("threshold", 0.5))
     min_speech_sec = float(vad_cfg.get("min_speech_sec", 0.25))
     pad_sec = float(vad_cfg.get("pad_sec", 0.1))
     merge_gap_sec = float(vad_cfg.get("merge_gap_sec", 0.3))
 
-    model = _load_silero()
-    raw_spans = _silero_timestamps(model, audio16k, threshold, min_speech_sec)
+    off_threshold = max(threshold - 0.15, 0.01)
 
-    return _postprocess_spans(raw_spans, duration, pad_sec, merge_gap_sec)
+    raw_spans: list[tuple[float, float]] = []
+    in_speech = False
+    start_idx = 0
+
+    for i, p in enumerate(probs):
+        if not in_speech:
+            if p >= threshold:
+                in_speech = True
+                start_idx = i
+        else:
+            if p < off_threshold:
+                in_speech = False
+                raw_spans.append((start_idx * chunk_sec, i * chunk_sec))
+
+    if in_speech:
+        raw_spans.append((start_idx * chunk_sec, len(probs) * chunk_sec))
+
+    # Drop raw spans shorter than min_speech_sec
+    filtered_spans = [(s, e) for s, e in raw_spans if (e - s) >= min_speech_sec]
+
+    return _postprocess_spans(filtered_spans, duration, pad_sec, merge_gap_sec)
+
+
+def speech_regions(audio: np.ndarray, sr: int, cfg: Config) -> list[tuple[float, float]]:
+    """Return sorted (start, end) speech spans in seconds."""
+    if audio is None or audio.size == 0:
+        return []
+
+    if audio.ndim == 2:
+        if audio.shape[0] < audio.shape[1] and audio.shape[0] <= 8:
+            n_samples = audio.shape[1]
+        else:
+            n_samples = audio.shape[0]
+    elif audio.ndim > 2:
+        n_samples = audio.shape[0]
+    else:
+        n_samples = len(audio)
+
+    duration = float(n_samples) / float(sr) if sr > 0 else 0.0
+    probs = speech_probs(audio, sr, cfg)
+    return speech_regions_from_probs(probs, VAD_CHUNK_SEC, duration, cfg)
 
 
 def speech_mask(times: np.ndarray, regions: list[tuple[float, float]]) -> np.ndarray:

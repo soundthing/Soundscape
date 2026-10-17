@@ -40,3 +40,25 @@ cause is gone.
   boundaries or at the clip edge can produce detections ending after `inputs.duration`
   or starting at/after it. Dropping start >= duration and clipping ends to duration
   ensures all events satisfy contract validation.
+- **Holdout clips must never appear in dev.** Hand-labeled holdout clips evaluate models
+  strictly on promotion; allowing holdout ids into dev risks tuning against the test split,
+  so import refuses overlaps and enforces disjoint sets.
+- **`import kaggle` authenticates at import time.** Importing `kaggle` or any of its submodules without valid credentials immediately raises; import lazily inside client accessors only.
+- **Kaggle builds only committed and pushed code.** The cache kernel clones the repo at a specified git SHA; uncommitted local edits or unpushed commits will not be in the remote build.
+- **Faking a tuning submodule needs the package attribute too.** Once the real module has
+  been imported, `import soundthing.events.tuning.x as m` resolves through the package
+  attribute, so a fake placed only in `sys.modules` is silently bypassed (tests pass alone,
+  fail in the full suite). Patch both.
+- **FSD50K labels are hierarchy-propagated.** Parent ontology labels (e.g. `Animal`,
+  `Domestic_animals_and_pets`) appear alongside specific leaf labels on every clip.
+  Filtering for clips that reach exactly one distinct mapped class prevents multi-source
+  contamination while allowing clips with multiple ontology tags that map to the same
+  target class. So never map a parent label (`Alarm`, `Door`, `Glass`) whose children
+  map to other classes: every siren/knock clip would turn two-class and be dropped.
+- **VAD hysteresis state across chunk boundaries.** Silero VAD per-chunk probabilities
+  require maintaining hysteresis state (on at threshold, off below threshold - 0.15)
+  and resetting model states between files.
+- **Overlapping events under priority filter.** Overlapping events of different priorities
+  (e.g. safety vs non-safety) will have the non-safety event suppressed by `priority_filter`.
+  When synthesizing multi-event test clips, space activations across non-overlapping time
+  windows so both events are preserved.
