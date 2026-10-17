@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from soundthing.config import load_config
+from soundthing.events.tuning import bootstrap, space
 
 
 WRITABLE_PREFIXES = ("events.", "thresholds.")
@@ -421,3 +423,424 @@ def write_overrides(overrides: dict, config_dir: Path) -> list[Path]:
         raise PromoteError(f"Config validation failed after editing: {e}") from e
 
     return changed_files
+
+
+def _git_state(ledger_mod: Any, root: Path) -> dict[str, Any]:
+    try:
+        return ledger_mod.git_state(root)
+    except TypeError:
+        return ledger_mod.git_state()
+
+
+def _fmt_val(val: Any) -> str:
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    if isinstance(val, float):
+        return f"{val:.4f}"
+    if isinstance(val, int):
+        return str(val)
+    return str(val)
+
+
+def _get_old_value(
+    key: str,
+    space_idx: dict[str, dict[str, Any]],
+    config_dir: Path,
+) -> Any:
+    if key in space_idx and space_idx[key].get("current") is not None:
+        return space_idx[key]["current"]
+    try:
+        filename, y_path = split_target(key)
+        file_path = config_dir / filename
+        if file_path.exists():
+            with open(file_path, "r", encoding="utf-8", newline="") as f:
+                data = yaml.safe_load(f)
+            cur = data
+            for p in y_path:
+                cur = cur[p]
+            return cur
+    except Exception:
+        pass
+    return "missing"
+
+
+def holdout_check(
+    overrides: dict,
+    score_fn: Any = None,
+    cfg: Any = None,
+) -> bool:
+    """Check a candidate configuration against the hidden holdout set.
+
+    Lazy imports score_fn (soundthing.events.tuning.score.score) and holdout labels
+    directory (soundthing.events.tuning.holdout.holdout_labels_dir()).
+    Pass iff candidate objective, safety_recall, and fp_per_min are at least as
+    good as the current config on holdout.
+
+    Returns ONLY a bool. Never prints, logs, returns, or stores holdout numbers.
+    """
+    if score_fn is None:
+        try:
+            from soundthing.events.tuning.score import score as score_fn
+        except ImportError as e:
+            raise PromoteError(f"score function not available: {e}") from e
+
+    try:
+        import soundthing.events.tuning.holdout as holdout
+    except ImportError as e:
+        raise PromoteError(f"holdout set not available (module soundthing.events.tuning.holdout missing: {e})") from e
+
+    try:
+        hdir = holdout.holdout_labels_dir()
+    except Exception as e:
+        raise PromoteError(f"holdout set not available: {e}") from e
+
+    hdir_path = Path(hdir) if hdir is not None else None
+    if hdir_path is None or not hdir_path.is_dir() or not any(hdir_path.glob("*.json")):
+        raise PromoteError(f"holdout set not available: directory {hdir} missing or contains no JSON files")
+
+    cand = score_fn(overrides=overrides, split="holdout", cfg=cfg, best=None, labels_dir=hdir_path)
+    cur = score_fn(overrides={}, split="holdout", cfg=cfg, best=None, labels_dir=hdir_path)
+
+    def _metric(res: Any, name: str) -> float:
+        if isinstance(res, dict):
+            return float(res[name])
+        return float(getattr(res, name))
+
+    cand_obj = _metric(cand, "objective")
+    cur_obj = _metric(cur, "objective")
+    cand_safety = _metric(cand, "safety_recall")
+    cur_safety = _metric(cur, "safety_recall")
+    cand_fp = _metric(cand, "fp_per_min")
+    cur_fp = _metric(cur, "fp_per_min")
+
+    passed = (cand_obj >= cur_obj and cand_safety >= cur_safety and cand_fp <= cur_fp)
+    return bool(passed)
+
+
+def _format_tuning_log_entry(
+    entry: dict[str, Any],
+    old: dict[str, Any],
+    ci: dict[str, float],
+    before: float | None,
+    git_sha: str,
+) -> list[str]:
+    run_id = entry.get("run_id", "norun")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    sha_str = str(git_sha)[:10]
+    n_clips = len(entry.get("per_clip", {}))
+
+    overrides = entry.get("overrides", {})
+    param_parts = []
+    for k in sorted(overrides.keys()):
+        old_v = _fmt_val(old.get(k, "missing"))
+        new_v = _fmt_val(overrides[k])
+        param_parts.append(f"{k}: {old_v} -> {new_v}")
+    params_str = "; ".join(param_parts)
+
+    before_str = f"{float(before):.4f}" if before is not None else "n/a"
+    after_str = f"{float(entry['objective']):.4f}"
+    base_str = f"{float(entry.get('baseline', 0.0)):.4f}"
+    wrong_str = f"{float(entry.get('wrong_env', 0.0)):.4f}"
+
+    gain_str = f"{float(ci['gain']):.4f}"
+    lo_str = f"{float(ci['lo']):.4f}"
+    hi_str = f"{float(ci['hi']):.4f}"
+
+    return [
+        f"## {date_str} — promote {run_id}",
+        f"Git: {sha_str}    Split: dev ({n_clips} clips)",
+        f"Params: {params_str}",
+        f"Dev F0.5: {before_str} -> {after_str}   (baseline {base_str}, wrong-env {wrong_str})",
+        f"Bootstrap gain: {gain_str} [{lo_str}, {hi_str}]",
+        "Holdout: pass",
+        "Outcome: promoted",
+    ]
+
+
+def append_tuning_log(
+    path: Path,
+    entry: dict[str, Any],
+    old: dict[str, Any],
+    ci: dict[str, float],
+    before: float | None,
+    git_sha: str,
+) -> None:
+    """Insert a promote entry into tuning-log.md newest first.
+
+    Inserts directly before the first '## ' entry line after the header,
+    or replacing '_No runs yet._', or at EOF. Preserves newline style.
+    """
+    path = Path(path)
+    if not path.exists():
+        content = ""
+        newline = "\n"
+        ends_with_newline = False
+        lines: list[str] = []
+    else:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            content = f.read()
+        newline = "\r\n" if "\r\n" in content else "\n"
+        ends_with_newline = content.endswith("\r\n") or content.endswith("\n")
+        lines = content.splitlines()
+
+    entry_lines = _format_tuning_log_entry(entry, old, ci, before, git_sha)
+
+    in_code_block = False
+    first_entry_idx: int | None = None
+    no_runs_idx: int | None = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if not in_code_block:
+            if stripped == "_No runs yet._" and no_runs_idx is None:
+                no_runs_idx = i
+            elif line.startswith("## ") and first_entry_idx is None:
+                first_entry_idx = i
+
+    if first_entry_idx is not None:
+        lines[first_entry_idx:first_entry_idx] = entry_lines + [""]
+    elif no_runs_idx is not None:
+        lines[no_runs_idx:no_runs_idx + 1] = entry_lines
+    else:
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend(entry_lines)
+
+    new_content = newline.join(lines)
+    if ends_with_newline or not content:
+        new_content += newline
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new_content)
+
+
+def promote(
+    run_id: str,
+    *,
+    ledger: Any = None,
+    score_fn: Any = None,
+    holdout_fn: Any = None,
+    cfg: Any = None,
+    root: Path | None = None,
+    n_boot: int = 1000,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Take a ledger candidate, verify limits, bootstrap and holdout, then promote.
+
+    Args:
+        run_id: Candidate identifier in ledger.
+        ledger: Ledger module or fake (lazy loaded if None).
+        score_fn: Score function or fake (lazy loaded if None).
+        holdout_fn: Holdout check callable (defaults to holdout_check).
+        cfg: Config instance (defaults to load_config(root / "config")).
+        root: Repo root Path (defaults to Path.cwd()).
+        n_boot: Bootstrap iterations for paired bootstrap test.
+        seed: Random seed for bootstrap.
+
+    Returns:
+        Dict with "promoted": True/False and associated metadata.
+    """
+    root_path = Path(root) if root is not None else Path.cwd()
+    config_dir = root_path / "config"
+    tuning_log_path = root_path / "src" / "soundthing" / "events" / "references" / "tuning-log.md"
+
+    if cfg is None:
+        cfg = load_config(config_dir)
+
+    if ledger is None:
+        from soundthing.events.tuning import ledger
+
+    if holdout_fn is None:
+        holdout_fn = lambda ov: holdout_check(ov, score_fn=score_fn, cfg=cfg)
+
+    entries = ledger.read()
+    candidate: dict[str, Any] | None = None
+    for e in entries:
+        if isinstance(e, dict) and e.get("run_id") == run_id and e.get("kind", "score") == "score":
+            candidate = e
+
+    if candidate is None:
+        raise PromoteError(f"Candidate run_id {run_id!r} not found in ledger")
+
+    overrides = candidate.get("overrides", {})
+    if overrides is None:
+        overrides = {}
+
+    git_info = _git_state(ledger, root_path)
+
+    # 1. overrides empty -> reason "no overrides"
+    if not overrides:
+        reason = "no overrides"
+        ledger.append({
+            "kind": "promote",
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+            "holdout_pass": None,
+            "bootstrap": None,
+            "git": git_info,
+        })
+        return {
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+        }
+
+    # 2. Any shared key -> reason mentions propose_shared_change.
+    # Any key failing split_target -> reason with PromoteError message.
+    reason = None
+    for k in sorted(overrides.keys()):
+        if space.is_shared(k):
+            reason = f"key {k!r} is shared; use propose_shared_change to propose changes to shared files"
+            break
+
+    if reason is None:
+        for k in sorted(overrides.keys()):
+            try:
+                split_target(k)
+            except PromoteError as e:
+                reason = str(e)
+                break
+
+    if reason is not None:
+        ledger.append({
+            "kind": "promote",
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+            "holdout_pass": None,
+            "bootstrap": None,
+            "git": git_info,
+        })
+        return {
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+        }
+
+    # 3. entry["passed"] not True -> "limits not passed"
+    if not candidate.get("passed", False):
+        reason = "limits not passed"
+        ledger.append({
+            "kind": "promote",
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+            "holdout_pass": None,
+            "bootstrap": None,
+            "git": git_info,
+        })
+        return {
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+        }
+
+    # 4. Bootstrap: comparator per_clip = ledger.best()["per_clip"] if a best exists,
+    # else score_fn(overrides={}, split="dev", cfg=cfg).per_clip (current config).
+    # ci = bootstrap.paired_bootstrap(entry["per_clip"], comparator, n=n_boot, seed=seed);
+    # not bootstrap.accepts(ci) -> "bootstrap lower bound <= 0".
+    best_entry = ledger.best()
+    if best_entry is not None and "per_clip" in best_entry:
+        comparator = best_entry["per_clip"]
+        before = best_entry.get("objective")
+    else:
+        if score_fn is None:
+            from soundthing.events.tuning.score import score as score_fn
+        cur_res = score_fn(overrides={}, split="dev", cfg=cfg)
+        if isinstance(cur_res, dict):
+            comparator = cur_res.get("per_clip")
+            before = cur_res.get("objective")
+        else:
+            comparator = getattr(cur_res, "per_clip")
+            before = getattr(cur_res, "objective")
+
+    ci = bootstrap.paired_bootstrap(candidate["per_clip"], comparator, n=n_boot, seed=seed)
+    if not bootstrap.accepts(ci):
+        reason = "bootstrap lower bound <= 0"
+        ledger.append({
+            "kind": "promote",
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+            "holdout_pass": None,
+            "bootstrap": ci,
+            "git": git_info,
+        })
+        return {
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+        }
+
+    # 5. holdout_fn(overrides) False -> "holdout failed".
+    # If it raises PromoteError -> reason with its message.
+    try:
+        passed_holdout = holdout_fn(overrides)
+    except PromoteError as e:
+        reason = str(e)
+        ledger.append({
+            "kind": "promote",
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+            "holdout_pass": None,
+            "bootstrap": ci,
+            "git": git_info,
+        })
+        return {
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+        }
+
+    if not passed_holdout:
+        reason = "holdout failed"
+        ledger.append({
+            "kind": "promote",
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+            "holdout_pass": False,
+            "bootstrap": ci,
+            "git": git_info,
+        })
+        return {
+            "run_id": run_id,
+            "promoted": False,
+            "reason": reason,
+        }
+
+    # On success:
+    space_idx = space.space_index(space.describe_space(cfg, None))
+    old: dict[str, Any] = {}
+    for k in overrides:
+        old[k] = _get_old_value(k, space_idx, config_dir)
+
+    changed = write_overrides(overrides, config_dir)
+    git_sha = str(git_info.get("sha", ""))
+    ledger.set_best({**candidate, "git_sha": git_sha})
+    append_tuning_log(tuning_log_path, candidate, old, ci, before, git_sha)
+
+    ledger.append({
+        "kind": "promote",
+        "run_id": run_id,
+        "promoted": True,
+        "reason": None,
+        "holdout_pass": True,
+        "bootstrap": ci,
+        "git": git_info,
+    })
+
+    return {
+        "run_id": run_id,
+        "promoted": True,
+        "holdout": "pass",
+        "files": [p.relative_to(root_path).as_posix() for p in changed],
+        "bootstrap": ci,
+        "objective": candidate["objective"],
+    }

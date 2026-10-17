@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 import shutil
+import sys
+import types
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -12,7 +15,10 @@ import yaml
 from soundthing.config import DEFAULT_CONFIG_DIR, load_config
 from soundthing.events.tuning.promote import (
     PromoteError,
+    append_tuning_log,
     format_scalar,
+    holdout_check,
+    promote,
     set_yaml_value,
     split_target,
     write_overrides,
@@ -243,3 +249,475 @@ def test_load_config_validation_failure_restores_file(tmp_config_dir: Path):
 
     after_bytes = {p.name: p.read_bytes() for p in tmp_config_dir.iterdir()}
     assert before_bytes == after_bytes
+
+
+@dataclass
+class FakeResult:
+    run_id: str = "run_fake"
+    objective: float = 0.85
+    baseline: float = 0.60
+    wrong_env: float = 0.50
+    safety_recall: float = 0.95
+    fp_per_min: float = 0.20
+    grid_f1: float = 0.70
+    per_clip: dict = field(default_factory=dict)
+    diagnostics: dict = field(default_factory=dict)
+    limits: dict = field(default_factory=dict)
+    passed: bool = True
+    overrides: dict = field(default_factory=dict)
+    split: str = "dev"
+
+
+class FakeLedger:
+    def __init__(self, entries=None, best_entry=None):
+        self.entries = list(entries or [])
+        self._best = best_entry
+        self.set_best_called = None
+
+    def append(self, entry: dict) -> None:
+        self.entries.append(dict(entry))
+
+    def read(self) -> list[dict]:
+        return list(self.entries)
+
+    def best(self) -> dict | None:
+        return self._best
+
+    def set_best(self, entry: dict) -> None:
+        self._best = dict(entry)
+        self.set_best_called = dict(entry)
+
+    def git_state(self, cwd=None) -> dict:
+        return {"sha": "c0ffee1234567890", "dirty": False, "branch": "orch/C-promote"}
+
+
+def make_per_clip_data(n_clips: int = 30, fp_cand: int = 0, fp_best: int = 5) -> tuple[dict, dict]:
+    cand_per_clip = {}
+    best_per_clip = {}
+    for i in range(n_clips):
+        vid = f"clip_{i:02d}"
+        cand_per_clip[vid] = {
+            "conditioned": {
+                "tp_fine": 10,
+                "tp_coarse": 0,
+                "fp": fp_cand,
+                "fn": 1,
+                "minutes": 1.0,
+                "safety_tp": 2,
+                "safety_total": 2,
+            },
+            "baseline": {
+                "tp_fine": 8,
+                "tp_coarse": 0,
+                "fp": fp_cand + 1,
+                "fn": 2,
+                "minutes": 1.0,
+                "safety_tp": 2,
+                "safety_total": 2,
+            },
+            "wrong_env": {
+                "tp_fine": 6,
+                "tp_coarse": 0,
+                "fp": fp_cand + 2,
+                "fn": 3,
+                "minutes": 1.0,
+                "safety_tp": 1,
+                "safety_total": 2,
+            },
+        }
+        best_per_clip[vid] = {
+            "conditioned": {
+                "tp_fine": 10,
+                "tp_coarse": 0,
+                "fp": fp_best,
+                "fn": 1,
+                "minutes": 1.0,
+                "safety_tp": 2,
+                "safety_total": 2,
+            },
+            "baseline": {
+                "tp_fine": 8,
+                "tp_coarse": 0,
+                "fp": fp_best + 1,
+                "fn": 2,
+                "minutes": 1.0,
+                "safety_tp": 2,
+                "safety_total": 2,
+            },
+            "wrong_env": {
+                "tp_fine": 6,
+                "tp_coarse": 0,
+                "fp": fp_best + 2,
+                "fn": 3,
+                "minutes": 1.0,
+                "safety_tp": 1,
+                "safety_total": 2,
+            },
+        }
+    return cand_per_clip, best_per_clip
+
+
+@pytest.fixture
+def repo_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("SOUNDTHING_TUNING_HOME", str(tmp_path / "tuning_home"))
+    root = tmp_path / "repo"
+    config_dir = root / "config"
+    shutil.copytree(DEFAULT_CONFIG_DIR, config_dir)
+
+    real_tuning_log = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "soundthing"
+        / "events"
+        / "references"
+        / "tuning-log.md"
+    )
+    target_tuning_log = root / "src" / "soundthing" / "events" / "references" / "tuning-log.md"
+    target_tuning_log.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(real_tuning_log, target_tuning_log)
+
+    return root
+
+
+def test_promote_happy_path(repo_root: Path):
+    cand_per_clip, best_per_clip = make_per_clip_data(30, fp_cand=0, fp_best=5)
+
+    tuning_log_path = repo_root / "src" / "soundthing" / "events" / "references" / "tuning-log.md"
+    # Pre-seed one older ## entry to check ordering
+    pre_seed_text = (
+        tuning_log_path.read_text(encoding="utf-8").replace(
+            "_No runs yet._",
+            "## 2026-10-15 — promote old_run\n"
+            "Git: 1111222233    Split: dev (30 clips)\n"
+            "Params: events.postprocess.smoothing_sec: 0.5000 -> 0.6000\n"
+            "Dev F0.5: 0.6000 -> 0.7200   (baseline 0.5500, wrong-env 0.5000)\n"
+            "Bootstrap gain: 0.1200 [0.0500, 0.1800]\n"
+            "Holdout: pass\n"
+            "Outcome: promoted\n",
+        )
+    )
+    tuning_log_path.write_text(pre_seed_text, encoding="utf-8")
+
+    run_id = "cand_001"
+    cand_entry = {
+        "run_id": run_id,
+        "kind": "score",
+        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "objective": 0.88,
+        "baseline": 0.70,
+        "wrong_env": 0.65,
+        "safety_recall": 0.95,
+        "fp_per_min": 0.10,
+        "passed": True,
+        "per_clip": cand_per_clip,
+    }
+    best_entry = {
+        "run_id": "best_000",
+        "kind": "score",
+        "objective": 0.72,
+        "baseline": 0.65,
+        "wrong_env": 0.60,
+        "safety_recall": 0.95,
+        "fp_per_min": 0.30,
+        "passed": True,
+        "per_clip": best_per_clip,
+    }
+
+    ledger = FakeLedger(entries=[best_entry, cand_entry], best_entry=best_entry)
+
+    holdout_called_with = []
+
+    def fake_holdout(ov):
+        holdout_called_with.append(ov)
+        return True
+
+    res = promote(
+        run_id,
+        ledger=ledger,
+        holdout_fn=fake_holdout,
+        root=repo_root,
+        n_boot=100,
+        seed=42,
+    )
+
+    # 1. promoted True
+    assert res["promoted"] is True
+    assert res["run_id"] == run_id
+    assert res["holdout"] == "pass"
+    assert res["objective"] == 0.88
+    assert res["bootstrap"]["lo"] > 0
+    assert "config/pipeline.yaml" in res["files"]
+
+    # 2. pipeline.yaml in root has the new value with comment kept
+    pipe_text = (repo_root / "config" / "pipeline.yaml").read_text(encoding="utf-8")
+    assert "smoothing_sec: 0.75" in pipe_text
+    assert "# two-sided median filter width" in pipe_text
+
+    # 3. ledger.set_best called with git_sha
+    assert ledger.set_best_called is not None
+    assert ledger.set_best_called["run_id"] == run_id
+    assert ledger.set_best_called["git_sha"] == "c0ffee1234567890"
+
+    # 4. tuning-log has new entry right after header and before older entries
+    log_text = tuning_log_path.read_text(encoding="utf-8")
+    assert f"promote {run_id}" in log_text
+    new_idx = log_text.index(f"promote {run_id}")
+    old_idx = log_text.index("promote old_run")
+    assert new_idx < old_idx
+    header_end = log_text.index("```\n\n## ")
+    assert new_idx > header_end
+
+    # 5. Ledger got one "promote" entry with holdout_pass True
+    promote_entries = [e for e in ledger.entries if e.get("kind") == "promote"]
+    assert len(promote_entries) == 1
+    p_entry = promote_entries[0]
+    assert p_entry["run_id"] == run_id
+    assert p_entry["promoted"] is True
+    assert p_entry["holdout_pass"] is True
+    assert p_entry["reason"] is None
+    assert p_entry["git"]["sha"] == "c0ffee1234567890"
+
+    # 6. Return value and ledger entries contain NO holdout numbers (only bool / "pass")
+    assert "holdout_pass" in p_entry
+    assert isinstance(p_entry["holdout_pass"], bool)
+    assert not any("holdout" in k and k != "holdout_pass" for k in p_entry)
+    assert res["holdout"] == "pass"
+    for k, v in res.items():
+        if "holdout" in k:
+            assert v == "pass"
+
+
+def test_promote_refusals(repo_root: Path):
+    cand_per_clip, best_per_clip = make_per_clip_data(30, fp_cand=0, fp_best=5)
+
+    base_cand = {
+        "run_id": "cand_refuse",
+        "kind": "score",
+        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "objective": 0.88,
+        "baseline": 0.70,
+        "wrong_env": 0.65,
+        "safety_recall": 0.95,
+        "fp_per_min": 0.10,
+        "passed": True,
+        "per_clip": cand_per_clip,
+    }
+    best_entry = {
+        "run_id": "best_000",
+        "kind": "score",
+        "objective": 0.72,
+        "passed": True,
+        "per_clip": best_per_clip,
+    }
+
+    def raise_holdout(ov):
+        raise PromoteError("holdout set not available (test error)")
+
+    cases = [
+        # (name, cand_mods, holdout_fn, expected_reason_sub, holdout_pass_val)
+        ("shared_key", {"overrides": {"vocabulary.gunshot.clap": ["woof"]}}, lambda ov: True, "propose_shared_change", None),
+        ("limits_not_passed", {"passed": False}, lambda ov: True, "limits not passed", None),
+        ("bootstrap_fail", {"per_clip": best_per_clip}, lambda ov: True, "bootstrap lower bound <= 0", None),
+        ("holdout_failed", {}, lambda ov: False, "holdout failed", False),
+        ("holdout_error", {}, raise_holdout, "holdout set not available", None),
+        ("no_overrides", {"overrides": {}}, lambda ov: True, "no overrides", None),
+        ("invalid_target", {"overrides": {"events.backend": "real"}}, lambda ov: True, "Refusing to override events.backend", None),
+    ]
+
+    for name, cand_mods, holdout_fn, expected_reason, expected_hp in cases:
+        cand = {**base_cand, **cand_mods}
+        ledger = FakeLedger(entries=[best_entry, cand], best_entry=best_entry)
+
+        config_dir = repo_root / "config"
+        before_bytes = {p.name: p.read_bytes() for p in config_dir.iterdir()}
+
+        res = promote(
+            "cand_refuse",
+            ledger=ledger,
+            holdout_fn=holdout_fn,
+            root=repo_root,
+            n_boot=100,
+            seed=42,
+        )
+
+        assert res["promoted"] is False, f"Failed for case {name}"
+        assert expected_reason in res["reason"], f"Reason mismatch for {name}: {res['reason']}"
+
+        after_bytes = {p.name: p.read_bytes() for p in config_dir.iterdir()}
+        assert before_bytes == after_bytes, f"Config modified for refusal case {name}"
+
+        promote_entries = [e for e in ledger.entries if e.get("kind") == "promote"]
+        assert len(promote_entries) == 1, f"Expected 1 promote entry for {name}, got {len(promote_entries)}"
+        pe = promote_entries[0]
+        assert pe["promoted"] is False
+        assert pe["reason"] == res["reason"]
+        assert pe["holdout_pass"] == expected_hp
+
+
+def test_promote_no_best_in_ledger(repo_root: Path):
+    cand_per_clip, comparator_per_clip = make_per_clip_data(30, fp_cand=0, fp_best=5)
+
+    cand_entry = {
+        "run_id": "cand_nobest",
+        "kind": "score",
+        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "objective": 0.88,
+        "baseline": 0.70,
+        "wrong_env": 0.65,
+        "passed": True,
+        "per_clip": cand_per_clip,
+    }
+
+    ledger = FakeLedger(entries=[cand_entry], best_entry=None)
+
+    fake_score_calls = []
+
+    def fake_score(**kwargs):
+        fake_score_calls.append(kwargs)
+        return FakeResult(
+            run_id="cur_baseline",
+            objective=0.70,
+            per_clip=comparator_per_clip,
+        )
+
+    res = promote(
+        "cand_nobest",
+        ledger=ledger,
+        score_fn=fake_score,
+        holdout_fn=lambda ov: True,
+        root=repo_root,
+        n_boot=100,
+        seed=42,
+    )
+
+    assert res["promoted"] is True
+    assert len(fake_score_calls) == 1
+    assert fake_score_calls[0]["overrides"] == {}
+    assert fake_score_calls[0]["split"] == "dev"
+    assert fake_score_calls[0]["cfg"] is not None
+
+
+def test_promote_unknown_run_id(repo_root: Path):
+    ledger = FakeLedger(entries=[])
+    with pytest.raises(PromoteError, match="Candidate run_id 'unknown_run' not found in ledger"):
+        promote("unknown_run", ledger=ledger, root=repo_root)
+
+
+def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    tmp_hdir = tmp_path / "holdout_labels"
+    tmp_hdir.mkdir(parents=True, exist_ok=True)
+    (tmp_hdir / "clip_01.json").write_text("{}", encoding="utf-8")
+
+    mod = types.ModuleType("soundthing.events.tuning.holdout")
+    mod.holdout_labels_dir = lambda: tmp_hdir
+    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", mod)
+    if "soundthing.events.tuning" in sys.modules:
+        monkeypatch.setattr(sys.modules["soundthing.events.tuning"], "holdout", mod, raising=False)
+
+    score_calls = []
+
+    def make_score_fn(cand_res: FakeResult, cur_res: FakeResult):
+        def _score(overrides=None, split="dev", cfg=None, best=None, labels_dir=None):
+            score_calls.append({
+                "overrides": overrides,
+                "split": split,
+                "cfg": cfg,
+                "best": best,
+                "labels_dir": labels_dir,
+            })
+            if overrides:
+                return cand_res
+            return cur_res
+        return _score
+
+    base_cur = FakeResult(run_id="cur", objective=0.70, safety_recall=0.90, fp_per_min=0.25)
+
+    # 1. All pass: cand >= cur objective, cand >= cur safety, cand <= cur fp
+    cand_pass = FakeResult(run_id="cand", objective=0.75, safety_recall=0.92, fp_per_min=0.20)
+    score_calls.clear()
+    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur)) is True
+    assert len(score_calls) == 2
+    assert all(c["split"] == "holdout" for c in score_calls)
+    assert all(c["labels_dir"] == tmp_hdir for c in score_calls)
+
+    # 2. Objective fail
+    cand_obj_fail = FakeResult(run_id="cand", objective=0.69, safety_recall=0.92, fp_per_min=0.20)
+    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_obj_fail, base_cur)) is False
+
+    # 3. Safety fail
+    cand_safety_fail = FakeResult(run_id="cand", objective=0.75, safety_recall=0.88, fp_per_min=0.20)
+    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_safety_fail, base_cur)) is False
+
+    # 4. FP fail
+    cand_fp_fail = FakeResult(run_id="cand", objective=0.75, safety_recall=0.92, fp_per_min=0.26)
+    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_fp_fail, base_cur)) is False
+
+    # 5. Missing module -> PromoteError
+    monkeypatch.delitem(sys.modules, "soundthing.events.tuning.holdout", raising=False)
+    if "soundthing.events.tuning" in sys.modules:
+        monkeypatch.delattr(sys.modules["soundthing.events.tuning"], "holdout", raising=False)
+    with pytest.raises(PromoteError, match="holdout set not available"):
+        holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
+
+    # 6. Empty dir -> PromoteError
+    tmp_empty = tmp_path / "empty_holdout"
+    tmp_empty.mkdir(parents=True, exist_ok=True)
+    mod_empty = types.ModuleType("soundthing.events.tuning.holdout")
+    mod_empty.holdout_labels_dir = lambda: tmp_empty
+    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", mod_empty)
+    if "soundthing.events.tuning" in sys.modules:
+        monkeypatch.setattr(sys.modules["soundthing.events.tuning"], "holdout", mod_empty, raising=False)
+    with pytest.raises(PromoteError, match="holdout set not available"):
+        holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
+
+
+def test_append_tuning_log_formatting(tmp_path: Path):
+    log_file = tmp_path / "tuning-log.md"
+    log_file.write_text(
+        "# Tuning log\n\nFormat:\n\n```\n## YYYY-MM-DD — <what changed>\n```\n\n_No runs yet._\n",
+        encoding="utf-8",
+    )
+
+    entry = {
+        "run_id": "run_test_1",
+        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "objective": 0.825,
+        "baseline": 0.65,
+        "wrong_env": 0.55,
+        "per_clip": {f"clip_{i}": {} for i in range(25)},
+    }
+    old = {"events.postprocess.smoothing_sec": 0.5}
+    ci = {"gain": 0.075, "lo": 0.02, "hi": 0.13}
+
+    append_tuning_log(log_file, entry, old, ci, before=0.75, git_sha="1234567890abcdef")
+
+    content = log_file.read_text(encoding="utf-8")
+    assert "_No runs yet._" not in content
+    assert "## " in content
+    assert "promote run_test_1" in content
+    assert "Git: 1234567890    Split: dev (25 clips)" in content
+    assert "Params: events.postprocess.smoothing_sec: 0.5000 -> 0.7500" in content
+    assert "Dev F0.5: 0.7500 -> 0.8250   (baseline 0.6500, wrong-env 0.5500)" in content
+    assert "Bootstrap gain: 0.0750 [0.0200, 0.1300]" in content
+    assert "Holdout: pass" in content
+    assert "Outcome: promoted" in content
+
+    # Add a second entry, verify it is inserted before the first entry
+    entry2 = {
+        "run_id": "run_test_2",
+        "overrides": {"events.postprocess.smoothing_sec": 0.85},
+        "objective": 0.85,
+        "baseline": 0.65,
+        "wrong_env": 0.55,
+        "per_clip": {f"clip_{i}": {} for i in range(25)},
+    }
+    old2 = {"events.postprocess.smoothing_sec": 0.75}
+    ci2 = {"gain": 0.025, "lo": 0.01, "hi": 0.04}
+
+    append_tuning_log(log_file, entry2, old2, ci2, before=0.825, git_sha="abcdef1234567890")
+
+    content2 = log_file.read_text(encoding="utf-8")
+    idx1 = content2.index("promote run_test_1")
+    idx2 = content2.index("promote run_test_2")
+    assert idx2 < idx1
+
