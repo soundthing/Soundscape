@@ -533,7 +533,10 @@ def test_8_request_recache(tuning_env: dict[str, Any], monkeypatch: pytest.Monke
 
     # With no recache_fn and kaggle_io set to None in sys.modules -> RuntimeError mentioning kaggle_io
     tools_no_recache = TuningTools(ledger=FakeLedger(), cfg_loader=lambda: cfg)
+    import soundthing.events.tuning
     monkeypatch.setitem(sys.modules, "soundthing.events.tuning.kaggle_io", None)
+    monkeypatch.setattr(soundthing.events.tuning, "kaggle_io", None, raising=False)
     with pytest.raises(RuntimeError) as exc_info:
         tools_no_recache.request_recache(window=1.0, hop=0.5, model="panns")
     assert "kaggle_io" in str(exc_info.value)
+

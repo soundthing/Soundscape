@@ -611,6 +611,8 @@ def test_promote_unknown_run_id(repo_root: Path):
 
 
 def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import soundthing.events.tuning.promote as promote_mod
+
     tmp_hdir = tmp_path / "holdout_labels"
     tmp_hdir.mkdir(parents=True, exist_ok=True)
     (tmp_hdir / "clip_01.json").write_text("{}", encoding="utf-8")
@@ -620,6 +622,7 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", mod)
     if "soundthing.events.tuning" in sys.modules:
         monkeypatch.setattr(sys.modules["soundthing.events.tuning"], "holdout", mod, raising=False)
+    monkeypatch.setattr(promote_mod, "holdout", mod, raising=False)
 
     score_calls = []
 
@@ -659,10 +662,14 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cand_fp_fail = FakeResult(run_id="cand", objective=0.75, safety_recall=0.92, fp_per_min=0.26)
     assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_fp_fail, base_cur)) is False
 
-    # 5. Missing module -> PromoteError
-    monkeypatch.delitem(sys.modules, "soundthing.events.tuning.holdout", raising=False)
+    # 5. Missing dir -> PromoteError
+    tmp_missing = tmp_path / "missing_holdout"
+    mod_missing = types.ModuleType("soundthing.events.tuning.holdout")
+    mod_missing.holdout_labels_dir = lambda: tmp_missing
+    monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", mod_missing)
     if "soundthing.events.tuning" in sys.modules:
-        monkeypatch.delattr(sys.modules["soundthing.events.tuning"], "holdout", raising=False)
+        monkeypatch.setattr(sys.modules["soundthing.events.tuning"], "holdout", mod_missing, raising=False)
+    monkeypatch.setattr(promote_mod, "holdout", mod_missing, raising=False)
     with pytest.raises(PromoteError, match="holdout set not available"):
         holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
 
@@ -674,8 +681,10 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, "soundthing.events.tuning.holdout", mod_empty)
     if "soundthing.events.tuning" in sys.modules:
         monkeypatch.setattr(sys.modules["soundthing.events.tuning"], "holdout", mod_empty, raising=False)
+    monkeypatch.setattr(promote_mod, "holdout", mod_empty, raising=False)
     with pytest.raises(PromoteError, match="holdout set not available"):
         holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
+
 
 
 def test_append_tuning_log_formatting(tmp_path: Path):

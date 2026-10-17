@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
-from soundthing.events.tuning.bootstrap import accepts, paired_bootstrap, pooled_f_beta
+from soundthing.events.tuning.bootstrap import (
+    _vectorized_f_beta,
+    accepts,
+    paired_bootstrap,
+    pooled_f_beta,
+)
+from soundthing.events.tuning.objective import ClipMatch, f_beta
+
 
 
 def test_pooled_f_beta_hand_computed_cases():
@@ -22,6 +30,52 @@ def test_pooled_f_beta_hand_computed_cases():
 
     # 4. beta=1 case: P=0.75 (tp=6, fp=2), R=0.6 (tp=6, fn=4) -> F1 = 2*0.75*0.6 / 1.35 = 2/3
     assert pooled_f_beta(6.0, 0.0, 2.0, 4.0, beta=1.0) == pytest.approx(2.0 / 3.0)
+
+
+def test_pooled_f_beta_and_vectorized_match_objective():
+    """Verify pooled_f_beta and _vectorized_f_beta match objective.f_beta."""
+    test_cases = [
+        # All-zero
+        (0.0, 0.0, 0.0, 0.0, 0.5),
+        (0.0, 0.0, 0.0, 0.0, 1.0),
+        (0.0, 0.0, 0.0, 0.0, 2.0),
+        # Coarse-only
+        (0.0, 2.0, 0.0, 0.0, 0.5),
+        (0.0, 5.0, 3.0, 1.0, 0.5),
+        (0.0, 10.0, 0.0, 4.0, 1.0),
+        (0.0, 4.0, 2.0, 2.0, 2.0),
+    ]
+
+    # Add random count sets
+    rng = np.random.default_rng(42)
+    for _ in range(20):
+        tp_fine = float(rng.integers(0, 50))
+        tp_coarse = float(rng.integers(0, 50))
+        fp = float(rng.integers(0, 50))
+        fn = float(rng.integers(0, 50))
+        beta = float(rng.choice([0.5, 1.0, 2.0]))
+        test_cases.append((tp_fine, tp_coarse, fp, fn, beta))
+
+    for tp_fine, tp_coarse, fp, fn, beta in test_cases:
+        m = ClipMatch(
+            video_id="match",
+            minutes=1.0,
+            tp_fine=tp_fine,
+            tp_coarse=tp_coarse,
+            fp=fp,
+            fn=fn,
+        )
+        expected_obj = f_beta([m], beta=beta)
+        actual_pooled = pooled_f_beta(tp_fine, tp_coarse, fp, fn, beta=beta)
+        vec_in = np.array([[tp_fine, tp_coarse, fp, fn]], dtype=np.float64)
+        actual_vec = float(_vectorized_f_beta(vec_in, beta=beta)[0])
+
+        assert actual_pooled == pytest.approx(expected_obj), (
+            f"pooled_f_beta mismatch for counts ({tp_fine}, {tp_coarse}, {fp}, {fn}), beta={beta}"
+        )
+        assert actual_vec == pytest.approx(expected_obj), (
+            f"_vectorized_f_beta mismatch for counts ({tp_fine}, {tp_coarse}, {fp}, {fn}), beta={beta}"
+        )
 
 
 def test_paired_bootstrap_identical_candidates():

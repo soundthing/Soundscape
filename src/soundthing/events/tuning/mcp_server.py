@@ -7,19 +7,24 @@ Enforces holdout confidentiality, ledger logging, and immutable contracts.
 
 from __future__ import annotations
 
-import inspect
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 import numpy as np
 
-from soundthing.events.tuning import bootstrap, space, sweep
+from soundthing.config import load_config
+from soundthing.events.tuning import bootstrap, objective, space, sweep
+from soundthing.events.tuning import ledger as ledger_module
+from soundthing.events.tuning.score import score as score_func
+from soundthing.events.tuning.sweep import sweep as sweep_func
+from soundthing.events.tuning.promote import promote as promote_func
+from soundthing.events.tuning.proposals import propose_shared_change as propose_func
 
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
 
-OBJECTIVE_NAME: str = "f0.5_conditioned_micro"  # mirror of objective.OBJECTIVE, dedupe when Track A lands
+OBJECTIVE_NAME: str = objective.OBJECTIVE
 
 INSTRUCTIONS: str = (
     "Tuning agent loop:\n"
@@ -29,12 +34,6 @@ INSTRUCTIONS: str = (
     "4. Propose vocabulary or priors changes via propose_shared_change; promote for holdout validation."
 )
 
-
-def _get_res_attr(res: Any, attr: str, default: Any = None) -> Any:
-    """Helper to access an attribute from a result object or dict."""
-    if isinstance(res, dict):
-        return res.get(attr, default)
-    return getattr(res, attr, default)
 
 
 def _make_json_safe(obj: Any) -> Any:
@@ -83,8 +82,7 @@ class TuningTools:
     def score_fn(self) -> Any:
         if self._score_fn is not None:
             return self._score_fn
-        from soundthing.events.tuning.score import score
-        return score
+        return score_func
 
     @score_fn.setter
     def score_fn(self, value: Any) -> None:
@@ -94,8 +92,7 @@ class TuningTools:
     def ledger(self) -> Any:
         if self._ledger is not None:
             return self._ledger
-        from soundthing.events.tuning import ledger
-        return ledger
+        return ledger_module
 
     @ledger.setter
     def ledger(self, value: Any) -> None:
@@ -105,7 +102,6 @@ class TuningTools:
     def cfg_loader(self) -> Callable[[], Any]:
         if self._cfg_loader is not None:
             return self._cfg_loader
-        from soundthing.config import load_config
         return load_config
 
     @cfg_loader.setter
@@ -116,8 +112,7 @@ class TuningTools:
     def sweep_fn(self) -> Any:
         if self._sweep_fn is not None:
             return self._sweep_fn
-        from soundthing.events.tuning.sweep import sweep as sweep_fn
-        return sweep_fn
+        return sweep_func
 
     @sweep_fn.setter
     def sweep_fn(self, value: Any) -> None:
@@ -127,8 +122,7 @@ class TuningTools:
     def promote_fn(self) -> Any:
         if self._promote_fn is not None:
             return self._promote_fn
-        from soundthing.events.tuning.promote import promote as promote_fn
-        return promote_fn
+        return promote_func
 
     @promote_fn.setter
     def promote_fn(self, value: Any) -> None:
@@ -138,12 +132,12 @@ class TuningTools:
     def propose_fn(self) -> Any:
         if self._propose_fn is not None:
             return self._propose_fn
-        from soundthing.events.tuning.proposals import propose_shared_change
-        return propose_shared_change
+        return propose_func
 
     @propose_fn.setter
     def propose_fn(self, value: Any) -> None:
         self._propose_fn = value
+
 
     @property
     def recache_fn(self) -> Any:
@@ -235,7 +229,7 @@ class TuningTools:
             bootstrap_dict: dict[str, Any] | None = None
             if best is not None:
                 best_per_clip = best.get("per_clip") if isinstance(best, dict) else getattr(best, "per_clip", None)
-                cand_per_clip = _get_res_attr(result, "per_clip")
+                cand_per_clip = result.per_clip
                 if best_per_clip and cand_per_clip:
                     boot = bootstrap.paired_bootstrap(cand_per_clip, best_per_clip)
                     bootstrap_dict = {
@@ -245,20 +239,20 @@ class TuningTools:
                         "accept": bootstrap.accepts(boot),
                     }
 
-            diag = _get_res_attr(result, "diagnostics") or {}
+            diag = result.diagnostics or {}
             per_class = diag.get("per_class", {})
             top_fps = diag.get("top_false_positives", [])
 
             reply: dict[str, Any] = {
-                "run_id": str(_get_res_attr(result, "run_id")),
-                "objective": float(_get_res_attr(result, "objective", 0.0)),
-                "baseline": float(_get_res_attr(result, "baseline", 0.0)),
-                "wrong_env": float(_get_res_attr(result, "wrong_env", 0.0)),
-                "safety_recall": float(_get_res_attr(result, "safety_recall", 0.0)),
-                "fp_per_min": float(_get_res_attr(result, "fp_per_min", 0.0)),
-                "grid_f1": float(_get_res_attr(result, "grid_f1", 0.0)),
-                "limits": _make_json_safe(_get_res_attr(result, "limits", {})),
-                "passed": bool(_get_res_attr(result, "passed", True)),
+                "run_id": str(result.run_id),
+                "objective": float(result.objective),
+                "baseline": float(result.baseline),
+                "wrong_env": float(result.wrong_env),
+                "safety_recall": float(result.safety_recall),
+                "fp_per_min": float(result.fp_per_min),
+                "grid_f1": float(result.grid_f1),
+                "limits": _make_json_safe(result.limits),
+                "passed": bool(result.passed),
                 "shared": bool(is_shared),
                 "bootstrap": bootstrap_dict,
                 "per_class": _make_json_safe(per_class),
@@ -293,15 +287,12 @@ class TuningTools:
         """Promote candidate to config; hidden holdout reported as pass/fail only."""
         args: dict[str, Any] = {"run_id": run_id}
         with self._log_call("promote", args):
-            kwargs: dict[str, Any] = {
-                "ledger": self.ledger,
-                "score_fn": self.score_fn,
-            }
-            sig = inspect.signature(self.promote_fn)
-            if "cfg" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
-                kwargs["cfg"] = self.cfg_loader()
-
-            raw_res = self.promote_fn(run_id, **kwargs)
+            raw_res = self.promote_fn(
+                run_id,
+                ledger=self.ledger,
+                score_fn=self.score_fn,
+                cfg=self.cfg_loader(),
+            )
             res = dict(raw_res)
 
             # Strip any unexpected holdout_* numeric field
@@ -324,16 +315,13 @@ class TuningTools:
             result = self.score_fn(overrides=overrides, split="dev", cfg=cfg)
             sweep.log_result(result, "proposal", self.ledger)
 
-            sig = inspect.signature(self.propose_fn)
-            if "cfg" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
-                path = self.propose_fn(overrides, result, note, cfg=cfg)
-            else:
-                path = self.propose_fn(overrides, result, note)
+            path = self.propose_fn(overrides, result, note, cfg=cfg)
 
-            run_id = str(_get_res_attr(result, "run_id"))
+            run_id = str(result.run_id)
             path_str = str(path)
             self.ledger.append({"kind": "proposal", "path": path_str, "run_id": run_id})
             return {"path": path_str, "run_id": run_id}
+
 
     def request_recache(self, window: float, hop: float, model: str) -> dict[str, Any]:
         """Request audio feature cache rebuilding via Kaggle GPU kernel."""

@@ -16,7 +16,10 @@ from typing import Any
 import yaml
 
 from soundthing.config import load_config
-from soundthing.events.tuning import bootstrap, space
+from soundthing.events.tuning import bootstrap, holdout, space
+from soundthing.events.tuning import ledger as ledger_module
+from soundthing.events.tuning.score import score as score_func
+
 
 
 WRITABLE_PREFIXES = ("events.", "thresholds.")
@@ -426,10 +429,7 @@ def write_overrides(overrides: dict, config_dir: Path) -> list[Path]:
 
 
 def _git_state(ledger_mod: Any, root: Path) -> dict[str, Any]:
-    try:
-        return ledger_mod.git_state(root)
-    except TypeError:
-        return ledger_mod.git_state()
+    return ledger_mod.git_state(root)
 
 
 def _fmt_val(val: Any) -> str:
@@ -471,7 +471,7 @@ def holdout_check(
 ) -> bool:
     """Check a candidate configuration against the hidden holdout set.
 
-    Lazy imports score_fn (soundthing.events.tuning.score.score) and holdout labels
+    Uses score_fn (soundthing.events.tuning.score.score) and holdout labels
     directory (soundthing.events.tuning.holdout.holdout_labels_dir()).
     Pass iff candidate objective, safety_recall, and fp_per_min are at least as
     good as the current config on holdout.
@@ -479,15 +479,7 @@ def holdout_check(
     Returns ONLY a bool. Never prints, logs, returns, or stores holdout numbers.
     """
     if score_fn is None:
-        try:
-            from soundthing.events.tuning.score import score as score_fn
-        except ImportError as e:
-            raise PromoteError(f"score function not available: {e}") from e
-
-    try:
-        import soundthing.events.tuning.holdout as holdout
-    except ImportError as e:
-        raise PromoteError(f"holdout set not available (module soundthing.events.tuning.holdout missing: {e})") from e
+        score_fn = score_func
 
     try:
         hdir = holdout.holdout_labels_dir()
@@ -515,6 +507,7 @@ def holdout_check(
 
     passed = (cand_obj >= cur_obj and cand_safety >= cur_safety and cand_fp <= cur_fp)
     return bool(passed)
+
 
 
 def _format_tuning_log_entry(
@@ -676,7 +669,8 @@ def promote(
         cfg = load_config(config_dir)
 
     if ledger is None:
-        from soundthing.events.tuning import ledger
+        ledger = ledger_module
+
 
     if holdout_fn is None:
         holdout_fn = lambda ov: holdout_check(ov, score_fn=score_fn, cfg=cfg)
@@ -733,7 +727,8 @@ def promote(
         before = best_entry.get("objective")
     else:
         if score_fn is None:
-            from soundthing.events.tuning.score import score as score_fn
+            score_fn = score_func
+
         cur_res = score_fn(overrides={}, split="dev", cfg=cfg)
         if isinstance(cur_res, dict):
             comparator = cur_res.get("per_clip")

@@ -12,7 +12,8 @@ from typing import Any
 
 from soundthing.config import Config
 from soundthing.contracts import load_labels
-from soundthing.events.tuning import paths
+from soundthing.events.tuning import overrides, paths
+
 
 MIN_CLASS_EVENTS: int = 20
 
@@ -212,11 +213,9 @@ def validate_overrides(overrides: dict[str, Any], space: list[dict[str, Any]]) -
 
 
 def is_shared(key: str) -> bool:
-    """True for keys starting with 'vocabulary.' or 'priors.'.
+    """True for keys starting with 'vocabulary.' or 'priors.'."""
+    return overrides.touches_shared({key: None})
 
-    Mirror of overrides.touches_shared in TUNING_DESIGN.md; dedupe once overrides.py lands.
-    """
-    return key.startswith("vocabulary.") or key.startswith("priors.")
 
 
 def dev_event_counts(labels_dir: Path | None = None) -> dict[str, int]:
