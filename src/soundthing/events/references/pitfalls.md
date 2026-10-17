@@ -23,3 +23,6 @@ cause is gone.
   prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail
   wherever the `events` extra isn't installed, including CI.
+- **Silero VAD expects 16 kHz mono float32.** Multi-channel audio or other sample rates must
+  be averaged to mono and resampled; feeding raw multi-channel audio leads to silent failures
+  or shape mismatches.

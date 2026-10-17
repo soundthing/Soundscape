@@ -37,3 +37,7 @@ variants.
 ## Speech masking scales scores down, doesn't remove them — agreed
 Non-safety scores are multiplied by `suppress_under_speech` inside speech; safety classes
 are untouched. Loud events during dialogue can still surface.
+
+## VAD spans are padded and merged before masking — events
+Raw Silero spans are padded by `pad_sec`, clipped to [0, duration], and merged across gaps
+under `merge_gap_sec` so brief pauses in dialogue don't leak false events.
