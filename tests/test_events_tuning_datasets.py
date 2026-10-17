@@ -17,7 +17,7 @@ import soundfile as sf
 from soundthing.config import load_config
 from soundthing.contracts import ClipLabels, LabeledEvent, load_labels, save_labels
 import soundthing.events.tuning as tuning_pkg
-from soundthing.events.tuning import datasets
+from soundthing.events.tuning import datasets, holdout
 from soundthing.events.tuning.datasets import (
     _load_mono_16k,
     _trim_silence,
@@ -648,7 +648,6 @@ def test_build_dev_caches_workflow(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert len(built_calls) == 2
 
     # Holdout guard: if any id overlaps with holdout, raise ValueError and build nothing
-    from soundthing.events.tuning import holdout
 
     holdout_dir = holdout.holdout_labels_dir()
     holdout_dir.mkdir(parents=True, exist_ok=True)
@@ -703,4 +702,3 @@ def test_fsd50k_map_has_no_parent_of_another_mapped_class():
     fsd_map = datasets.load_datasets_yaml()["fsd50k"]["map"]
     for parent in ("Alarm", "Door", "Glass"):
         assert parent not in fsd_map
-
