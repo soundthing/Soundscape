@@ -11,8 +11,8 @@ import math
 from typing import Any
 
 import numpy as np
-import optuna
 
+from soundthing.config import load_config
 from soundthing.events.tuning import space
 
 
@@ -93,7 +93,6 @@ def sweep(
     if ledger is None:
         from soundthing.events.tuning import ledger
     if cfg is None:
-        from soundthing.config import load_config
         cfg = load_config()
 
     sp = space.describe_space(cfg, space.dev_event_counts())
@@ -205,11 +204,13 @@ def sweep(
                 break
 
     elif strategy == "optuna":
+        import optuna  # optional `tuning` extra: import only when used
+
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         sampler = optuna.samplers.TPESampler(seed=seed)
         study = optuna.create_study(direction="maximize", sampler=sampler)
 
-        def objective_fn(trial: optuna.Trial) -> float:
+        def objective_fn(trial: Any) -> float:
             nonlocal evaluations, incumbent_overrides, incumbent_objective, incumbent_run_id
             suggested: dict[str, Any] = {}
             for param in params:
