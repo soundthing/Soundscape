@@ -27,4 +27,6 @@ cause is gone.
   (center: 0.2, scale: 20.0) in pipeline config are placeholders; until tuned on
   labeled validation clips, CLAP zero-shot scores may under- or over-trigger
   relative to AudioSet tagger probabilities.
-
+- **Silero VAD expects 16 kHz mono float32.** Multi-channel audio or other sample rates must
+  be averaged to mono and resampled; feeding raw multi-channel audio leads to silent failures
+  or shape mismatches.

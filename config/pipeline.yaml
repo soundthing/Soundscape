@@ -39,6 +39,10 @@ events:             # Person 1
   vad:
     model: silero
     suppress_under_speech: 0.3  # multiply non-safety scores by this inside speech regions
+    threshold: 0.5
+    min_speech_sec: 0.25
+    pad_sec: 0.1
+    merge_gap_sec: 0.3
   postprocess:
     smoothing_sec: 0.5          # two-sided median filter width
     min_event_sec: 0.3
