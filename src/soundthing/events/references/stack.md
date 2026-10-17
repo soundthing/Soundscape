@@ -28,3 +28,7 @@ Offline only. CPU must work; CUDA is used when available. Model weights download
 use (PANNs checkpoint ~300 MB, CLAP ~600 MB).
 
 Dev mixes resample with torchaudio (events extra), keeping scipy out.
+
+## Compute
+
+- **Kaggle cache runner:** Kaggle (kaggle 1.7 CLI/API, free T4/P100) builds dev caches; the kernel installs the repo at a pushed git sha.
