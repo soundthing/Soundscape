@@ -26,15 +26,6 @@ class ParamSpec:
     hi: float | int
     default: float | int | None = None
 
-    def __getitem__(self, item: Any) -> Any:
-        if isinstance(item, str):
-            return getattr(self, item)
-        fields = (self.type, self.lo, self.hi, self.default)
-        return fields[item]
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return getattr(self, key, default)
-
 
 BOUNDS: dict[str, ParamSpec] = {
     "events.clap.calibration.center": ParamSpec("float", 0.0, 0.6),
@@ -59,12 +50,9 @@ BOUNDS: dict[str, ParamSpec] = {
 def _get_nested(data: Any, path: list[str]) -> Any:
     cur = data
     for part in path:
-        if isinstance(cur, dict) and part in cur:
-            cur = cur[part]
-        elif hasattr(cur, part):
-            cur = getattr(cur, part)
-        else:
+        if not isinstance(cur, dict) or part not in cur:
             return None
+        cur = cur[part]
     return cur
 
 
@@ -82,17 +70,11 @@ def describe_space(cfg: Config, dev_event_counts: dict[str, int] | None) -> list
     for name, spec in BOUNDS.items():
         val: Any = None
         if name == "thresholds.default":
-            val = getattr(cfg.thresholds, "default", None) if hasattr(cfg.thresholds, "default") else (
-                cfg.thresholds.get("default") if isinstance(cfg.thresholds, dict) else None
-            )
+            val = cfg.thresholds.default
         elif name == "thresholds.safety_default":
-            val = getattr(cfg.thresholds, "safety_default", None) if hasattr(cfg.thresholds, "safety_default") else (
-                cfg.thresholds.get("safety_default") if isinstance(cfg.thresholds, dict) else None
-            )
+            val = cfg.thresholds.safety_default
         elif name.startswith("events."):
-            subpath = name[len("events."):].split(".")
-            events_cfg = cfg.pipeline.get("events") if isinstance(cfg.pipeline, dict) else None
-            val = _get_nested(events_cfg, subpath)
+            val = _get_nested(cfg.pipeline.get("events") or {}, name[len("events."):].split("."))
 
         if val is None:
             if spec.default is not None:
@@ -145,27 +127,23 @@ def describe_space(cfg: Config, dev_event_counts: dict[str, int] | None) -> list
             "shared": True,
         })
 
-    priors_floor = getattr(cfg.priors, "floor", 0.0) if hasattr(cfg.priors, "floor") else cfg.priors.get("floor", 0.0)
     entries.append({
         "name": "priors.floor",
         "type": "float",
         "bounds": [0.0, 1.0],
-        "current": float(priors_floor),
+        "current": float(cfg.priors.floor),
         "shared": True,
     })
 
-    priors_envs = getattr(cfg.priors, "environments", {}) if hasattr(cfg.priors, "environments") else cfg.priors.get("environments", {})
-    for env_name, env_priors in priors_envs.items():
-        env_default = getattr(env_priors, "default", 1.0) if hasattr(env_priors, "default") else env_priors.get("default", 1.0)
+    for env_name, env_priors in cfg.priors.environments.items():
         entries.append({
             "name": f"priors.{env_name}.default",
             "type": "float",
             "bounds": [0.0, 1.0],
-            "current": float(env_default),
+            "current": float(env_priors.default),
             "shared": True,
         })
-        env_classes = getattr(env_priors, "classes", {}) if hasattr(env_priors, "classes") else env_priors.get("classes", {})
-        for cid, weight in env_classes.items():
+        for cid, weight in env_priors.classes.items():
             entries.append({
                 "name": f"priors.{env_name}.classes.{cid}",
                 "type": "float",
