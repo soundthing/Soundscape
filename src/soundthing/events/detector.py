@@ -8,13 +8,33 @@ from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs
 from . import postprocess as pp
 from .conditioning import apply_priors
+from .clap import load_clap, text_embeddings
 from .core import EventModels, score_window
+from .tagger import build_tagger_map, load_tagger
 from .types import FrameScores
 from .vad import speech_mask, speech_regions
 
 
 def load_models(cfg: Config) -> EventModels:
-    raise NotImplementedError("TODO(Person 1): load tagger + CLAP, build tagger_map / text embeddings")
+    tagger, audioset_names = load_tagger(cfg)
+    tagger_map = build_tagger_map(cfg, audioset_names)
+
+    clap_cfg = cfg.pipeline.get("events", {}).get("clap", {})
+    clap_enabled = clap_cfg.get("enabled", True)
+
+    clap = None
+    clap_text_emb = None
+    if clap_enabled:
+        clap = load_clap(cfg)
+        clap_text_emb = text_embeddings(clap, cfg)
+
+    return EventModels(
+        tagger=tagger,
+        clap=clap,
+        class_ids=list(cfg.class_ids),
+        tagger_map=tagger_map,
+        clap_text_emb=clap_text_emb,
+    )
 
 
 def score_audio(audio: np.ndarray, sr: int, models: EventModels, cfg: Config) -> FrameScores:

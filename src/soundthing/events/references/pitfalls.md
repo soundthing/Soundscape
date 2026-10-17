@@ -23,3 +23,8 @@ cause is gone.
   prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail
   wherever the `events` extra isn't installed, including CI.
+- **CLAP calibration center/scale are untuned placeholders.** Default values
+  (center: 0.2, scale: 20.0) in pipeline config are placeholders; until tuned on
+  labeled validation clips, CLAP zero-shot scores may under- or over-trigger
+  relative to AudioSet tagger probabilities.
+

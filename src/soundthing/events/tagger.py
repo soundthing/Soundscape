@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from ..config import Config
@@ -26,6 +28,44 @@ def map_to_vocab(audioset_scores: np.ndarray, tagger_map: np.ndarray) -> np.ndar
     return masked.max(axis=-1)
 
 
-def load_tagger(cfg: Config):
-    """Return (model, audioset_names). Model maps (B, N) audio at 16 kHz -> (B, A) probs."""
-    raise NotImplementedError("TODO(Person 1): load PANNs/BEATs checkpoint")
+class PannsTagger:
+    """Callable wrapper around PANNs AudioTagging model.
+
+    Resamples input audio to 32 kHz with torchaudio and returns clipwise probabilities.
+    """
+
+    def __init__(self, model: Any) -> None:
+        self.model = model
+
+    def __call__(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        """Score audio batch (B, N) at sample rate `sr` -> (B, A) clipwise probabilities."""
+        if sr != 32000:
+            import torch
+            import torchaudio
+
+            t = torch.as_tensor(audio, dtype=torch.float32)
+            t = torchaudio.functional.resample(t, sr, 32000)
+            audio = t.cpu().numpy()
+
+        clipwise_output, _ = self.model.inference(audio)
+        return np.asarray(clipwise_output, dtype=np.float32)
+
+
+def load_tagger(cfg: Config) -> tuple[PannsTagger, list[str]]:
+    """Return (model, audioset_names). Model maps (B, N) audio at sr -> (B, A) probs.
+
+    Resamples sr -> 32000 with torchaudio.functional.resample.
+    Only 'panns_cnn14' is supported; other values raise NotImplementedError.
+    """
+    model_name = cfg.pipeline.get("events", {}).get("tagger", {}).get("model")
+    if model_name != "panns_cnn14":
+        raise NotImplementedError(
+            f"Unsupported tagger model: {model_name!r}. Only 'panns_cnn14' is supported."
+        )
+
+    import torch
+    from panns_inference import AudioTagging, labels
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    at = AudioTagging(checkpoint_path=None, device=device)
+    return PannsTagger(at), list(labels)
