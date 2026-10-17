@@ -79,7 +79,7 @@ def load_clap(cfg: Config) -> Clap:
     return Clap(model=model, processor=processor, device=device, center=center, scale=scale)
 
 
-def text_embeddings(clap, cfg: Config) -> np.ndarray:
+def text_embeddings(clap: Any, cfg: Config) -> np.ndarray:
     """(C, D) in cfg.classes order: mean of the class's `clap` prompt embeddings,
     re-normalised; zero row for classes without prompts.
     """
@@ -111,8 +111,26 @@ def text_embeddings(clap, cfg: Config) -> np.ndarray:
     return out
 
 
+def calibrate(
+    sims: np.ndarray,
+    text_emb: np.ndarray,
+    center: float = 0.2,
+    scale: float = 20.0,
+) -> np.ndarray:
+    """Calibrate cosine similarities to [0, 1] scores via sigmoid.
+
+    Zero rows in text_emb (no prompts) score exactly 0.
+    """
+    has_prompts = np.any(text_emb != 0, axis=-1)
+    x = (sims - center) * scale
+    x_clipped = np.clip(x, -50.0, 50.0)
+    calibrated = 1.0 / (1.0 + np.exp(-x_clipped))
+    scores = np.where(has_prompts, calibrated, 0.0)
+    return scores.astype(np.float32)
+
+
 def clap_scores(
-    clap,
+    clap: Any,
     audio: np.ndarray,
     sr: int,
     text_emb: np.ndarray,
@@ -126,17 +144,10 @@ def clap_scores(
     Rows that are all zero (no prompts) score exactly 0.
     """
     if center is None:
-        center = getattr(clap, "center", 0.2)
+        center = float(getattr(clap, "center", 0.2))
     if scale is None:
-        scale = getattr(clap, "scale", 20.0)
+        scale = float(getattr(clap, "scale", 20.0))
 
     audio_emb = clap.embed_audio(audio, sr)  # (D,)
     sim = text_emb @ audio_emb  # (C,)
-
-    has_prompts = np.any(text_emb != 0, axis=-1)  # (C,) bool
-    x = (sim - center) * scale
-    x_clipped = np.clip(x, -50.0, 50.0)
-    calibrated = 1.0 / (1.0 + np.exp(-x_clipped))
-
-    scores = np.where(has_prompts, calibrated, 0.0)
-    return scores.astype(np.float32)
+    return calibrate(sim, text_emb, center, scale)

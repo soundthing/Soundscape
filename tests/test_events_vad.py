@@ -51,11 +51,11 @@ def test_stereo_input_averaged(cfg, monkeypatch):
     monkeypatch.setattr(vad, "_load_silero", lambda: "fake_model")
     recorded: list[np.ndarray] = []
 
-    def fake_timestamps(model, audio16k, threshold, min_speech_sec):
+    def fake_probs(model, audio16k):
         recorded.append(audio16k)
-        return []
+        return np.zeros(0, dtype=np.float32)
 
-    monkeypatch.setattr(vad, "_silero_timestamps", fake_timestamps)
+    monkeypatch.setattr(vad, "_silero_probs", fake_probs)
 
     # 1. Channels-last: shape (16000, 2)
     ch1 = np.ones(16000, dtype=np.float32) * 0.2
@@ -83,18 +83,18 @@ def test_fake_timestamps_padding_and_clipping(cfg, monkeypatch):
     # 10s audio duration
     audio = np.zeros(16000 * 10, dtype=np.float32)
 
-    # Raw span near 0 and near 10.0; default pad_sec is 0.1
-    raw_spans = [(0.05, 1.0), (9.5, 9.95)]
-    monkeypatch.setattr(
-        vad,
-        "_silero_timestamps",
-        lambda model, audio16k, threshold, min_speech_sec: raw_spans,
-    )
+    # 10s audio: 313 chunks of 512 samples.
+    # Chunk 1..31 (0.032 to 0.992) -> padded by 0.1 -> [0.0, 1.092]
+    # Chunk 297..312 (9.504 to 9.984) -> padded by 0.1 -> [9.404, 10.0]
+    probs = np.zeros(313, dtype=np.float32)
+    probs[1:31] = 0.9
+    probs[297:312] = 0.9
+    monkeypatch.setattr(vad, "_silero_probs", lambda model, audio16k: probs)
 
     regions = vad.speech_regions(audio, 16000, cfg)
-    # 0.05 - 0.1 = -0.05 -> clipped to 0.0; 1.0 + 0.1 = 1.1
-    # 9.5 - 0.1 = 9.4; 9.95 + 0.1 = 10.05 -> clipped to 10.0
-    assert regions == [(0.0, 1.1), (9.4, 10.0)]
+    # 0.032 - 0.1 = -0.068 -> clipped to 0.0; 0.992 + 0.1 = 1.092
+    # 9.504 - 0.1 = 9.404; 9.984 + 0.1 = 10.084 -> clipped to 10.0
+    assert regions == [(0.0, 1.092), (9.404, 10.0)]
 
 
 def test_fake_timestamps_merging_and_separation(cfg, monkeypatch):
@@ -102,31 +102,34 @@ def test_fake_timestamps_merging_and_separation(cfg, monkeypatch):
     audio = np.zeros(16000 * 10, dtype=np.float32)
 
     # pad_sec=0.1, merge_gap_sec=0.3
-    # Span 1 (1.0, 2.0) -> padded: [0.9, 2.1]
-    # Span 2 (2.2, 3.0) -> padded: [2.1, 3.1]
-    # Gap between them = 2.1 - 2.1 = 0.0 < 0.3 -> merges into [0.9, 3.1]
-    # Span 3 (5.0, 6.0) -> padded: [4.9, 6.1]
-    # Gap from 3.1 to 4.9 = 1.8 >= 0.3 -> stays separate
-    # Span 4 (7.0, 8.0) -> padded: [6.9, 8.1]
-    # Span 5 (7.5, 8.5) -> padded: [7.4, 8.6]
-    # Overlapping after padding -> merges into [6.9, 8.6]
-    spans = [(1.0, 2.0), (2.2, 3.0), (5.0, 6.0), (7.0, 8.0), (7.5, 8.5)]
-    monkeypatch.setattr(vad, "_silero_timestamps", lambda m, a, t, min_s: spans)
+    # Span 1: chunks 31..62 (0.992 to 1.984) -> padded: [0.892, 2.084]
+    # Span 2: chunks 68..93 (2.176 to 2.976) -> padded: [2.076, 3.076]
+    # Gap between them = 2.076 - 2.084 < 0 -> merges into [0.892, 3.076]
+    # Span 3: chunks 156..187 (4.992 to 5.984) -> padded: [4.892, 6.084]
+    # Gap from 3.076 to 4.892 >= 0.3 -> stays separate
+    probs = np.zeros(313, dtype=np.float32)
+    probs[31:62] = 0.9
+    probs[68:93] = 0.9
+    probs[156:187] = 0.9
+    monkeypatch.setattr(vad, "_silero_probs", lambda m, a: probs)
 
     regions = vad.speech_regions(audio, 16000, cfg)
-    assert regions == [(0.9, 3.1), (4.9, 6.1), (6.9, 8.6)]
+    assert len(regions) == 2
+    assert regions[0] == (0.892, 3.076)
+    assert regions[1] == (4.892, 6.084)
 
 
 def test_fake_timestamps_sorted_output(cfg, monkeypatch):
     monkeypatch.setattr(vad, "_load_silero", lambda: "fake_model")
     audio = np.zeros(16000 * 10, dtype=np.float32)
 
-    # Raw spans deliberately in reverse order
-    spans = [(5.0, 6.0), (1.0, 2.0)]
-    monkeypatch.setattr(vad, "_silero_timestamps", lambda m, a, t, min_s: spans)
+    probs = np.zeros(313, dtype=np.float32)
+    probs[31:62] = 0.9
+    probs[156:187] = 0.9
+    monkeypatch.setattr(vad, "_silero_probs", lambda m, a: probs)
 
     regions = vad.speech_regions(audio, 16000, cfg)
-    assert regions == [(0.9, 2.1), (4.9, 6.1)]
+    assert regions == [(0.892, 2.084), (4.892, 6.084)]
 
 
 def test_loader_cached_across_calls(cfg, monkeypatch):
@@ -135,7 +138,7 @@ def test_loader_cached_across_calls(cfg, monkeypatch):
     fake_module = types.ModuleType("silero_vad")
     fake_module.load_silero_vad = load_mock
     monkeypatch.setitem(sys.modules, "silero_vad", fake_module)
-    monkeypatch.setattr(vad, "_silero_timestamps", lambda *args, **kwargs: [])
+    monkeypatch.setattr(vad, "_silero_probs", lambda *args, **kwargs: np.zeros(0, dtype=np.float32))
 
     audio = np.zeros(16000, dtype=np.float32)
     res1 = vad.speech_regions(audio, 16000, cfg)
@@ -151,15 +154,21 @@ def test_speech_mask_integration(cfg, monkeypatch):
     monkeypatch.setattr(vad, "_load_silero", lambda: "fake_model")
     audio = np.zeros(16000 * 6, dtype=np.float32)
 
-    # Raw span: (2.0, 4.0) -> padded: (1.9, 4.1)
-    monkeypatch.setattr(vad, "_silero_timestamps", lambda m, a, t, min_s: [(2.0, 4.0)])
+    # 6s audio = 188 chunks
+    # Speech span around 2.0 to 4.0: chunks 63 to 125
+    probs = np.zeros(188, dtype=np.float32)
+    probs[63:125] = 1.0
+    monkeypatch.setattr(vad, "_silero_probs", lambda m, a: probs)
     regions = vad.speech_regions(audio, 16000, cfg)
-    assert regions == [(1.9, 4.1)]
+    assert len(regions) == 1
+    s, e = regions[0]
+    assert abs(s - 1.916) < 1e-3
+    assert abs(e - 4.1) < 1e-3
 
     times = np.arange(0.0, 6.0, 0.5)
     mask = vad.speech_mask(times, regions)
 
-    expected = (times >= 1.9) & (times < 4.1)
+    expected = (times >= s) & (times < e)
     assert np.array_equal(mask, expected)
     assert mask.dtype == bool
 
@@ -176,11 +185,40 @@ def test_resample_on_non_16k_sr(cfg, monkeypatch):
         return np.zeros(16000, dtype=np.float32)
 
     monkeypatch.setattr(vad, "_resample", fake_resample)
-    monkeypatch.setattr(vad, "_silero_timestamps", lambda m, a, t, min_s: [])
+    monkeypatch.setattr(vad, "_silero_probs", lambda m, a: np.zeros(0, dtype=np.float32))
 
     audio48k = np.zeros(48000, dtype=np.float32)
     vad.speech_regions(audio48k, 48000, cfg)
     assert resample_called
+
+
+def test_speech_regions_from_probs_hysteresis_and_min_speech(cfg):
+    """Test hysteresis on/off and min_speech filtering in speech_regions_from_probs."""
+    chunk_sec = 0.1
+    duration = 5.0
+
+    # 1. Short burst: 2 chunks (0.2 s) >= 0.5 -> shorter than 0.25 min_speech -> dropped!
+    short_burst = np.array([0.1, 0.8, 0.8, 0.1, 0.1], dtype=np.float32)
+    assert vad.speech_regions_from_probs(short_burst, chunk_sec, duration, cfg) == []
+
+    # 2. Hysteresis on and off:
+    # chunk 0: 0.1 (off)
+    # chunk 1: 0.6 (turns ON: start = 1*0.1 = 0.1)
+    # chunk 2: 0.4 (>= 0.35 -> stays ON)
+    # chunk 3: 0.35 (>= 0.35 -> stays ON)
+    # chunk 4: 0.30 (< 0.35 -> turns OFF: end = 4*0.1 = 0.4)
+    # Raw span: [0.1, 0.4) length 0.3s >= 0.25s min_speech.
+    # Padded by pad_sec=0.1: [0.0, 0.5]
+    hyst_probs = np.array([0.1, 0.6, 0.4, 0.35, 0.30, 0.1], dtype=np.float32)
+    regions = vad.speech_regions_from_probs(hyst_probs, chunk_sec, duration, cfg)
+    assert regions == [(0.0, 0.5)]
+
+    # 3. Model none and empty probs return empty
+    p_none = copy.deepcopy(cfg.pipeline)
+    p_none["events"]["vad"]["model"] = "none"
+    cfg_none = replace(cfg, pipeline=p_none)
+    assert vad.speech_regions_from_probs(hyst_probs, chunk_sec, duration, cfg_none) == []
+    assert vad.speech_regions_from_probs(np.array([], dtype=np.float32), chunk_sec, duration, cfg) == []
 
 
 def test_real_model_guarded(cfg):

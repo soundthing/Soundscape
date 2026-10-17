@@ -11,15 +11,14 @@ import numpy as np
 from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs
 from . import postprocess as pp
-from .conditioning import apply_priors
 from .clap import load_clap, text_embeddings
-from .core import EventModels, score_window
+from .core import EventModels
 from .tagger import build_tagger_map, load_tagger
-from .types import FrameScores
-from .vad import speech_mask, speech_regions
+from .tuning.cache import ClipCache, build_cache, cache_key
+from .tuning.replay import replay
 
 _models_cache: dict[tuple, EventModels] = {}
-_raw_scores_cache: tuple[tuple, FrameScores] | None = None
+_clip_cache_memo: tuple[tuple, ClipCache] | None = None
 
 
 def _freeze(val: Any) -> Any:
@@ -50,10 +49,10 @@ def get_models(cfg: Config) -> EventModels:
 
 
 def _clear_caches() -> None:
-    """Clear models and raw scores caches (useful between tests)."""
-    global _raw_scores_cache
+    """Clear models and clip cache memos (useful between tests)."""
+    global _clip_cache_memo
     _models_cache.clear()
-    _raw_scores_cache = None
+    _clip_cache_memo = None
 
 
 def load_models(cfg: Config) -> EventModels:
@@ -75,22 +74,8 @@ def load_models(cfg: Config) -> EventModels:
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
         clap_text_emb=clap_text_emb,
+        audioset_names=audioset_names,
     )
-
-
-def score_audio(audio: np.ndarray, sr: int, models: EventModels, cfg: Config) -> FrameScores:
-    ecfg = cfg.pipeline["events"]
-    win = int(ecfg["window_sec"] * sr)
-    hop = int(ecfg["hop_sec"] * sr)
-    starts = range(0, max(1, len(audio) - win + 1), hop)
-    rows, times = [], []
-    for s in starts:
-        chunk = audio[s : s + win]
-        if len(chunk) < win:
-            chunk = np.pad(chunk, (0, win - len(chunk)))
-        rows.append(score_window(chunk, sr, models))
-        times.append((s + win / 2) / sr)
-    return FrameScores(np.array(times), list(models.class_ids), np.stack(rows), ecfg["hop_sec"])
 
 
 def detect(
@@ -98,20 +83,19 @@ def detect(
 ) -> list[CaptionEvent]:
     import soundfile as sf
 
-    global _raw_scores_cache
-    ecfg = cfg.pipeline["events"]
+    global _clip_cache_memo
 
     audio_path = Path(inputs.audio_path).resolve()
     stat = audio_path.stat()
     m_key = _models_cache_key(cfg)
-    vad_key = _freeze(ecfg.get("vad", {}))
-    win_hop_key = (ecfg.get("window_sec"), ecfg.get("hop_sec"))
-    raw_key = (str(audio_path), stat.st_mtime, stat.st_size, m_key, vad_key, win_hop_key)
+    c_key = cache_key(cfg)
+    memo_key = (str(audio_path), stat.st_mtime, stat.st_size, c_key, m_key)
 
-    if _raw_scores_cache is not None and _raw_scores_cache[0] == raw_key:
-        scores = _raw_scores_cache[1].copy_with(_raw_scores_cache[1].scores.copy())
+    models = get_models(cfg)
+
+    if _clip_cache_memo is not None and _clip_cache_memo[0] == memo_key:
+        cache = _clip_cache_memo[1]
     else:
-        models = get_models(cfg)
         audio, sr = sf.read(inputs.audio_path, dtype="float32")
         if audio.ndim == 2:
             audio = np.mean(audio, axis=1 if audio.shape[1] <= audio.shape[0] else 0)
@@ -119,30 +103,15 @@ def detect(
             audio = np.mean(audio, axis=tuple(range(1, audio.ndim)))
         audio = np.ascontiguousarray(audio, dtype=np.float32)
 
-        scores = score_audio(audio, sr, models, cfg)
+        cache = build_cache(audio, sr, inputs.video_id, cfg, models=models)
+        _clip_cache_memo = (memo_key, cache)
 
-        # Speech masking: suppress non-safety classes under dialogue.
-        mask = speech_mask(scores.times, speech_regions(audio, sr, cfg))
-        safety = cfg.safety_ids()
-        factor = np.array(
-            [1.0 if c in safety else ecfg["vad"]["suppress_under_speech"] for c in scores.class_ids],
-            dtype=np.float32,
-        )
-        s = scores.scores.copy()
-        s[mask] *= factor
-        masked_scores = scores.copy_with(s)
-
-        _raw_scores_cache = (raw_key, masked_scores)
-        scores = masked_scores.copy_with(masked_scores.scores.copy())
-
-    if segments is not None:  # None = unconditioned baseline
-        scores = apply_priors(scores, segments, cfg)
-
-    pcfg = ecfg["postprocess"]
-    scores = pp.smooth(scores, pcfg["smoothing_sec"])
-    events = pp.threshold_to_events(scores, cfg)
-    events = pp.collapse_confusable(events, scores, cfg)
-    events = pp.priority_filter(events, cfg)
+    events = replay(
+        replace(cache, duration=inputs.duration),
+        segments,
+        cfg,
+        text_emb=models.clap_text_emb,
+    )
 
     stereo_sr = getattr(inputs, "sample_rate", 16000)
     if inputs.audio_stereo_path is not None and Path(inputs.audio_stereo_path).exists():
@@ -151,18 +120,5 @@ def detect(
     else:
         events = pp.add_modifiers(events, None, stereo_sr, cfg)
 
-    # Clip every event's end to inputs.duration (drop events whose start >= duration),
-    # then call .validate() on each event before returning. Return sorted by start.
-    final_events: list[CaptionEvent] = []
-    for ev in events:
-        if ev.start >= inputs.duration:
-            continue
-        clipped_end = min(ev.end, inputs.duration)
-        if clipped_end <= ev.start:
-            continue
-        clipped_ev = replace(ev, end=clipped_end)
-        clipped_ev.validate()
-        final_events.append(clipped_ev)
-
-    final_events.sort(key=lambda ev: (ev.start, ev.end))
-    return final_events
+    events.sort(key=lambda ev: (ev.start, ev.end))
+    return events

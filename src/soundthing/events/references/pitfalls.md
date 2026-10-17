@@ -40,3 +40,6 @@ cause is gone.
   boundaries or at the clip edge can produce detections ending after `inputs.duration`
   or starting at/after it. Dropping start >= duration and clipping ends to duration
   ensures all events satisfy contract validation.
+- **VAD hysteresis state across chunk boundaries.** Silero VAD per-chunk probabilities
+  require maintaining hysteresis state (on at threshold, off below threshold - 0.15)
+  and resetting model states between files.

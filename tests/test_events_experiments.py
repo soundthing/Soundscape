@@ -47,6 +47,8 @@ def fake_env(cfg: Config, monkeypatch):
     tagger_map = build_tagger_map(cfg, audioset_names)
     tagger = FakeTagger(audioset_names, default_prob=0.0)
 
+    from soundthing.events import vad
+
     def fake_load_models(c: Config) -> EventModels:
         return EventModels(
             tagger=tagger,
@@ -54,10 +56,11 @@ def fake_env(cfg: Config, monkeypatch):
             class_ids=list(c.class_ids),
             tagger_map=tagger_map,
             clap_text_emb=None,
+            audioset_names=audioset_names,
         )
 
     monkeypatch.setattr(detector, "load_models", fake_load_models)
-    monkeypatch.setattr(detector, "speech_regions", lambda audio, sr, c: [])
+    monkeypatch.setattr(vad, "speech_probs", lambda audio, sr, c: np.array([], dtype=np.float32))
     return tagger
 
 
