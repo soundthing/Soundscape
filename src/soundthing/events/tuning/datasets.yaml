@@ -1,0 +1,147 @@
+# Dataset-to-vocabulary mappings and synthetic mix recipes for tuning.
+# All target class ids must exist in config/vocabulary.yaml.
+
+esc50:
+  map:
+    airplane: aircraft
+    car_horn: car_horn
+    cat: cat_meow
+    chirping_birds: birdsong
+    clapping: applause
+    clock_alarm: alarm_ringing
+    clock_tick: clock_ticking
+    coughing: cough
+    crickets: insects
+    crow: birdsong
+    crying_baby: baby_cry
+    dog: dog_bark
+    door_wood_creaks: door_open_close
+    door_wood_knock: door_knock
+    fireworks: fireworks
+    footsteps: footsteps
+    glass_breaking: glass_break
+    helicopter: helicopter
+    insects: insects
+    keyboard_typing: typing
+    laughing: laughter
+    mouse_click: mouse_click
+    rain: rain
+    sea_waves: waves
+    siren: siren
+    thunderstorm: thunder
+    train: train
+    wind: wind
+  unmapped:
+    - breathing
+    - brushing_teeth
+    - can_opening
+    - chainsaw
+    - church_bells
+    - cow
+    - crackling_fire
+    - drinking_sipping
+    - engine
+    - frog
+    - hand_saw
+    - hen
+    - pig
+    - pouring_water
+    - rooster
+    - sheep
+    - sneezing
+    - snoring
+    - toilet_flush
+    - vacuum_cleaner
+    - washing_machine
+    - water_drops
+  background:
+    - breathing
+    - crackling_fire
+    - vacuum_cleaner
+    - washing_machine
+    - water_drops
+
+fsd50k:
+  # FSD50K labels are hierarchy-propagated: never map a parent label (Alarm, Door,
+  # Glass, ...) whose children map to other classes, or every child clip becomes
+  # two-class and is dropped (or mislabeled).
+  map:
+    Accelerating_and_revving_and_vroom: engine_rev
+    Aircraft: aircraft
+    Applause: applause
+    Bark: dog_bark
+    Bird_vocalization_and_bird_call_and_bird_song: birdsong
+    Blender: blender
+    Boiling: boiling
+    Car_passing_by: car_passing
+    Cheering: cheering
+    Chopping_(food): chopping
+    Clapping: applause
+    Clock: clock_ticking
+    Computer_keyboard: typing
+    Cough: cough
+    Cricket: insects
+    Crowd: crowd_murmur
+    Cutlery_and_silverware: dishes
+    Dishes_and_pots_and_pans: dishes
+    Doorbell: doorbell
+    Engine_starting: engine_start
+    Explosion: explosion
+    Fireworks: fireworks
+    Fixed-wing_aircraft_and_airplane: aircraft
+    Frying_(food): sizzling
+    Gunshot_and_gunfire: gunshot
+    Helicopter: helicopter
+    Insect: insects
+    Keys_jangling: keys_jingle
+    Knock: door_knock
+    Laughter: laughter
+    Meow: cat_meow
+    Microwave_oven: microwave_beep
+    Motorcycle: motorcycle
+    Ocean: waves
+    Printer: printer
+    Rain: rain
+    Raindrop: rain
+    Ringtone: phone_ring
+    Screaming: scream
+    Shatter: glass_break
+    Sink_(filling_or_washing): faucet
+    Siren: siren
+    Slam: door_slam
+    Stream: stream
+    Telephone: phone_ring
+    Thunder: thunder
+    Thunderstorm: thunder
+    Thump_and_thud: thud
+    Tick-tock: clock_ticking
+    Traffic_noise_and_roadway_noise: traffic
+    Train: train
+    Typing: typing
+    Vehicle_horn_and_car_horn_and_honking: car_horn
+    Walk_and_footsteps: footsteps
+    Water_tap_and_faucet: faucet
+    Waves_and_surf: waves
+    Whistle: whistle
+    Wind: wind
+  background:
+    - Crackle
+    - Hiss
+    - Hum
+    - Mechanical_fan
+    - Rustle
+
+audioset:
+  clip_sec: 10.0
+
+mix:
+  sample_rate: 16000
+  clip_sec: 30.0
+  events_per_mix: [3, 6]      # inclusive range
+  snr_db: [6.0, 20.0]         # event active-RMS over bed RMS
+  bed_dbfs: -40.0             # bed RMS level
+  min_gap_sec: 0.5            # silence between placed events (no overlaps)
+  trim_frame_sec: 0.02
+  trim_rel_db: -35.0          # energy gate relative to the clip's loudest frame
+  trim_floor_dbfs: -60.0      # absolute gate floor
+  max_event_sec: 8.0          # longer trimmed sources are cut to this

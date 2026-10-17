@@ -60,3 +60,17 @@ weight vector over vocabulary classes has lowest cosine similarity to the true e
 Sharing masked scores across baseline and conditioned modes halves scoring and VAD cost.
 Caching only the most recent entry bounded by audio path, mtime, size, and config keys
 prevents unbounded memory growth during batch runs.
+
+## Synthetic dev mixes keep folds isolated, sample by prior, and gate onsets — events
+Each mix draws sources from a single dataset fold so cross-validation splits remain
+leak-free. Foreground event classes are sampled proportional to the environment's prior
+weights to mirror real test distributions without hard-coding ids. Onsets are trimmed
+with an energy gate to ensure tight ground truth timestamps rather than arbitrary clip
+padding. Background beds use unmapped categories so the bed provides realistic texture
+without leaking vocabulary sound events.
+
+## FSD50K sources require exactly one mapped class; AudioSet strong labels are baseline-only — events
+FSD50K clips are multi-labeled and ontology-propagated; admitting clips mapping to multiple
+vocabulary classes would inject unintended overlapping events into synthetic mixes, so sources
+must reach exactly one distinct mapped class. AudioSet strong-label clips have unknown environments,
+so their annotations are generated with empty segments and evaluated exclusively in baseline mode.
