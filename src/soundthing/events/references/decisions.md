@@ -67,7 +67,7 @@ The fixed tuning objective uses micro-pooled F0.5 because precision is prioritiz
 receive half credit (0.5 TP + 0.5 FP + 0.5 FN), rewarding coarse detections while preserving
 an incentive for fine-grained accuracy.
 
-## Safety recall includes coarse-level matches — agreed
+## Safety recall includes coarse-level matches — events
 For safety-critical classes, coarse captions (such as "alarm" for a siren) still alert the
 viewer to danger. Safety recall therefore counts coarse matches toward true positives.
 
