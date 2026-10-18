@@ -50,6 +50,20 @@ captions/pipeline components, generic score/sweep/bootstrap/promote/ledger with
 trusted scorer (`trusted.py`), experiment runner and code promotion to review branches
 (`runner.py`), MCP tools `list_components`, `run_experiment`, `promote_code`.
 
+## First runs (2026-10-18, current config, 42 ESC-50 dev mixes, audio only)
+
+| Component | Objective | Notes |
+|---|---|---|
+| events | F0.5 0.085 | baseline 0.099, **wrong env 0.220**, safety recall 0.20, 23 FP/min |
+| environment | 0.119 | audio-only CLAP; 14 envs, so barely above chance (0.07) |
+| captions | cue F0.5 0.042 | safety recall 0.11, mean cue 2.0 s |
+| pipeline | cue F0.5 0.071 | baseline 0.051, 12.8 FP/min, env time acc 0.119 |
+
+Conditioning on the labeled environment scores *below* a deliberately wrong one, so the
+priors or their application likely hurt; investigate before tuning anything else.
+Reproduce: `build-dev --esc50 data/esc50 --n-per-env 3 --out data/harness/dev-esc`, then
+`build-cache --component environment ...` and `score --component C --labels data/harness/dev-esc/labels --no-log`.
+
 ## Work left
 
 - Build dev caches at scale (Kaggle) for AudioSet dev; only the ESC-50 mixes are cached locally.
