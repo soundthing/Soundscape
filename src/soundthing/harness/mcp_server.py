@@ -246,6 +246,10 @@ class TuningTools:
             space.validate_overrides(ovr, sp)
 
             is_shared = any(space.is_shared(k) for k in ovr)
+            if not labels_dir:
+                from soundthing.harness import clipset
+
+                clipset.maybe_rebaseline(component)
             result = self.score_fn(
                 overrides=ovr, split="dev", cfg=cfg, component=component, labels_dir=labels_dir
             )

@@ -74,3 +74,6 @@ Code experiments run in dedicated git worktrees located under `<main_checkout pa
 
 ## Code promotion targets review branches with tamper verification — harness
 `promote_code` verifies that the experiment was accepted, validates the patch SHA against the recorded ledger entry to detect any tampering, enforces holdout gating on events, and creates a local `harness/review/<run_id>` branch. It never automatically merges into user branches or pushes to remotes, keeping human review as the final gate for code promotion.
+
+## Clip sets: tune on the clips cached so far — harness
+Building the AudioSet caches takes hours, and tuning can't wait for it. While some dev clips have no cache, dev scoring uses a frozen snapshot of the clips that do (`clipset.py`, under `data/harness/clipset/events/`). `rebaseline` takes a new snapshot and re-scores the best (main checkout code, best overrides) on it, so the best entry and later runs compare on the same clips. `score` and `run_experiment` trigger it themselves once the cache has grown by `MIN_GROWTH` clips. Runs that straddle a rebaseline may compare against a best scored on more clips, so verify accepted runs again before acting on them. When every dev clip is cached the snapshot is dropped and scoring goes back to the full split.

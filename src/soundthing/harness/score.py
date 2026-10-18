@@ -68,7 +68,9 @@ def score(
     if labels_dir is not None:
         ldir = Path(labels_dir)
     elif split == "dev":
-        ldir = paths.dev_labels_dir()
+        from soundthing.harness import clipset
+
+        ldir = clipset.active_labels_dir(component) or paths.dev_labels_dir()
     elif split == "holdout":
         ldir = paths.holdout_dir() / "labels"
     else:

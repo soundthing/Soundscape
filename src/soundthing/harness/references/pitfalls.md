@@ -22,3 +22,4 @@ cause is gone.
 
 - **Git archive fails on non-existent pathspecs.** `git archive <ref> path1 path2` fails with exit code 128 if any specified path does not exist in the commit tree. Inspecting the tree with `git ls-tree` first ensures minimal test repositories without `pyproject.toml` archive successfully without pathspec errors.
 - **Git apply whitespace warnings on Windows.** Differences in line endings (CRLF vs LF) on Windows can cause `git apply` to reject patches due to whitespace; passing `--whitespace=nowarn` allows clean patches to apply reliably across platforms.
+- **Trusted scoring runs the committed harness, not your working tree.** The overlay comes from `git archive` of the pinned commit, so a harness change does nothing for `run_experiment` or `rebaseline` until it's committed.
