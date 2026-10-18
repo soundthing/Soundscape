@@ -15,7 +15,8 @@ Background knowledge (stack details, decisions, pitfalls, tuning results) lives 
 5. **Vocabulary and thresholds:** the ~60-class vocabulary and per-class thresholds.
 6. **Baseline vs conditioned:** both outputs every run, to show the environment layer helps.
 
-Also: hand-label a share of the eval clips. Prior changes go through Person 2.
+Eval data is the AudioSet strong-label eval split (no hand labels). Prior changes go
+through Person 2.
 
 ## Stack
 
@@ -27,7 +28,7 @@ Also: hand-label a share of the eval clips. Prior changes go through Person 2.
 | Zero-shot scoring | LAION CLAP (`laion/clap-htsat-unfused`) via Hugging Face `transformers` |
 | Speech detection | Silero VAD via `silero-vad` |
 | Post-processing | plain numpy (no scipy) |
-| Testing / eval | pytest; `soundthing eval` against hand labels |
+| Testing / eval | pytest; evaluation harness `score` on AudioSet strong labels |
 
 Model libraries come from the `events` install extra, so the stub path works without
 them. Details and rationale: [references/stack.md](references/stack.md).
@@ -45,8 +46,8 @@ and there are no labeled clips, so there are no F1 / FP-per-minute numbers. CLAP
 calibration and all thresholds are untuned placeholders.
 
 **Next:** install the `events` extra, run the real backend end to end via a local
-`--config` copy, verify AudioSet names (`check-config --audioset`), label clips, then
-milestones 5–7.
+`--config` copy, verify AudioSet names (`check-config --audioset`), build caches for
+the AudioSet dev/holdout splits, then milestones 5–7.
 
 ## Milestones
 
@@ -62,10 +63,11 @@ milestones 5–7.
    *Done.*
 5. **Conditioned vs baseline:** compare both modes on the eval clips, including clips
    where the environment is deliberately wrong. *Tooling done (`soundthing eval` plus the
-   wrong-env experiment); needs labeled clips.*
-6. **Tuning:** calibrate thresholds and parameters on the labeled clips without
-   overfitting a small set. *Planned as an agent hill-climbing harness:
-   [tuning-plan.md](tuning-plan.md).*
+   wrong-env experiment). AudioSet has no environments, so this still needs
+   the synthetic mixes or Person 2's real `env_segments.json`.*
+6. **Tuning:** calibrate thresholds and parameters on the AudioSet dev split; promote
+   only after the AudioSet holdout passes. *Planned as an agent hill-climbing harness:
+   [harness/tuning-plan.md](../harness/tuning-plan.md); the harness is now its own component, see [harness/plan.md](../harness/plan.md).*
 7. **Go live:** switch `events.backend` to `real` once the stage runs end to end
    (use a local `--config` copy until then).
 8. **Modifiers (nice to have):** left/right, approaching/receding, loud/quiet. *Done;
@@ -83,7 +85,7 @@ milestones 5–7.
 - **Post-processing:** offline, so it can look at future context. Precision over recall:
   when in doubt, don't caption, except for safety sounds.
 - **Tuning:** agents hill-climb one fixed objective through an MCP harness over cached
-  model scores ([tuning-plan.md](tuning-plan.md)); results are recorded in
+  model scores ([harness/tuning-plan.md](../harness/tuning-plan.md)); results are recorded in
   [references/tuning-log.md](references/tuning-log.md).
 - **Tests:** post-processing and scoring are tested with synthetic scores and fake models;
   real-model tests skip when the `events` extra isn't installed.

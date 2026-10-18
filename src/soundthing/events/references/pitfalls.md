@@ -19,8 +19,6 @@ cause is gone.
   windows; a wide median filter erases them.
 - **Short events stay on screen longer than their span.** The caption writer extends cues
   to a minimum duration, which matters when capping captions on screen.
-- **Small eval set overfits fast.** 10–20 clips: tune on part, check on the rest, and
-  prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail
   wherever the `events` extra isn't installed, including CI.
 - **CLAP calibration center/scale are untuned placeholders.** Default values
@@ -40,15 +38,7 @@ cause is gone.
   boundaries or at the clip edge can produce detections ending after `inputs.duration`
   or starting at/after it. Dropping start >= duration and clipping ends to duration
   ensures all events satisfy contract validation.
-- **Holdout clips must never appear in dev.** Hand-labeled holdout clips evaluate models
-  strictly on promotion; allowing holdout ids into dev risks tuning against the test split,
-  so import refuses overlaps and enforces disjoint sets.
-- **`import kaggle` authenticates at import time.** Importing `kaggle` or any of its submodules without valid credentials immediately raises; import lazily inside client accessors only.
-- **Kaggle builds only committed and pushed code.** The cache kernel clones the repo at a specified git SHA; uncommitted local edits or unpushed commits will not be in the remote build.
-- **Faking a tuning submodule needs the package attribute too.** Once the real module has
-  been imported, `import soundthing.events.tuning.x as m` resolves through the package
-  attribute, so a fake placed only in `sys.modules` is silently bypassed (tests pass alone,
-  fail in the full suite). Patch both.
+- **AudioSet scores flatter the tagger.** PANNs was trained on AudioSet (a disjoint split, but the same sources and label style), so AudioSet F0.5 likely overstates performance on real videos.
 - **FSD50K labels are hierarchy-propagated.** Parent ontology labels (e.g. `Animal`,
   `Domestic_animals_and_pets`) appear alongside specific leaf labels on every clip.
   Filtering for clips that reach exactly one distinct mapped class prevents multi-source
@@ -62,5 +52,3 @@ cause is gone.
   (e.g. safety vs non-safety) will have the non-safety event suppressed by `priority_filter`.
   When synthesizing multi-event test clips, space activations across non-overlapping time
   windows so both events are preserved.
-- **MCP 2.x server import path.** MCP 2.x renamed `FastMCP` to `mcp.server.mcpserver.MCPServer`; importing from `mcp.server.fastmcp` fails. Use `from mcp.server.mcpserver import MCPServer`.
-- **YAML line endings may be CRLF.** Config YAML files checked out on Windows may have CRLF line endings, so line edits must preserve the existing newline style to avoid corrupting git diffs.

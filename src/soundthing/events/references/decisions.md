@@ -68,35 +68,14 @@ FSD50K clips are multi-labeled and ontology-propagated; admitting clips mapping 
 vocabulary classes would inject unintended overlapping events into synthetic mixes, so sources
 must reach exactly one distinct mapped class. AudioSet strong-label clips have unknown environments,
 so their annotations are generated with empty segments and evaluated exclusively in baseline mode.
-## Tuning objective is micro F0.5 with coarse-only matches at half credit — events
-The fixed tuning objective uses micro-pooled F0.5 because precision is prioritized over recall
-(false-positive captions are more jarring than missed non-safety events). Coarse-only matches
-receive half credit (0.5 TP + 0.5 FP + 0.5 FN), rewarding coarse detections while preserving
-an incentive for fine-grained accuracy.
-
-## Safety recall includes coarse-level matches — events
-For safety-critical classes, coarse captions (such as "alarm" for a siren) still alert the
-viewer to danger. Safety recall therefore counts coarse matches toward true positives.
-
-## Tuning matching replicates evaluate greedy semantics — events
-Harness matching uses the identical greedy nearest-onset iteration and tie-breaking order
-(<= distance favoring the later truth) as soundthing.evaluate so tuning metrics directly
-predict official evaluation results.
 
 ## Split detection into cached model stage and replay — events
 Detection is split into a cached model stage (`ClipCache`) and a replayable post-model stage (`replay`). Known accepted behaviour changes: tagger and CLAP audio embeddings pass through float16 to conserve memory (~1 MB/min); VAD regions come from per-chunk probs. Production detector and tuning harness share the exact same replay path. In-process memo in `detector.detect` caches the single most recent `ClipCache` by audio path, mtime, size, cache_key and models_cache_key so conditioned runs on the same file avoid recomputation.
 
-## Tuning acceptance uses limits vs current best plus paired bootstrap — events
-Acceptance requires passing limits vs the current best (safety recall, FP/min, above baseline, wrong-environment robustness) plus a paired bootstrap over clips where the lower 95% confidence bound of F0.5 gain is strictly positive (> 0). Single-number metric improvements on a few dozen clips are mostly noise and risk promoting random fluctuations.
-
-## Holdout test set is pass/fail only and checked only at promotion — events
-Hand-labeled holdout clips evaluate candidate vs current config on objective, safety recall, and FP/min only during promotion, returning a binary pass/fail result with no metric numbers revealed. Keeping holdout scores confidential prevents agents from hill-climbing against the holdout set.
-
-## Per-class thresholds require at least 20 dev events — events
-Per-class threshold tuning is restricted to classes with at least 20 dev events (`MIN_CLASS_EVENTS`) to limit overfitting to sparse sample outliers. Classes with fewer occurrences fall back to default thresholds.
-
-## Promotion edits YAML by line and routes shared files via proposals — events
-Promotion updates `config/pipeline.yaml` (`events:` section) and `config/thresholds.yaml` via line-by-line splicing rather than whole-file re-dumping, preserving comments, formatting, and ownership notes. Shared files (`vocabulary.yaml`, `priors.yaml`, `environments.yaml`) cannot be promoted directly; variants must be submitted as human-reviewed proposals.
-
-## Every MCP and CLI call is logged to the shared ledger — events
-All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) under `data/tuning/`, so parallel agents across worktrees have full visibility into past hypotheses, parameters, and results without repeating experiments.
+## Evaluation harness is its own component — events
+Tuning started inside `events/`, but the same loop (score on a fixed objective, accept by
+limits + bootstrap, promote, log) applies to environment, captions and end to end, so the
+harness moved to `soundthing/harness/` (2026-10-17). The model cache and replay stay in
+`events/` because production detection runs through them; they import the harness only
+lazily for the default cache location. Tuning decisions now live in
+[harness/references](../../harness/references/decisions.md).

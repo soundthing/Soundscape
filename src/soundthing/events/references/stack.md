@@ -20,10 +20,8 @@ a VAD alternative if Silero misses speech under music.
   there's no scipy.
 - **`events` extra:** torch, torchaudio, panns-inference, transformers, silero-vad. Import
   these lazily so the stub path and CI run without them.
-- **`tuning` extra:** mcp (2.x server SDK), optuna (TPE for sweeps), kaggle CLI. Imported
-  lazily so the base package and standard pipeline run without them. Note that mcp 2.x is
-  required by the server code (pyproject still says `mcp>=1.2`; the floor should be raised
-  to `>=2.0`).
+- **Evaluation harness:** its extra and Kaggle compute are in
+  [harness/references/stack.md](../../harness/references/stack.md).
 - **Testing:** pytest. Real-model tests skip when the extra isn't installed.
 
 ## Runtime
@@ -32,7 +30,3 @@ Offline only. CPU must work; CUDA is used when available. Model weights download
 use (PANNs checkpoint ~300 MB, CLAP ~600 MB).
 
 Dev mixes resample with torchaudio (events extra), keeping scipy out.
-
-## Compute
-
-- **Kaggle cache runner:** Kaggle (kaggle 1.7 CLI/API, free T4/P100) builds dev caches; the kernel installs the repo at a pushed git sha.
