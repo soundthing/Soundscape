@@ -26,6 +26,7 @@ from .evaluate import EventCounts, check_labels, env_accuracy, score_events
 from .extract import extract, video_id_for
 from .direction import ensure_direction
 from .stages import get_environment_classifier, get_event_detector
+from . import workspace
 
 MODES = ("baseline", "conditioned")
 
@@ -136,7 +137,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--cookies", help="exported YouTube cookie file; overrides SOUNDTHING_YOUTUBE_COOKIES for this process")
 
+    workspace.add_parser(sub)
+
     args = ap.parse_args(argv)
+
+    if args.cmd == "setup":
+        return workspace.main(args)
 
     if args.cmd == "merge-captions":
         try:
