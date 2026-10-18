@@ -158,3 +158,17 @@ Person 3 uses the same hierarchy when extending cue durations, so readability
 padding cannot reintroduce parent/child duplicates. The event JSON fields and
 schema version do not change; Person 2's environment outputs are unchanged.
 See `docs/examples/hierarchy.yaml` for a configuration-only example.
+
+### Full AudioSet vocabulary
+
+The live vocabulary contains 527 independently scored AudioSet labels plus five
+existing CLAP-only classes. Every PANNs output maps to exactly one caption class.
+Existing class ids are retained for their first (primary) AudioSet label. Former
+aliases become independent classes; this prevents a broad label such as `Dog`
+from directly scoring the existing `dog_bark` class. New ids are
+`audioset_` plus the AudioSet machine id with slashes replaced by underscores
+(e.g. `/m/09x0r` becomes `audioset_m_09x0r`). No existing id is renamed.
+`parents` comes from all paths in the AudioSet ontology, projected through any
+unscored intermediate nodes to the nearest scored ancestors. Multiple inheritance
+is retained. Existing labels and stored JSON stay loadable; regenerating runs is
+necessary to see expanded detection and hierarchy filtering.

@@ -5,6 +5,7 @@
     { "start": 3.2, "end": 3.9, "label": "door slams", "class_id": "door_slam", "confidence": 0.77, "modifiers": ["right"] },
     { "start": 6.0, "end": 11.5, "label": "food sizzling", "class_id": "sizzling", "confidence": 0.64, "modifiers": [] },
     { "start": 14.1, "end": 14.6, "label": "loud impact", "class_id": "impact", "confidence": 0.58, "modifiers": [] },
+    { "start": 17.0, "end": 18.0, "label": "dog", "class_id": "audioset_m_0bt9lr", "confidence": 0.72, "modifiers": [] },
     { "start": 20.0, "end": 26.0, "label": "siren wailing", "class_id": "siren", "confidence": 0.81, "modifiers": ["distant", "approaching"] }
   ]
 }
