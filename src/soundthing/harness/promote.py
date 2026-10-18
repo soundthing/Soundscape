@@ -469,6 +469,13 @@ def holdout_check(
         raise PromoteError(f"holdout set not available: {e}") from e
 
     hdir_path = Path(hdir) if hdir is not None else None
+    if hdir_path is not None and hdir_path.is_dir():
+        from soundthing.harness import clipset
+
+        try:
+            hdir_path = clipset.refresh_holdout(cfg)
+        except Exception:
+            pass  # no snapshot possible: score the full holdout, as before
     if hdir_path is None or not hdir_path.is_dir() or not any(hdir_path.glob("*.json")):
         raise PromoteError(f"holdout set not available: directory {hdir} missing or contains no JSON files")
 

@@ -89,3 +89,61 @@ def test_rebaseline_best_has_top_level_metrics(tmp_path, monkeypatch):
     best = ledger.best()
     assert best["safety_recall"] == 0.4 and best["fp_per_min"] == 3.0
     assert best["clipset"] == 1
+
+
+def _holdout_setup(tmp_path, monkeypatch, n_hold: int, cached: list[int]):
+    cfg, _ = _setup(tmp_path, monkeypatch, 1, [0])
+    from soundthing.harness import components, holdout
+
+    key = components.get("events").cache_key(cfg)
+    hl = holdout.holdout_labels_dir()
+    hl.mkdir(parents=True)
+    old = time.time() - 60
+    for i in range(n_hold):
+        (hl / f"h{i}.json").write_text("{}", encoding="utf-8")
+    for i in cached:
+        f = paths.cache_root() / key / f"h{i}.npz"
+        f.write_bytes(b"")
+        os.utime(f, (old, old))
+    return cfg, hl
+
+
+def test_refresh_holdout_freezes_cached_clips_inside_holdout_dir(tmp_path, monkeypatch):
+    cfg, hl = _holdout_setup(tmp_path, monkeypatch, 4, [1, 3])
+
+    d = clipset.refresh_holdout(cfg)
+
+    assert sorted(p.stem for p in d.glob("*.json")) == ["h1", "h3"]
+    assert paths.holdout_dir() in d.parents
+    assert clipset.active_holdout_dir() == d
+
+
+def test_refresh_holdout_uses_full_dir_when_all_cached(tmp_path, monkeypatch):
+    cfg, hl = _holdout_setup(tmp_path, monkeypatch, 2, [0, 1])
+
+    assert clipset.refresh_holdout(cfg) == hl
+    assert clipset.active_holdout_dir() is None
+
+
+def test_split_caches_keep_dev_holdout_proportions(tmp_path, monkeypatch):
+    monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))
+    from soundthing.harness import datasets, holdout
+
+    cfg = load_config()
+    for d, prefix, n in ((paths.dev_labels_dir(), "d", 8), (holdout.holdout_labels_dir(), "h", 2)):
+        d.mkdir(parents=True)
+        audio = d.parent / "audio"
+        audio.mkdir(parents=True)
+        for i in range(n):
+            (d / f"{prefix}{i}.json").write_text("{}", encoding="utf-8")
+            (audio / f"{prefix}{i}.wav").write_bytes(b"")
+    built = {}
+    monkeypatch.setattr(datasets, "_build_items", lambda items, cfg, **k: built.setdefault("order", [i for i, _ in items]))
+
+    datasets.build_split_caches(cfg, models=object())
+
+    order = built["order"]
+    assert len(order) == 10
+    # holdout is never more than one clip behind its 20% share at any point
+    for n in range(1, 11):
+        assert sum(c.startswith("h") for c in order[:n]) >= int(n * 0.2) - 1

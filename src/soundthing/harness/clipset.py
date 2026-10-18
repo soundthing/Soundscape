@@ -187,3 +187,65 @@ def status(component: str = "events") -> dict[str, Any]:
         "cached": len(done),
         "total": total,
     }
+
+
+# ------------------------------------------------------------------ holdout
+# Holdout checks are pass/fail and run on the holdout clips cached so far. The snapshot stays
+# under the holdout directory, so the "never read the holdout" rules cover it too.
+
+
+def _holdout_root() -> Path:
+    return paths.holdout_dir() / "cached"
+
+
+def active_holdout_dir() -> Path | None:
+    ptr = _holdout_root() / "current"
+    if not ptr.is_file():
+        return None
+    d = _holdout_root() / ptr.read_text(encoding="utf-8").strip() / "labels"
+    return d if d.is_dir() else None
+
+
+def cached_holdout_ids(cfg: Any, component: str = "events") -> tuple[list[str], int]:
+    """(holdout clip ids with a finished cache, total holdout clips). Reads ids, not labels."""
+    from soundthing.harness import components, holdout
+
+    key = components.get(component).cache_key(cfg)
+    cdir = paths.cache_root() / key
+    now = time.time()
+    ids = sorted(p.stem for p in Path(holdout.holdout_labels_dir()).glob("*.json"))
+    done = []
+    for vid in ids:
+        try:
+            if now - (cdir / f"{vid}.npz").stat().st_mtime >= STABLE_SEC:
+                done.append(vid)
+        except FileNotFoundError:
+            pass
+    return done, len(ids)
+
+
+def refresh_holdout(cfg: Any = None, component: str = "events") -> Path:
+    """Freeze the cached holdout clips for one holdout check and return the labels dir that
+    both sides of the check must score. Falls back to the full holdout labels dir when
+    every clip is cached, or none is (scoring then fails as it always did)."""
+    from soundthing.config import load_config
+    from soundthing.harness import holdout
+
+    if cfg is None:
+        cfg = load_config(paths.main_checkout() / "config")
+    full = holdout.holdout_labels_dir()
+    ptr = _holdout_root() / "current"
+    done, total = cached_holdout_ids(cfg, component)
+    if not done or len(done) == total:
+        ptr.unlink(missing_ok=True)
+        return full
+    name = f"{len(done):05d}"
+    labels = _holdout_root() / name / "labels"
+    if sorted(p.stem for p in labels.glob("*.json")) != done:
+        labels.mkdir(parents=True, exist_ok=True)
+        for vid in done:
+            shutil.copy2(full / f"{vid}.json", labels / f"{vid}.json")
+    tmp = _holdout_root() / "current.tmp"
+    tmp.write_text(name, encoding="utf-8")
+    os.replace(tmp, ptr)
+    return labels

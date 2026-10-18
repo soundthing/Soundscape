@@ -72,7 +72,9 @@ def score(
 
         ldir = clipset.active_labels_dir(component) or paths.dev_labels_dir()
     elif split == "holdout":
-        ldir = paths.holdout_dir() / "labels"
+        from soundthing.harness import clipset
+
+        ldir = clipset.active_holdout_dir() or paths.holdout_dir() / "labels"
     else:
         raise ValueError(f"Unknown split: {split!r}")
 

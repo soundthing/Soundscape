@@ -861,6 +861,62 @@ def _build_caches(
             UserWarning,
         )
 
+    return _build_items(clips_with_audio, cfg, models=models, overwrite=overwrite, root=root,
+                        missing_audio_count=missing_audio_count)
+
+
+def build_split_caches(cfg: Config, *, models: Any = None) -> list[Path]:
+    """Build dev and holdout caches interleaved, so that at any moment the cached clips keep
+    the dev/holdout proportions. Each step builds from whichever split is the smaller
+    fraction done; a split that's behind (holdout, after a dev-only build) catches up first.
+    Never reads holdout label contents."""
+    from soundthing.events import cache as cache_mod
+    from soundthing.harness import holdout
+
+    key = cache_mod.cache_key(cfg)
+    dev_ids = _label_ids(paths.dev_labels_dir())
+    hold_ids = holdout.holdout_ids()
+    holdout.assert_disjoint(dev_ids)
+
+    def pending(audio_dir: Path, ids: list[str]) -> tuple[list[tuple[str, Path]], int]:
+        todo, done = [], 0
+        for clip_id in ids:
+            if cache_mod.cache_path(clip_id, key).exists():
+                done += 1
+            elif (audio := _find_audio(audio_dir, clip_id)) is not None:
+                todo.append((clip_id, audio))
+        return todo, done
+
+    dev_todo, dev_done = pending(paths.dev_audio_dir(), dev_ids)
+    hold_todo, hold_done = pending(holdout.holdout_audio_dir(), hold_ids)
+    order: list[tuple[str, Path]] = []
+    di = hi = 0
+    while di < len(dev_todo) or hi < len(hold_todo):
+        dev_frac = (dev_done + di) / max(len(dev_ids), 1)
+        hold_frac = (hold_done + hi) / max(len(hold_ids), 1)
+        if hi < len(hold_todo) and (di >= len(dev_todo) or hold_frac <= dev_frac):
+            order.append(hold_todo[hi])
+            hi += 1
+        else:
+            order.append(dev_todo[di])
+            di += 1
+    log.info("split caches: dev %d/%d built, holdout %d/%d built",
+             dev_done, len(dev_ids), hold_done, len(hold_ids))
+    return _build_items(order, cfg, models=models)
+
+
+def _build_items(
+    clips_with_audio: list[tuple[str, Path]],
+    cfg: Config,
+    *,
+    models: Any = None,
+    overwrite: bool = False,
+    root: Path | None = None,
+    missing_audio_count: int = 0,
+) -> list[Path]:
+    from soundthing.events import cache as cache_mod
+
+    key = cache_mod.cache_key(cfg)
     to_build: list[tuple[str, Path, Path]] = []
     cache_paths: list[Path] = []
     for clip_id, audio_path in clips_with_audio:
@@ -889,7 +945,10 @@ def _build_caches(
         audio_sec += len(data) / sr
         c = cache_mod.build_cache(data, sr, clip_id, cfg, models=models)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_mod.save_cache(c, out_path)
+        # Write then rename, so a killed build never leaves a truncated cache behind.
+        tmp_path = out_path.with_name(f"{out_path.stem}.partial.npz")
+        cache_mod.save_cache(c, tmp_path)
+        os.replace(tmp_path, out_path)
         if i == 1 or i % every == 0 or i == n:
             elapsed = time.monotonic() - t0
             eta = elapsed / i * (n - i)

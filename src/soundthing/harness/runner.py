@@ -259,6 +259,9 @@ def _code_holdout_check(main: Path, candidate: dict) -> bool:
     """Holdout pass/fail for a code experiment: the experiment branch's code (with its
     overrides) vs the main checkout, both through the trusted scorer. Numbers never leave
     this function."""
+    from soundthing.harness import clipset
+
+    clipset.refresh_holdout()  # both trusted scores below read this snapshot
     branch = candidate["branch"]
     wt_path = paths.experiments_root() / f"soundthing-holdout-{candidate['run_id']}"
     subprocess.run(

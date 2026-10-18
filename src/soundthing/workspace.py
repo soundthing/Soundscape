@@ -347,8 +347,8 @@ def harness(args: argparse.Namespace) -> int:
         if _count(mix / "labels", "*.json"):
             datasets.build_dev_caches(mix / "audio", mix / "labels", cfg)
             build_env_caches(mix / "labels", mix / "audio", cfg)
-        datasets.build_dev_caches(paths.dev_audio_dir(), paths.dev_labels_dir(), cfg)
-        datasets.build_holdout_caches(cfg)
+        # Interleaved, so tuning can start on the clips cached so far with holdout in proportion.
+        datasets.build_split_caches(cfg)
         print(f"OK      feature caches ({_count(paths.cache_root(), '*/*.npz')} files)")
     else:
         print("INFO    skipped feature caches; build them with --caches (hours on CPU) "
