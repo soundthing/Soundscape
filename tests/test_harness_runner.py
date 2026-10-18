@@ -11,6 +11,7 @@ import subprocess
 import pytest
 
 from soundthing.harness import paths
+from soundthing.harness import runner as runner_module
 from soundthing.harness.runner import (
     cli_handle,
     cli_register,
@@ -343,3 +344,26 @@ def test_cli_and_mcp_wrappers(temp_git_repo: Path, tmp_path: Path, monkeypatch: 
     )
     code_promote = cli_handle(args_promote)
     assert code_promote == 0
+
+
+def test_code_holdout_scores_experiment_branch_code(temp_git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Code-promotion holdout scores the experiment branch's code, not the main checkout's."""
+    monkeypatch.setenv("SOUNDTHING_EXPERIMENTS_ROOT", str(tmp_path / "experiments"))
+    subprocess.run(["git", "branch", "harness/exp-abc"], cwd=temp_git_repo, capture_output=True, check=True)
+
+    calls = []
+
+    def fake_trusted(worktree, component, overrides, *, split="dev", **kwargs):
+        detector = Path(worktree) / "src" / "soundthing" / "events" / "detector.py"
+        calls.append((Path(worktree), split, detector.is_file()))
+        cand = Path(worktree) != temp_git_repo
+        return {"objective": 0.6 if cand else 0.5, "safety_recall": 1.0, "fp_per_min": 1.0}
+
+    monkeypatch.setattr(runner_module, "trusted_score", fake_trusted)
+    candidate = {"run_id": "abc", "branch": "harness/exp-abc", "overrides": {}}
+
+    assert runner_module._code_holdout_check(temp_git_repo, candidate) is True
+    assert [c[1] for c in calls] == ["holdout", "holdout"]
+    assert calls[0][0] != temp_git_repo and calls[0][2]
+    assert calls[1][0] == temp_git_repo
+    assert not calls[0][0].exists()

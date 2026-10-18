@@ -19,6 +19,7 @@ from soundthing.contracts import (
     LabeledSegment,
     save_labels,
 )
+from soundthing.harness.components import captions as captions_mod
 from soundthing.harness.components.base import Clip, Component
 from soundthing.harness.components.captions import (
     COMPONENT,
@@ -177,9 +178,7 @@ def test_stat_objective_consistency(cfg: Config, monkeypatch: pytest.MonkeyPatch
     fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
     fake_events_mod.labeled_env_segments = fake_labeled_env  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
+    monkeypatch.setattr(captions_mod, "ev_comp", fake_events_mod)
 
     labels = _make_labels(
         "clip_test",
@@ -230,9 +229,7 @@ def test_raising_max_cue_sec_changes_score_for_long_events(cfg: Config, monkeypa
     fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
     fake_events_mod.labeled_env_segments = fake_labeled_env  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
+    monkeypatch.setattr(captions_mod, "ev_comp", fake_events_mod)
 
     labels = _make_labels(
         "clip_long",
@@ -329,9 +326,7 @@ def test_captions_diagnostics_histogram(cfg: Config, monkeypatch: pytest.MonkeyP
     fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
     fake_events_mod.labeled_env_segments = fake_labeled_env  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
+    monkeypatch.setattr(captions_mod, "ev_comp", fake_events_mod)
 
     labels = _make_labels(
         "clip_diag",

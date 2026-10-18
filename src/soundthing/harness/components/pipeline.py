@@ -12,8 +12,11 @@ from typing import Any
 import numpy as np
 
 from soundthing.config import Config
-from soundthing.contracts import ClipLabels
+from soundthing.contracts import ClipLabels, load_labels
 from soundthing.captions import events_to_cues
+from soundthing.harness.components import environment as env_comp
+from soundthing.harness.components import events as ev_comp
+from soundthing.harness.components import get
 from soundthing.harness.components.base import Clip, Component, Evaluation
 from soundthing.harness.components.captions import CaptionCue, match_cues
 
@@ -82,31 +85,7 @@ class PipelineComponent:
 
     def cache_key(self, cfg: Config) -> str | None:
         """Hash of events key + '+' + environment key."""
-        try:
-            import soundthing.harness.components.events as ev_comp
-            if hasattr(ev_comp, "COMPONENT"):
-                ev_key = ev_comp.COMPONENT.cache_key(cfg)
-            elif hasattr(ev_comp, "cache_key"):
-                ev_key = ev_comp.cache_key(cfg)
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            from soundthing.events.cache import cache_key as ev_cache_key
-            ev_key = ev_cache_key(cfg)
-
-        try:
-            import soundthing.harness.components.environment as env_comp
-            if hasattr(env_comp, "COMPONENT"):
-                env_key = env_comp.COMPONENT.cache_key(cfg)
-            elif hasattr(env_comp, "cache_key"):
-                env_key = env_comp.cache_key(cfg)
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            from soundthing.harness.components import get
-            env_key = get("environment").cache_key(cfg)
-
-        return f"{ev_key}+{env_key}"
+        return f"{ev_comp.COMPONENT.cache_key(cfg)}+{env_comp.COMPONENT.cache_key(cfg)}"
 
     def build_cache(self, video_id: str, audio_path: Path, cfg: Config) -> Path | None:
         """No dedicated pipeline cache (built from events + environment)."""
@@ -118,42 +97,10 @@ class PipelineComponent:
         label_files = sorted(labels_path.glob("*.json"))
         if not label_files:
             raise ValueError(f"No label files found in {labels_dir}")
-        from soundthing.contracts import load_labels
         all_labels = [load_labels(p) for p in label_files]
         all_labels.sort(key=lambda l: l.video_id)
-
-        # 1. Events caches
-        try:
-            import soundthing.harness.components.events as ev_comp
-            if hasattr(ev_comp, "load_event_caches"):
-                ev_caches = ev_comp.load_event_caches(cfg, all_labels)
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            from soundthing.events.cache import cache_key, cache_path, load_cache
-            ekey = cache_key(cfg)
-            ev_caches = []
-            for lbl in all_labels:
-                cpath = cache_path(lbl.video_id, ekey)
-                if not cpath.exists():
-                    raise FileNotFoundError(
-                        f"Events cache missing for clip {lbl.video_id!r} with key {ekey!r} at {cpath}."
-                    )
-                ev_caches.append(load_cache(cpath))
-
-        # 2. Environment caches
-        try:
-            import soundthing.harness.components.environment as env_comp
-            if hasattr(env_comp, "load_env_cache"):
-                load_env = env_comp.load_env_cache
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            raise FileNotFoundError("Environment component or load_env_cache not available")
-
-        env_caches = []
-        for lbl in all_labels:
-            env_caches.append(load_env(lbl.video_id, cfg))
+        ev_caches = ev_comp.load_event_caches(cfg, all_labels)
+        env_caches = [env_comp.load_env_cache(lbl.video_id, cfg) for lbl in all_labels]
 
         return [
             Clip(
@@ -174,35 +121,8 @@ class PipelineComponent:
                 f"captions.min_cue_sec ({min_cue_sec}) cannot exceed captions.max_cue_sec ({max_cue_sec})"
             )
 
-        try:
-            import soundthing.harness.components.environment as env_comp
-            predict_segments = getattr(env_comp, "predict_segments")
-        except (ImportError, AttributeError) as exc:
-            raise RuntimeError("Environment predict_segments is required for pipeline evaluation") from exc
-
-        try:
-            import soundthing.harness.components.events as ev_comp
-            replay_events = getattr(ev_comp, "replay_events", None)
-            text_emb_for = getattr(ev_comp, "text_emb_for", None)
-        except (ImportError, AttributeError):
-            replay_events = None
-            text_emb_for = None
-
-        if replay_events is None:
-            from soundthing.events.replay import replay as replay_events
-
         ev_caches = [_extract_caches(c.cache)[0] for c in clips]
-        if text_emb_for is not None:
-            text_emb = text_emb_for(cfg, ev_caches)
-        else:
-            clap_cfg = cfg.pipeline.get("events", {}).get("clap", {})
-            clap_enabled = bool(clap_cfg.get("enabled", True))
-            has_clap = any(getattr(c, "clap_emb", None) is not None for c in ev_caches)
-            if clap_enabled and has_clap:
-                from soundthing.events.replay import text_embeddings_for
-                text_emb = text_embeddings_for(cfg)
-            else:
-                text_emb = None
+        text_emb = ev_comp.text_emb_for(cfg, ev_caches)
 
         matches: list[Any] = []
         base_matches: list[Any] = []
@@ -218,10 +138,10 @@ class PipelineComponent:
                 from dataclasses import replace
                 ev_cache = replace(ev_cache, duration=lbl.duration)
 
-            pred_segs = predict_segments(env_cache, cfg)
+            pred_segs = env_comp.predict_segments(env_cache, cfg)
             pred_envs.append((clip, pred_segs))
 
-            events = replay_events(ev_cache, pred_segs, cfg, text_emb)
+            events = ev_comp.replay_events(ev_cache, pred_segs, cfg, text_emb)
             sorted_events = sorted(events, key=lambda e: e.start)
             cues = events_to_cues(sorted_events, min_cue=min_cue_sec, max_cue=max_cue_sec)
             pred_cues = [
@@ -231,7 +151,7 @@ class PipelineComponent:
             m = match_cues(pred_cues, lbl, cfg, tol)
             matches.append(m)
 
-            base_events = replay_events(ev_cache, None, cfg, text_emb)
+            base_events = ev_comp.replay_events(ev_cache, None, cfg, text_emb)
             sorted_base = sorted(base_events, key=lambda e: e.start)
             base_cues = events_to_cues(sorted_base, min_cue=min_cue_sec, max_cue=max_cue_sec)
             pred_base_cues = [
@@ -324,15 +244,10 @@ class PipelineComponent:
 
     def space(self, cfg: Config, labels_dir: Path | None = None) -> list[dict[str, Any]]:
         """Union of events, environment, and captions search spaces, dropping duplicates."""
-        from soundthing.harness.components import get
         entries: list[dict[str, Any]] = []
         seen_names: set[str] = set()
         for comp_name in ("events", "environment", "captions"):
-            try:
-                comp = get(comp_name)
-            except (ImportError, AttributeError, KeyError):
-                continue
-            comp_space = comp.space(cfg, labels_dir)
+            comp_space = get(comp_name).space(cfg, labels_dir)
             for item in comp_space:
                 name = item.get("name")
                 if name not in seen_names:

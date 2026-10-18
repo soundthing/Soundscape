@@ -27,23 +27,7 @@ from soundthing.harness.patches import PROTECTED_CONFIG_FILES
 def _get_component(name: str):
     from soundthing.harness import components
 
-    try:
-        return components.get(name)
-    except (KeyError, ModuleNotFoundError, AttributeError):
-        if name == "events":
-            from dataclasses import dataclass
-
-            @dataclass
-            class _FallbackEvents:
-                name: str = "events"
-                owner: str = "person1"
-                sections: tuple[str, ...] = ("events.", "thresholds.")
-                code_paths: tuple[str, ...] = ("src/soundthing/events",)
-                tuning_log: str = "src/soundthing/events/references/tuning-log.md"
-                n_stats: int = 4
-
-            return _FallbackEvents()
-        raise
+    return components.get(name)
 
 
 def _find_main_repo(worktree: Path) -> Path:

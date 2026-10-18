@@ -202,10 +202,7 @@ class TuningTools:
         if component != "events":
             args["component"] = component
         with self._log_call("get_best", args):
-            try:
-                best = self.ledger.best(component)
-            except TypeError:
-                best = self.ledger.best()
+            best = self.ledger.best(component)
             if best is None:
                 return None
             res = {k: v for k, v in best.items() if k != "per_clip"}
@@ -219,10 +216,7 @@ class TuningTools:
         with self._log_call("get_ledger", args):
             if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= 200):
                 raise ValueError(f"limit must be between 1 and 200, got {limit}")
-            try:
-                entries = self.ledger.read(component)
-            except TypeError:
-                entries = self.ledger.read()
+            entries = self.ledger.read(component)
             slice_entries = entries[-limit:] if limit < len(entries) else entries
             res: list[dict[str, Any]] = []
             for entry in slice_entries:
@@ -235,8 +229,9 @@ class TuningTools:
         overrides: dict[str, Any] | None = None,
         hypothesis: str = "",
         component: str = "events",
+        labels_dir: str | None = None,
     ) -> dict[str, Any]:
-        """Score candidate overrides against the dev split and evaluate limits."""
+        """Score candidate overrides against the dev split (or labels_dir) and evaluate limits."""
         args: dict[str, Any] = {
             "overrides": overrides,
             "hypothesis": hypothesis,
@@ -247,21 +242,17 @@ class TuningTools:
             comp = components.get(component)
             cfg = self.cfg_loader()
             ovr = dict(overrides or {})
-            sp = comp.space(cfg, paths.dev_labels_dir())
+            sp = comp.space(cfg, Path(labels_dir) if labels_dir else paths.dev_labels_dir())
             space.validate_overrides(ovr, sp)
 
             is_shared = any(space.is_shared(k) for k in ovr)
-            try:
-                result = self.score_fn(overrides=ovr, split="dev", cfg=cfg, component=component)
-            except TypeError:
-                result = self.score_fn(overrides=ovr, split="dev", cfg=cfg)
+            result = self.score_fn(
+                overrides=ovr, split="dev", cfg=cfg, component=component, labels_dir=labels_dir
+            )
 
             sweep.log_result(result, hypothesis or "mcp score", self.ledger)
 
-            try:
-                best = self.ledger.best(component)
-            except TypeError:
-                best = self.ledger.best()
+            best = self.ledger.best(component)
             bootstrap_dict: dict[str, Any] | None = None
             if best is not None:
                 best_per_clip = _extract(best, "per_clip", None)
@@ -331,25 +322,15 @@ class TuningTools:
         with self._log_call("sweep", args):
             if isinstance(budget, bool) or not isinstance(budget, int) or not (1 <= budget <= self.max_sweep_budget):
                 raise ValueError(f"budget must be between 1 and {self.max_sweep_budget}, got {budget}")
-            try:
-                res = self.sweep_fn(
-                    params,
-                    strategy=strategy,
-                    score_fn=self.score_fn,
-                    budget=budget,
-                    cfg=self.cfg_loader(),
-                    ledger=self.ledger,
-                    component=component,
-                )
-            except TypeError:
-                res = self.sweep_fn(
-                    params,
-                    strategy=strategy,
-                    score_fn=self.score_fn,
-                    budget=budget,
-                    cfg=self.cfg_loader(),
-                    ledger=self.ledger,
-                )
+            res = self.sweep_fn(
+                params,
+                strategy=strategy,
+                score_fn=self.score_fn,
+                budget=budget,
+                cfg=self.cfg_loader(),
+                ledger=self.ledger,
+                component=component,
+            )
             return _make_json_safe(res)
 
     def promote(self, run_id: str, component: str = "events") -> dict[str, Any]:
@@ -358,21 +339,13 @@ class TuningTools:
         if component != "events":
             args["component"] = component
         with self._log_call("promote", args):
-            try:
-                raw_res = self.promote_fn(
-                    run_id,
-                    ledger=self.ledger,
-                    score_fn=self.score_fn,
-                    cfg=self.cfg_loader(),
-                    component=component,
-                )
-            except TypeError:
-                raw_res = self.promote_fn(
-                    run_id,
-                    ledger=self.ledger,
-                    score_fn=self.score_fn,
-                    cfg=self.cfg_loader(),
-                )
+            raw_res = self.promote_fn(
+                run_id,
+                ledger=self.ledger,
+                score_fn=self.score_fn,
+                cfg=self.cfg_loader(),
+                component=component,
+            )
             res = dict(raw_res)
 
             # Strip any unexpected holdout_* numeric field
@@ -436,6 +409,30 @@ class TuningTools:
             res = self.recache_fn(window, hop, model)
             return _make_json_safe(dict(res) if hasattr(res, "items") else res)
 
+    def run_experiment(
+        self,
+        component: str,
+        hypothesis: str,
+        patch: str | None = None,
+        overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Apply a code patch in a fresh experiment worktree, score it with the trusted
+        scorer, and keep its branch only if it passes limits and the bootstrap."""
+        args = {"component": component, "hypothesis": hypothesis, "overrides": overrides,
+                "has_patch": patch is not None}
+        with self._log_call("run_experiment", args):
+            from soundthing.harness import runner
+
+            return _make_json_safe(runner.mcp_run_experiment(component, hypothesis, patch=patch, overrides=overrides))
+
+    def promote_code(self, run_id: str) -> dict[str, Any]:
+        """Turn an accepted code experiment into a review branch for a human to merge."""
+        with self._log_call("promote_code", {"run_id": run_id}):
+            from soundthing.harness import runner
+
+            return _make_json_safe(runner.mcp_promote_code(run_id))
+
+
 
 def build_server(tools: TuningTools | None = None) -> MCPServer:
     """Build and configure the soundthing tuning MCP server."""
@@ -490,6 +487,8 @@ def build_server(tools: TuningTools | None = None) -> MCPServer:
         name="request_recache",
         description="Request cache rebuilding for window, hop, and model via Kaggle GPU kernel.",
     )(tools.request_recache)
+    server.tool(name="run_experiment")(tools.run_experiment)
+    server.tool(name="promote_code")(tools.promote_code)
 
     return server
 

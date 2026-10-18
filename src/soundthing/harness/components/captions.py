@@ -12,8 +12,9 @@ from typing import Any
 import numpy as np
 
 from soundthing.config import Config
-from soundthing.contracts import CaptionEvent, ClipLabels, LabeledEvent
+from soundthing.contracts import CaptionEvent, ClipLabels, LabeledEvent, load_labels
 from soundthing.captions import events_to_cues
+from soundthing.harness.components import events as ev_comp
 from soundthing.harness.components.base import Clip, Component, Evaluation
 
 
@@ -206,16 +207,7 @@ class CaptionsComponent:
 
     def cache_key(self, cfg: Config) -> str | None:
         """Hash of events settings (reuses events cache)."""
-        try:
-            import soundthing.harness.components.events as ev_comp
-            if hasattr(ev_comp, "COMPONENT"):
-                return ev_comp.COMPONENT.cache_key(cfg)
-            if hasattr(ev_comp, "cache_key"):
-                return ev_comp.cache_key(cfg)
-        except (ImportError, AttributeError):
-            pass
-        from soundthing.events.cache import cache_key as ev_cache_key
-        return ev_cache_key(cfg)
+        return ev_comp.COMPONENT.cache_key(cfg)
 
     def build_cache(self, video_id: str, audio_path: Path, cfg: Config) -> Path | None:
         """No cache of its own."""
@@ -227,27 +219,9 @@ class CaptionsComponent:
         label_files = sorted(labels_path.glob("*.json"))
         if not label_files:
             raise ValueError(f"No label files found in {labels_dir}")
-        from soundthing.contracts import load_labels
         all_labels = [load_labels(p) for p in label_files]
         all_labels.sort(key=lambda l: l.video_id)
-
-        try:
-            import soundthing.harness.components.events as ev_comp
-            if hasattr(ev_comp, "load_event_caches"):
-                caches = ev_comp.load_event_caches(cfg, all_labels)
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            from soundthing.events.cache import cache_key, cache_path, load_cache
-            key = cache_key(cfg)
-            caches = []
-            for lbl in all_labels:
-                cpath = cache_path(lbl.video_id, key)
-                if not cpath.exists():
-                    raise FileNotFoundError(
-                        f"Cache missing for clip {lbl.video_id!r} with key {key!r} at {cpath}."
-                    )
-                caches.append(load_cache(cpath))
+        caches = ev_comp.load_event_caches(cfg, all_labels)
 
         return [
             Clip(video_id=lbl.video_id, labels=lbl, cache=c)
@@ -264,34 +238,7 @@ class CaptionsComponent:
                 f"captions.min_cue_sec ({min_cue_sec}) cannot exceed captions.max_cue_sec ({max_cue_sec})"
             )
 
-        try:
-            import soundthing.harness.components.events as ev_comp
-            replay_events = getattr(ev_comp, "replay_events", None)
-            text_emb_for = getattr(ev_comp, "text_emb_for", None)
-            labeled_env_segments = getattr(ev_comp, "labeled_env_segments", None)
-        except (ImportError, AttributeError):
-            replay_events = None
-            text_emb_for = None
-            labeled_env_segments = None
-
-        if labeled_env_segments is None:
-            from soundthing.harness.score import labeled_env_segments
-
-        if replay_events is None:
-            from soundthing.events.replay import replay as replay_events
-
-        caches = [c.cache for c in clips]
-        if text_emb_for is not None:
-            text_emb = text_emb_for(cfg, caches)
-        else:
-            clap_cfg = cfg.pipeline.get("events", {}).get("clap", {})
-            clap_enabled = bool(clap_cfg.get("enabled", True))
-            has_clap = any(getattr(c, "clap_emb", None) is not None for c in caches)
-            if clap_enabled and has_clap:
-                from soundthing.events.replay import text_embeddings_for
-                text_emb = text_embeddings_for(cfg)
-            else:
-                text_emb = None
+        text_emb = ev_comp.text_emb_for(cfg, [c.cache for c in clips])
 
         matches: list[CueMatch] = []
         per_clip: dict[str, dict[str, Any]] = {}
@@ -304,8 +251,8 @@ class CaptionsComponent:
                 from dataclasses import replace
                 cache = replace(cache, duration=lbl.duration)
 
-            cond_segs = labeled_env_segments(lbl, cfg, confidence=0.7)
-            events = replay_events(cache, cond_segs, cfg, text_emb)
+            cond_segs = ev_comp.labeled_env_segments(lbl, cfg, confidence=0.7)
+            events = ev_comp.replay_events(cache, cond_segs, cfg, text_emb)
 
             sorted_events = sorted(events, key=lambda e: e.start)
             cues = events_to_cues(sorted_events, min_cue=min_cue_sec, max_cue=max_cue_sec)

@@ -112,10 +112,7 @@ def sweep(
             )
 
     def _eval_candidate(ovr: dict[str, Any]) -> Any:
-        try:
-            return score_fn(overrides=ovr, split="dev", cfg=cfg, component=component)
-        except TypeError:
-            return score_fn(overrides=ovr, split="dev", cfg=cfg)
+        return score_fn(overrides=ovr, split="dev", cfg=cfg, component=component)
 
     # Initial evaluation of base_overrides
     init_overrides = dict(base_overrides)

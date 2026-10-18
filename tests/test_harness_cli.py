@@ -22,19 +22,19 @@ class FakeTools:
         self.promote_result: dict[str, Any] = {"promoted": False, "run_id": "run_001"}
         self.should_raise: Exception | None = None
 
-    def score(self, overrides: dict[str, Any] | None = None, hypothesis: str = "") -> dict[str, Any]:
+    def score(self, overrides: dict[str, Any] | None = None, hypothesis: str = "", component: str = "events", **kwargs: Any) -> dict[str, Any]:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("score", {"overrides": overrides, "hypothesis": hypothesis}))
         return {"run_id": "run_test", "objective": 0.8, "passed": True}
 
-    def sweep(self, params: list[str], strategy: str = "coordinate", budget: int = 20) -> dict[str, Any]:
+    def sweep(self, params: list[str], strategy: str = "coordinate", budget: int = 20, component: str = "events", **kwargs: Any) -> dict[str, Any]:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("sweep", {"params": params, "strategy": strategy, "budget": budget}))
         return {"best_params": params, "best_objective": 0.85}
 
-    def promote(self, run_id: str) -> dict[str, Any]:
+    def promote(self, run_id: str, component: str = "events", **kwargs: Any) -> dict[str, Any]:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("promote", {"run_id": run_id}))
@@ -46,19 +46,19 @@ class FakeTools:
         self.calls.append(("propose_shared_change", {"overrides": overrides, "note": note}))
         return {"path": "proposals/test.md", "run_id": "run_prop"}
 
-    def describe_space(self) -> dict[str, Any]:
+    def describe_space(self, component: str = "events", **kwargs: Any) -> dict[str, Any]:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("describe_space", {}))
         return {"params": ["events.postprocess.smoothing_sec"]}
 
-    def get_best(self) -> dict[str, Any] | None:
+    def get_best(self, component: str = "events", **kwargs: Any) -> dict[str, Any] | None:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("get_best", {}))
         return {"run_id": "run_best", "objective": 0.9}
 
-    def get_ledger(self, limit: int = 20) -> list[dict[str, Any]]:
+    def get_ledger(self, limit: int = 20, component: str = "events", **kwargs: Any) -> list[dict[str, Any]]:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("get_ledger", {"limit": limit}))

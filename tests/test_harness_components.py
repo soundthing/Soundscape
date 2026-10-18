@@ -418,6 +418,7 @@ def test_list_components_cli(monkeypatch: pytest.MonkeyPatch):
     assert comp_map["events"]["owner"] == "person1"
     assert "events." in comp_map["events"]["sections"]
 
-    assert comp_map["environment"]["available"] is False
-    assert comp_map["captions"]["available"] is False
-    assert comp_map["pipeline"]["available"] is False
+    owners = {"environment": "person2", "captions": "person3", "pipeline": "person3"}
+    for name, owner in owners.items():
+        assert comp_map[name]["available"] is True
+        assert comp_map[name]["owner"] == owner

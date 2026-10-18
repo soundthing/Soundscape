@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
-import inspect
 import json
 from pathlib import Path
 import shutil
@@ -54,30 +53,17 @@ def _run_bootstrap(
     best_per_clip: dict,
     component: str,
 ) -> dict:
-    sig = inspect.signature(boot_fn)
-    kwargs: dict[str, Any] = {}
-    if "component" in sig.parameters:
-        kwargs["component"] = component
-    if "n_boot" in sig.parameters:
-        kwargs["n_boot"] = 1000
-    elif "n" in sig.parameters:
-        kwargs["n"] = 1000
-    return boot_fn(cand_per_clip, best_per_clip, **kwargs)
+    return boot_fn(cand_per_clip, best_per_clip, n_boot=1000, component=component)
 
 
 def _check_accepts(ci: dict | None) -> bool:
     if ci is None:
         return False
-    if hasattr(bootstrap_module, "accepts"):
-        return bool(bootstrap_module.accepts(ci))
-    return float(ci.get("lo", 0.0)) > 0
+    return bool(bootstrap_module.accepts(ci))
 
 
 def _get_best_entry(ledger_mod: Any, component: str) -> dict | None:
-    try:
-        return ledger_mod.best(component=component)
-    except TypeError:
-        return ledger_mod.best()
+    return ledger_mod.best(component=component)
 
 
 def run_experiment(
@@ -265,6 +251,28 @@ def _refuse_promote(
     })
 
 
+def _code_holdout_check(main: Path, candidate: dict) -> bool:
+    """Holdout pass/fail for a code experiment: the experiment branch's code (with its
+    overrides) vs the main checkout, both through the trusted scorer. Numbers never leave
+    this function."""
+    branch = candidate["branch"]
+    wt_path = paths.experiments_root() / f"soundthing-holdout-{candidate['run_id']}"
+    subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", str(wt_path), branch],
+        capture_output=True, text=True, check=True,
+    )
+    try:
+        cand = trusted_score(wt_path, "events", candidate.get("overrides") or {}, split="holdout")
+        cur = trusted_score(main, "events", {}, split="holdout")
+    finally:
+        _remove_worktree(main, wt_path)
+    return bool(
+        float(cand["objective"]) >= float(cur["objective"])
+        and float(cand["safety_recall"]) >= float(cur["safety_recall"])
+        and float(cand["fp_per_min"]) <= float(cur["fp_per_min"])
+    )
+
+
 def promote_code(
     run_id: str,
     *,
@@ -314,10 +322,8 @@ def promote_code(
             except Exception:
                 holdout_ok = False
         else:
-            from soundthing.harness import promote as promote_module
-
             try:
-                holdout_ok = promote_module.holdout_check(candidate.get("overrides") or {})
+                holdout_ok = _code_holdout_check(main, candidate)
             except Exception:
                 holdout_ok = False
 

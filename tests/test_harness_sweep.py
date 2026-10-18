@@ -40,13 +40,13 @@ class FakeLedger:
     def append(self, entry: dict[str, Any]) -> None:
         self.entries.append(dict(entry))
 
-    def read(self) -> list[dict[str, Any]]:
+    def read(self, component: str | None = None) -> list[dict[str, Any]]:
         return list(self.entries)
 
-    def best(self) -> dict[str, Any] | None:
+    def best(self, component: str | None = None) -> dict[str, Any] | None:
         return self._best
 
-    def set_best(self, entry: dict[str, Any]) -> None:
+    def set_best(self, entry: dict[str, Any], component: str = "events") -> None:
         self._best = dict(entry)
 
     def git_state(self, cwd: Any = None) -> dict[str, Any]:
@@ -73,6 +73,8 @@ class FakeScoreFn:
         overrides: dict[str, Any] | None = None,
         split: str = "dev",
         cfg: Any = None,
+        component: str = "events",
+        **kwargs: Any,
     ) -> FakeResult:
         self._counter += 1
         run_id = f"run_{self._counter:04d}"

@@ -277,12 +277,15 @@ def predict_segments(cache: EnvCache, cfg: Config) -> list[EnvSegment]:
 def load_clips(cfg: Config, labels_dir: Path) -> list[Clip]:
     """Load labels and caches for clips with environment labels."""
     labels_dir = Path(labels_dir)
-    clips: list[Clip] = []
     if not labels_dir.is_dir():
-        return clips
+        raise ValueError(f"Labels directory does not exist: {labels_dir}")
+    label_files = sorted(labels_dir.glob("*.json"))
+    if not label_files:
+        raise ValueError(f"No label files found in {labels_dir}")
 
+    clips: list[Clip] = []
     key = cache_key(cfg)
-    for path in sorted(labels_dir.glob("*.json")):
+    for path in label_files:
         labels = load_labels(path)
         if not labels.segments:
             continue

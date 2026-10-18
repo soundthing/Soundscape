@@ -42,18 +42,22 @@ Each component declares: `name`, owning role, the config keys it owns, `cache_ke
   an agent can't improve its number by editing the objective.
 - **Holdout:** unchanged: pass/fail only at promotion, stored outside the repo.
 
+## Status
+
+Done (2026-10-18): component protocol + registry (`components/`), events/environment/
+captions/pipeline components, generic score/sweep/bootstrap/promote/ledger with
+`--component`, per-component best, cross-role promotion as proposals (`SOUNDTHING_ROLE`),
+trusted scorer (`trusted.py`), experiment runner and code promotion to review branches
+(`runner.py`), MCP tools `list_components`, `run_experiment`, `promote_code`.
+
 ## Work left
 
-- Move to the layout above (after the in-flight AudioSet work is committed).
-- Component protocol; core score/sweep/promote take `--component`; events becomes the first component.
-- Trusted scorer; ledger stores each candidate's patch.
-- Experiment runner (worktree per experiment, score, keep/discard) and code promotion to a review branch.
-- Environment, captions and end-to-end components.
-- MCP tools `list_components` and `run_experiment`; agent loop rules in `harness/AGENTS.md`.
-- First real runs on ESC-50 mixes, AudioSet strong labels and env-labeled clips.
+- Build dev caches at scale (Kaggle) for AudioSet dev; only the ESC-50 mixes are cached locally.
+- Environment component on clips with video (dev mixes are audio-only, so visual fusion is untested on real data).
+- Captions merge rules: `captions.py` has only min/max cue duration to tune.
 
 ## Open decisions
 
-1. Who owns `harness/` (Person 1, or a new shared row everyone may edit)?
-2. May the harness ever write another role's config directly, or proposals only (default)?
-3. End-to-end objective: caption F0.5 only, or also weigh environment accuracy and modifiers?
+1. ~~Who owns `harness/`~~ Person 1 (root AGENTS.md row).
+2. ~~Cross-role writes~~ Proposals only.
+3. ~~End-to-end objective~~ Caption-cue F0.5 with predicted environment; env accuracy is a diagnostic.

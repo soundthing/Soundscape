@@ -699,10 +699,7 @@ def promote(
         return _refuse(ledger, run_id, "limits not passed", git_info, component=cand_comp)
 
     # 4. Bootstrap check
-    try:
-        best_entry = ledger.best(cand_comp)
-    except TypeError:
-        best_entry = ledger.best()
+    best_entry = ledger.best(cand_comp)
     if best_entry is not None and "per_clip" in best_entry:
         comparator = best_entry["per_clip"]
         before = best_entry.get("objective")
@@ -710,10 +707,7 @@ def promote(
         if score_fn is None:
             score_fn = score_func
 
-        try:
-            cur_res = score_fn(overrides={}, split="dev", cfg=cfg, component=cand_comp)
-        except TypeError:
-            cur_res = score_fn(overrides={}, split="dev", cfg=cfg)
+        cur_res = score_fn(overrides={}, split="dev", cfg=cfg, component=cand_comp)
 
         if isinstance(cur_res, dict):
             comparator = cur_res.get("per_clip")
@@ -782,10 +776,7 @@ def promote(
         old[k] = _get_old_value(k, space_idx, config_dir)
 
     git_sha = str(git_info.get("sha", ""))
-    try:
-        ledger.set_best({**candidate, "git_sha": git_sha}, component=cand_comp)
-    except TypeError:
-        ledger.set_best({**candidate, "git_sha": git_sha})
+    ledger.set_best({**candidate, "git_sha": git_sha}, component=cand_comp)
     append_tuning_log(tuning_log_path, candidate, old, ci, before, git_sha, holdout_str=holdout_status)
 
     ledger.append({

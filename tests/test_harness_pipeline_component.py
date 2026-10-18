@@ -19,6 +19,7 @@ from soundthing.contracts import (
     LabeledSegment,
     save_labels,
 )
+from soundthing.harness.components import pipeline as pipeline_mod
 from soundthing.harness.components.base import Clip, Component
 from soundthing.harness.components.pipeline import (
     COMPONENT,
@@ -67,10 +68,8 @@ def test_pipeline_component_protocol(cfg: Config, monkeypatch: pytest.MonkeyPatc
     assert COMPONENT.build_cache("vid", Path("audio.wav"), cfg) is None
 
     fake_env_mod = types.ModuleType("soundthing.harness.components.environment")
-    fake_env_mod.cache_key = lambda c: "envkey123"  # type: ignore[attr-defined]
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.environment", fake_env_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "environment", fake_env_mod, raising=False)
+    fake_env_mod.COMPONENT = types.SimpleNamespace(cache_key=lambda c: "envkey123")  # type: ignore[attr-defined]
+    monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
 
     key = COMPONENT.cache_key(cfg)
     assert isinstance(key, str)
@@ -106,11 +105,8 @@ def test_predicted_env_passed_to_events_replay(cfg: Config, monkeypatch: pytest.
     fake_events_mod.replay_events = fake_replay  # type: ignore[attr-defined]
     fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.environment", fake_env_mod)
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "environment", fake_env_mod, raising=False)
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
+    monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
+    monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)
 
     # Labeled segments say "street", not "kitchen"
     labeled_segs = [LabeledSegment(start=0.0, end=10.0, env="street")]
@@ -148,11 +144,8 @@ def test_missing_env_cache_raises_filenotfound(cfg: Config, tmp_path: Path, monk
 
     fake_env_mod.load_env_cache = fake_load_env  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.environment", fake_env_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
-    monkeypatch.setattr(comp_pkg, "environment", fake_env_mod, raising=False)
+    monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)
+    monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
 
     labels_dir = tmp_path / "labels"
     labels_dir.mkdir(parents=True)
@@ -192,8 +185,7 @@ def test_pipeline_space_deduplicated_union(cfg: Config, monkeypatch: pytest.Monk
         "captions": fake_captions,
     }
 
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "get", lambda name: registry[name])
+    monkeypatch.setattr(pipeline_mod, "get", lambda name: registry[name])
 
     union_space = COMPONENT.space(cfg)
     names = [item["name"] for item in union_space]
@@ -274,11 +266,8 @@ def test_pipeline_env_time_acc_diagnostic(cfg: Config, monkeypatch: pytest.Monke
     ]
     fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.environment", fake_env_mod)
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "environment", fake_env_mod, raising=False)
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
+    monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
+    monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)
 
     # Labeled: 0-6s street (agree 6s), 6-10s park (agree 2s) -> total 8s / 10s = 0.8
     labeled_segs = [
@@ -316,11 +305,8 @@ def test_pipeline_clips_without_env_labels_scored(cfg: Config, monkeypatch: pyte
     ]
     fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.environment", fake_env_mod)
-    monkeypatch.setitem(pytest.importorskip("sys").modules, "soundthing.harness.components.events", fake_events_mod)
-    import soundthing.harness.components as comp_pkg
-    monkeypatch.setattr(comp_pkg, "environment", fake_env_mod, raising=False)
-    monkeypatch.setattr(comp_pkg, "events", fake_events_mod, raising=False)
+    monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
+    monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)
 
     # Empty segments list
     labels = _make_labels(
