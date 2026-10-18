@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -309,3 +311,47 @@ def test_clear_caches_reloads_models_and_rescores(cfg: Config, fake_env, tmp_pat
     detector.detect(inputs, None, cfg)
     assert fake_env.calls == 2
     assert fake_env.tagger.call_count > calls_before
+
+
+def test_load_models_and_cache_key_with_separation(cfg: Config, monkeypatch: pytest.MonkeyPatch):
+    """Test load_models and _models_cache_key with separation enabled and disabled."""
+    key_disabled = detector._models_cache_key(cfg)
+
+    sep_load_calls = 0
+    fake_separator = object()
+
+    def fake_load_separator(c: Config):
+        nonlocal sep_load_calls
+        sep_load_calls += 1
+        return fake_separator
+
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    monkeypatch.setattr(detector, "load_tagger", lambda c: (FakeTagger(audioset_names), audioset_names))
+    monkeypatch.setattr(detector, "load_clap", lambda c: None)
+    monkeypatch.setattr(detector, "text_embeddings", lambda clap, c: None)
+    monkeypatch.setattr(detector.separation, "load_separator", fake_load_separator)
+
+    # When disabled: separator is None and load_separator is not called
+    models_disabled = detector.load_models(cfg)
+    assert models_disabled.separator is None
+    assert sep_load_calls == 0
+
+    # When enabled: load_separator is called and attached to EventModels.separator
+    p_sep = copy.deepcopy(cfg.pipeline)
+    p_sep["events"]["separation"]["enabled"] = True
+    cfg_sep = replace(cfg, pipeline=p_sep)
+
+    key_enabled = detector._models_cache_key(cfg_sep)
+    assert key_enabled != key_disabled
+
+    models_enabled = detector.load_models(cfg_sep)
+    assert models_enabled.separator is fake_separator
+    assert sep_load_calls == 1
+
+    # get_models caches loaded models
+    detector._clear_caches()
+    m1 = detector.get_models(cfg_sep)
+    m2 = detector.get_models(cfg_sep)
+    assert m1 is m2
+    assert m1.separator is fake_separator
+    assert sep_load_calls == 2

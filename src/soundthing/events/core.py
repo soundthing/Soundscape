@@ -25,6 +25,7 @@ class EventModels:
     tagger_map: np.ndarray  # (C, A) 0/1 matrix: vocabulary class <- AudioSet label
     clap_text_emb: np.ndarray | None  # (C, D); zero rows for classes without prompts
     audioset_names: list[str] | None = None
+    separator: Any = None
 
 
 def combine_scores(
