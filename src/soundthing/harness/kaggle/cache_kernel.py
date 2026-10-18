@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import glob
 import io
 import json
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 
 PARAMS = {}  # filled in by kaggle_io.push_cache_kernel
 BUNDLE = ""  # filled in by kaggle_io.push_cache_kernel
@@ -37,7 +39,32 @@ def _esc50_dir(csv_path: Path) -> Path:
     return csv_path.parent.parent if csv_path.parent.name == "meta" else csv_path.parent
 
 
+log = logging.getLogger("cache_kernel")
+_T0 = time.monotonic()
+
+
+def _stage(name: str) -> None:
+    log.info("=== %s (t=%.0fs)", name, time.monotonic() - _T0)
+
+
+def _log_env() -> None:
+    import torch
+
+    log.info("python %s, torch %s, cuda %s", sys.version.split()[0], torch.__version__, torch.cuda.is_available())
+    for i in range(torch.cuda.device_count()):
+        log.info("gpu %d: %s", i, torch.cuda.get_device_name(i))
+    log.info("params: %s", {k: v for k, v in PARAMS.items()})
+    log.info("inputs: %s", sorted(glob.glob("/kaggle/input/*/*"))[:50])
+
+
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+    logging.captureWarnings(True)
     window = float(PARAMS["window_sec"])
     hop = float(PARAMS["hop_sec"])
     model = str(PARAMS["tagger_model"])
@@ -47,6 +74,7 @@ def main() -> None:
     out_dir = Path("/kaggle/working/tuning")
     os.environ["SOUNDTHING_HARNESS_HOME"] = str(home_dir)
 
+    _stage("install bundle")
     src_dir.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(base64.b64decode(BUNDLE)), mode="r:gz") as tar:
         tar.extractall(src_dir)
@@ -56,6 +84,7 @@ def main() -> None:
         check=True,
     )
     sys.path.insert(0, str(src_dir / "src"))
+    _log_env()
 
     from soundthing.config import load_config
     from soundthing.events.cache import CACHE_VERSION, cache_key
@@ -68,11 +97,14 @@ def main() -> None:
         {"events.window_sec": window, "events.hop_sec": hop, "events.tagger.model": model},
     )
     key = cache_key(cfg)
+    _stage(f"load models (cache key {key})")
     models = get_models(cfg)
     counts: dict[str, int] = {}
 
     tsv = _find("audioset_eval_strong.tsv")
+    log.info("audioset tsv: %s", tsv)
     if tsv is not None:
+        _stage("audioset labels + split")
         with tempfile.TemporaryDirectory() as tmp:
             datasets.audioset_strong_labels(tsv, cfg, Path(tmp), tsv.parent / "class_labels_indices.csv")
             split = datasets.split_audioset(
@@ -80,20 +112,26 @@ def main() -> None:
             )
         counts["audioset_dev"] = len(split["dev"])
         counts["audioset_holdout"] = len(split["holdout"])
+        log.info("audioset split: %d dev, %d holdout", counts["audioset_dev"], counts["audioset_holdout"])
+        _stage("holdout caches")
         counts["holdout_caches"] = len(datasets.build_holdout_caches(cfg, models=models))
 
     esc50_csv = _find("esc50.csv")
+    log.info("esc50 csv: %s", esc50_csv)
     if esc50_csv is not None:
+        _stage("esc50 mixes")
         mixes = datasets.esc50_mixes(
             _esc50_dir(esc50_csv), cfg, int(PARAMS["n_per_env"]), int(PARAMS["seed"]),
             out_dir=home_dir / "dev",
         )
         counts["esc50_mixes"] = len(mixes)
 
+    _stage("dev caches")
     counts["dev_caches"] = len(
         datasets.build_dev_caches(paths.dev_audio_dir(), paths.dev_labels_dir(), cfg, models=models)
     )
 
+    _stage("copy output")
     shutil.copytree(paths.cache_root() / key, out_dir / "cache" / key)
     shutil.copytree(paths.dev_labels_dir(), out_dir / "dev" / "labels")
     manifest = paths.dev_labels_dir().parent / "manifest.json"
@@ -112,7 +150,7 @@ def main() -> None:
         "built_at": datetime.now(timezone.utc).isoformat(),
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    print(f"Built cache {key}: {counts}")
+    _stage(f"done: built cache {key}: {counts}")
 
 
 if __name__ == "__main__":

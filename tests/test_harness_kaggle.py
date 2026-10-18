@@ -380,6 +380,6 @@ def test_cache_kernel_script_compiles() -> None:
     assert "PARAMS = {}  # filled in by kaggle_io.push_cache_kernel" in src
     assert 'BUNDLE = ""  # filled in by kaggle_io.push_cache_kernel' in src
     lines = src.splitlines()
-    assert len(lines) < 120
+    assert len(lines) < 180
     # Compiles cleanly
     compile(src, str(kernel_file), "exec")

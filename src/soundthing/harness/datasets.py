@@ -9,8 +9,10 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import logging
 import os
 import shutil
+import time
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +26,8 @@ from soundthing.config import Config
 from soundthing.contracts import ClipLabels, LabeledEvent, LabeledSegment, load_labels, save_labels
 from soundthing.events import conditioning
 from soundthing.harness import paths
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -870,12 +874,28 @@ def _build_caches(
 
         models = get_models(cfg)
 
-    for clip_id, audio_path, out_path in to_build:
+    n = len(to_build)
+    log.info(
+        "caches %s: %d clips, %d already built, %d to build (%d missing audio)",
+        key, len(clips_with_audio), len(clips_with_audio) - n, n, missing_audio_count,
+    )
+    every = max(1, n // 100)
+    t0 = time.monotonic()
+    audio_sec = 0.0
+    for i, (clip_id, audio_path, out_path) in enumerate(to_build, 1):
         data, sr = sf.read(str(audio_path), dtype="float32", always_2d=False)
         if data.ndim > 1:
             data = np.mean(data, axis=1)
+        audio_sec += len(data) / sr
         c = cache_mod.build_cache(data, sr, clip_id, cfg, models=models)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         cache_mod.save_cache(c, out_path)
+        if i == 1 or i % every == 0 or i == n:
+            elapsed = time.monotonic() - t0
+            eta = elapsed / i * (n - i)
+            log.info(
+                "cache %d/%d (%s) %.1fs elapsed, %.2fs/clip, %.0fx realtime, eta %.0fs",
+                i, n, clip_id, elapsed, elapsed / i, audio_sec / max(elapsed, 1e-9), eta,
+            )
 
     return sorted(cache_paths)
