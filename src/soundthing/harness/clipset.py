@@ -115,6 +115,7 @@ def rebaseline(component: str = "events", *, force: bool = False) -> dict[str, A
     res = trusted_score(main, component, overrides)
     git = ledger.git_state(main)
     entry = {
+        **res.get("metrics", {}),  # limits read metrics from the top level, like score entries
         "kind": "rebaseline",
         "component": component,
         "run_id": res.get("run_id"),

@@ -74,3 +74,18 @@ def test_score_uses_active_clipset(tmp_path, monkeypatch):
     except RuntimeError:
         pass
     assert seen["ldir"] == clipset.active_labels_dir()
+
+
+def test_rebaseline_best_has_top_level_metrics(tmp_path, monkeypatch):
+    cfg, _ = _setup(tmp_path, monkeypatch, 2, [0])
+    from soundthing.harness import ledger, trusted
+
+    fake = {"run_id": "r1", "objective": 0.5, "per_clip": {"clip0": {}},
+            "metrics": {"objective": 0.5, "safety_recall": 0.4, "fp_per_min": 3.0}}
+    monkeypatch.setattr(trusted, "trusted_score", lambda *a, **k: fake)
+
+    clipset.rebaseline(force=True)
+
+    best = ledger.best()
+    assert best["safety_recall"] == 0.4 and best["fp_per_min"] == 3.0
+    assert best["clipset"] == 1
