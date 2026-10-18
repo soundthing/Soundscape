@@ -37,6 +37,6 @@ silently delete); a surprise → `pitfalls.md`. Record the why, not the code. Ke
 - Tests must isolate state with `monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))`.
 
 ## How to run
-- **CLI:** `python -m soundthing.harness score --set events.postprocess.smoothing_sec=0.75 --hypothesis "..."` (also `sweep`, `promote`, `propose`, `space`, `best`, `ledger`, `recache`, `build-dev`, `import-audioset`).
+- **CLI:** `python -m soundthing.harness score --component events --set events.postprocess.smoothing_sec=0.75 --hypothesis "..."` (also `sweep`, `promote`, `propose`, `space`, `best`, `ledger`, `list-components`, `recache`, `build-dev`, `import-audioset`; `--component NAME` selects the stage component).
 - **MCP server:** `python -m soundthing.harness serve-mcp` (stdio). Registering it in `.mcp.json` or `.claude/` is a protected shared-file change requiring explicit user confirmation (root AGENTS.md §2). Snippet for user reference:
   `{"mcpServers": {"soundthing-harness": {"command": ".venv/Scripts/py.exe", "args": ["-m", "soundthing.harness", "serve-mcp"]}}}` (venv interpreter name may differ per machine).

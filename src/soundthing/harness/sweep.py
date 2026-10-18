@@ -1,4 +1,4 @@
-"""Automated search over tunable parameters for events tuning.
+"""Automated search over tunable parameters for harness components.
 
 Evaluates candidates using coordinate descent or Optuna TPE search, logging
 every score result to the ledger.
@@ -13,17 +13,14 @@ from typing import Any
 import numpy as np
 
 from soundthing.config import load_config
-from soundthing.harness import ledger as ledger_module, space
+from soundthing.harness import components, ledger as ledger_module, paths, space
 from soundthing.harness.score import score as score_func
 
 
 def result_as_dict(result: Any) -> dict[str, Any]:
-    """Convert a score result to a dictionary.
-
-    Uses dataclasses.asdict if result is a dataclass instance,
-    else dict(vars(result)) if it has __dict__,
-    else dict(result) for a dict or mapping.
-    """
+    """Convert a score result to a dictionary."""
+    if hasattr(result, "to_dict") and callable(result.to_dict):
+        return result.to_dict()
     if dataclasses.is_dataclass(result) and not isinstance(result, type):
         return dataclasses.asdict(result)
     if hasattr(result, "__dict__"):
@@ -54,20 +51,21 @@ def sweep(
     ledger: Any = None,
     seed: int = 0,
     n_values: int = 5,
+    component: str = "events",
 ) -> dict[str, Any]:
     """Automated search over tunable parameters with ledger logging.
 
     Args:
         params: List of parameter names in search space to tune.
         strategy: 'coordinate' for coordinate descent, 'optuna' for TPE search.
-        score_fn: Scoring function(overrides, split, cfg). Defaults to
-            soundthing.harness.score.score.
+        score_fn: Scoring function. Defaults to soundthing.harness.score.score.
         budget: Total number of score_fn calls permitted (including initial evaluation).
         base_overrides: Starting overrides mapping. Default is empty dict.
         cfg: Config instance. Defaults to loading repo config.
         ledger: Ledger module or object. Defaults to soundthing.harness.ledger.
         seed: Random seed for samplers.
         n_values: Number of grid values per parameter in coordinate search.
+        component: Target component name. Defaults to 'events'.
 
     Returns:
         Dict with keys: strategy, evaluations, best_overrides, best_objective,
@@ -89,7 +87,8 @@ def sweep(
     if cfg is None:
         cfg = load_config()
 
-    sp = space.describe_space(cfg, space.dev_event_counts())
+    comp = components.get(component)
+    sp = comp.space(cfg, paths.dev_labels_dir())
     s_idx = space.space_index(sp)
 
     if base_overrides is None:
@@ -97,6 +96,8 @@ def sweep(
     for k in base_overrides:
         if space.is_shared(k):
             raise ValueError(f"base_overrides contains shared key {k!r}")
+        if not any(k.startswith(sec) for sec in comp.sections):
+            raise ValueError(f"base_overrides contains key outside component sections: {k!r}")
     space.validate_overrides(base_overrides, sp)
 
     for p in params:
@@ -110,9 +111,15 @@ def sweep(
                 f"Parameter {p!r} must have type 'float' or 'int', got {entry.get('type')!r}"
             )
 
+    def _eval_candidate(ovr: dict[str, Any]) -> Any:
+        try:
+            return score_fn(overrides=ovr, split="dev", cfg=cfg, component=component)
+        except TypeError:
+            return score_fn(overrides=ovr, split="dev", cfg=cfg)
+
     # Initial evaluation of base_overrides
     init_overrides = dict(base_overrides)
-    init_result = score_fn(overrides=init_overrides, split="dev", cfg=cfg)
+    init_result = _eval_candidate(init_overrides)
     evaluations = 1
     log_result(init_result, "sweep", ledger)
 
@@ -165,7 +172,7 @@ def sweep(
                     if evaluations >= budget:
                         break
                     cand_overrides = {**incumbent_overrides, param: val}
-                    result = score_fn(overrides=cand_overrides, split="dev", cfg=cfg)
+                    result = _eval_candidate(cand_overrides)
                     evaluations += 1
                     log_result(result, "sweep", ledger)
 
@@ -198,7 +205,7 @@ def sweep(
                 break
 
     elif strategy == "optuna":
-        import optuna  # optional `tuning` extra: import only when used
+        import optuna
 
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         sampler = optuna.samplers.TPESampler(seed=seed)
@@ -217,7 +224,7 @@ def sweep(
                     suggested[param] = float(trial.suggest_float(param, float(lo), float(hi)))
 
             cand_overrides = {**base_overrides, **suggested}
-            result = score_fn(overrides=cand_overrides, split="dev", cfg=cfg)
+            result = _eval_candidate(cand_overrides)
             evaluations += 1
             log_result(result, "sweep", ledger)
 
