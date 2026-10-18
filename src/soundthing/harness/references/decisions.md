@@ -48,3 +48,8 @@ Best runs for the legacy `events` component remain stored at `data/harness/best.
 ## Promotion ownership routing and proposals — harness
 Promotion enforces role boundaries from `AGENTS.md` using `SOUNDTHING_ROLE` (`harness_role()`). When a candidate run touches configuration sections owned by another role (such as Person 2's `environment:` or Person 3's `captions:` when run by Person 1), promotion refuses direct config modification and instead generates a structured proposal in `data/harness/proposals/`.
 
+## Environment tuning uses raw logits caching with pure replay function — environment
+`environment.classifier.classify` was refactored to extract `segments_from_logits`, separating slow inference (audio CLAP embeddings, visual SigLIP embeddings, PySceneDetect) from fast post-processing (temperature scaling, late fusion, visual similarity floor, thresholding, and adjacent same-env segment merging). `EnvCache` stores pre-softmax logits per shot span. Replay evaluates candidates in milliseconds without model re-runs.
+
+## Environment objective balances time accuracy with macro accuracy — environment
+The fixed environment objective is `0.5 * time_acc + 0.5 * macro_acc`. Time accuracy pools total matching seconds across all clips against total labeled seconds, prioritizing dominant scenes. Macro accuracy averages per-environment accuracy across only those environments present in the ground truth labels, preventing frequent background environments from completely overshadowing rarer scenes. Per-clip stats store `[correct_sec, total_sec]` for each environment in config order, enabling exact objective recomputation in paired bootstrap resampling.
