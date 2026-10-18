@@ -127,7 +127,7 @@ def replay(
     scores = add_generic_scores(scores, rms_dbfs, cfg)
     events = pp.threshold_to_events(scores, cfg)
     events = pp.collapse_confusable(events, scores, cfg)
-    events = suppress_ancestors(events, cfg.hierarchy())
+    events = suppress_ancestors(events, cfg.hierarchy(), keep=frozenset(cfg.safety_ids()), drop_tails=True)
 
     pcfg = cfg.pipeline.get("events", {}).get("postprocess", {})
 

@@ -7,11 +7,16 @@ from dataclasses import replace
 from ..contracts import CaptionEvent
 
 
-def suppress_ancestors(events: Sequence[CaptionEvent], ancestors: Mapping[str, frozenset[str]]) -> list[CaptionEvent]:
+def suppress_ancestors(events: Sequence[CaptionEvent], ancestors: Mapping[str, frozenset[str]],
+                       *, keep: frozenset[str] = frozenset(), drop_tails: bool = False) -> list[CaptionEvent]:
     """Input events already passed their class thresholds and duration checks.
 
     Descendants need no qualifying parent. Siblings/unrelated sources survive.
     Unknown ids (e.g. old external classes) have no ancestry. No input is mutated.
+    Classes in `keep` are never trimmed: a safety ancestor (siren over "civil defense
+    siren") is labeled alongside its descendant, and trimming it loses its true onset.
+    drop_tails drops fragments that start where a descendant ended: their onset is
+    the descendant's offset, not a new sound.
     """
     by_ancestor: dict[str, list[tuple[float, float]]] = {}
     for event in events:
@@ -29,17 +34,20 @@ def suppress_ancestors(events: Sequence[CaptionEvent], ancestors: Mapping[str, f
         blockers[parent] = merged
     output = []
     for event in events:
+        if event.class_id in keep:
+            output.append(event)
+            continue
         start = event.start
         for low, high in blockers.get(event.class_id, ()):
             if high <= start:
                 continue
             if low >= event.end:
                 break
-            if low > start:
+            if low > start and not (drop_tails and start > event.start):
                 output.append(replace(event, start=start, end=min(low, event.end)))
             start = max(start, high)
             if start >= event.end:
                 break
-        if start < event.end:
+        if start < event.end and not (drop_tails and start > event.start):
             output.append(replace(event, start=start))
     return sorted(output, key=lambda e: (e.start, e.end, e.class_id))
