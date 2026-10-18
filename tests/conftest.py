@@ -11,7 +11,12 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "examples"
 
 @pytest.fixture(scope="session")
 def cfg():
-    return load_config()
+    # Tests run the stub backends whatever config/pipeline.yaml selects, so they
+    # stay fast, offline and deterministic.
+    cfg = load_config()
+    for stage in ("events", "environment"):
+        cfg.pipeline[stage]["backend"] = "stub"
+    return cfg
 
 
 @pytest.fixture

@@ -8,7 +8,7 @@ extract:            # Person 3
   keep_stereo: true
 
 environment:        # Person 2
-  backend: stub     # stub | real
+  backend: real     # stub | real
   segmentation:
     detector: content         # PySceneDetect detector
     threshold: 27.0
@@ -26,7 +26,7 @@ environment:        # Person 2
   confidence_threshold: 0.45  # below this -> env = general
 
 events:             # Person 1
-  backend: stub     # stub | real
+  backend: real     # stub | real
   window_sec: 1.0
   hop_sec: 0.25
   tagger:

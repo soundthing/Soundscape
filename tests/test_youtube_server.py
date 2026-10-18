@@ -172,6 +172,7 @@ def test_api_submission_status_vtt_and_restart_detection(monkeypatch, tmp_path, 
     app = importlib.import_module("soundthing.server.app")
     states = {}
     jobs = YouTubeJobs(tmp_path / "runs", tmp_path / "uploads", cfg, states, downloader=lambda video_id, uploads: make_source(uploads, video_id), processor=artifacts)
+    monkeypatch.setattr(app, "cfg", cfg)
     monkeypatch.setattr(app, "youtube_jobs", jobs)
     monkeypatch.setattr(app, "status", states)
     monkeypatch.setattr(app, "RUNS", jobs.runs)
