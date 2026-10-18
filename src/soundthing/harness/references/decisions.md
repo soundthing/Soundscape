@@ -49,8 +49,8 @@ Best runs for the legacy `events` component remain stored at `data/harness/best.
 Reversed 2026-10-18. Promotion used to write only keys owned by the current role
 (`SOUNDTHING_ROLE`) and turn the rest into proposals. The repo dropped role ownership, so
 promotion now writes any tunable key in `pipeline.yaml` / `thresholds.yaml`. Proposals
-remain only for the shared contract files (`vocabulary.yaml`, `priors.yaml`), which still
-need explicit confirmation under root AGENTS.md §1.
+remain only for the shared contract files (`vocabulary.yaml`, `priors.yaml`), which
+promotion does not write.
 
 ## Environment tuning uses raw logits caching with pure replay function — environment
 `environment.classifier.classify` was refactored to extract `segments_from_logits`, separating slow inference (audio CLAP embeddings, visual SigLIP embeddings, PySceneDetect) from fast post-processing (temperature scaling, late fusion, visual similarity floor, thresholding, and adjacent same-env segment merging). `EnvCache` stores pre-softmax logits per shot span. Replay evaluates candidates in milliseconds without model re-runs.

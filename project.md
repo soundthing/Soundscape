@@ -229,7 +229,7 @@ the AudioSet names against the checkpoint's label list.
   time, so it's the fallback if a model component runs late.
 - **Integration and tuning:** run `soundthing eval` early and often. It settles "did this
   change help?" quickly.
-- **Priors table** is the shared hotspot: change it only with confirmation (AGENTS.md §1).
+- **Priors table** is the shared hotspot: every component reads it.
 
 ---
 
