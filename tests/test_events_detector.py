@@ -306,3 +306,13 @@ def test_clear_caches_reloads_models_and_rescores(cfg: Config, fake_env, tmp_pat
     detector.detect(inputs, None, cfg)
     assert fake_env.calls == 2
     assert fake_env.tagger.call_count > calls_before
+
+
+def test_full_vocabulary_speech_is_not_suppressed_by_its_own_vad(cfg, fake_env, monkeypatch, tmp_path):
+    speech = next(c for c in cfg.classes if c.audioset == ['Speech'])
+    assert speech.id in cfg.pipeline['events']['vad']['exempt_classes']
+    assert speech.id not in cfg.safety_ids()
+    fake_env.tagger.set_score('Speech', .95)
+    monkeypatch.setattr(detector, 'speech_regions', lambda *args: [(0., 3.)])
+    result = detector.detect(make_inputs(tmp_path, duration=3.), None, cfg)
+    assert speech.id in {event.class_id for event in result}

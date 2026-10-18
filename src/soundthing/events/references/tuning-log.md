@@ -14,4 +14,25 @@ Conditioned: F1 fine x.xx / coarse x.xx, FP/min x.x
 Outcome: <kept / reverted, and why>
 ```
 
-_No runs yet._
+## 2026-10-17 — dataset-derived environment enrichment
+
+Data: 1,315,263 joined training records, 329,391 held-out
+records by video id; 22,394 held-out clips matched a single environment. All 527
+PANNs classes have positives. Config: `application: odds`, floor 0.25, max gain 4,
+Beta shrinkage 200, minimum class support 20, minimum scene support 50.
+
+Held-out annotation log loss (weighted across matched environments):
+Baseline/global frequencies: 0.016746. Environment-adjusted: 0.014739.
+All 13 matched environments improved this diagnostic. This is annotation association,
+not sound-event accuracy: missing labels are not verified negatives and context
+captions are generated. No fine/coarse F1 or FP/min is available without hand labels.
+
+Runtime check: a 63.616-second cached YouTube video (`iTHtXgnhqfM`) completed real
+extraction, environment classification, PANNs/CLAP, hierarchy filtering, and VTT
+writing. Baseline: 34 events; conditioned: 43 events / 42 readable cues, including
+11 newly exposed AudioSet-class events. These counts do not establish precision.
+Stereo/surround direction remains independent (this video had verified 5.1).
+
+Outcome: keep bounded coefficients and explicit uncertainty documentation; validate
+caption quality with labeled clips before changing thresholds or CLAP calibration.
+Full source hashes/counts: `docs/research/sound-priors-report.json`.

@@ -42,9 +42,9 @@ and raw scores shared across both modes, and the wrong-environment experiment
 
 **Expanded detection:** all 527 PANNs labels map independently into 532 caption
 classes, with the 61 original ids retained. Hierarchy suppression and cue-padding
-protection have synthetic integration tests. Real PANNs + CLAP inference was run on
-a 12-second segment of a cached YouTube video; the 532 × 527 mapping and produced
-VTT were verified. There are still no labeled-clip F1 / FP-per-minute measurements.
+protection have synthetic integration tests. Real environment + PANNs + CLAP inference was run on a 63.616-second cached
+YouTube video: 34 baseline and 43 conditioned events. The 532 × 527 mapping,
+VTT output, ancestor suppression, and new AudioSet-class outputs were verified. There are still no labeled-clip F1 / FP-per-minute measurements.
 CLAP calibration and the default thresholds remain untuned placeholders.
 
 **Data-derived prior proposal:** Sound-VECaps context captions joined with AudioSet
@@ -53,8 +53,8 @@ and AudioCaps validation/test ids, splits remaining records by video id, and shr
 sparse cases toward neutral. These are weak annotation associations, not measured
 real-world occurrence probabilities or detector-accuracy improvements.
 
-**Next:** validate the expanded conditioned path on real audio, then label clips
-and measure precision/recall and false positives before tuning thresholds.
+**Next:** label clips and measure precision/recall and false positives before
+tuning thresholds. The expanded conditioned path has completed a real-video run.
 
 ## Milestones
 
