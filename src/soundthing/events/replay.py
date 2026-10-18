@@ -67,30 +67,36 @@ def text_embeddings_for(cfg: Config) -> np.ndarray | None:
     return emb
 
 
-def class_scores(
-    cache: ClipCache,
+DEFAULT_SEP_FUSION: str = "max"
+DEFAULT_SEP_WEIGHT: float = 0.5
+DEFAULT_SEP_SUPPRESS_UNDER_SPEECH: float = 1.0
+
+
+def _vocab_scores(
+    tagger_raw: np.ndarray,
+    clap_emb: np.ndarray | None,
+    tagger_map: np.ndarray,
     cfg: Config,
-    text_emb: np.ndarray | None = None,
-) -> FrameScores:
-    """Compute per-window vocabulary scores from a ClipCache."""
-    tagger_map = build_tagger_map(cfg, cache.audioset_names)
-    tagger_raw = cache.tagger_raw.astype(np.float32)
-    scores = map_to_vocab(tagger_raw, tagger_map)
+    text_emb: np.ndarray | None,
+) -> np.ndarray:
+    """Map raw tagger probs and optional CLAP embeddings to vocabulary scores."""
+    tagger_f32 = tagger_raw.astype(np.float32)
+    scores = map_to_vocab(tagger_f32, tagger_map)
 
-    ecfg = cfg.pipeline.get("events", {})
-    clap_cfg = ecfg.get("clap", {})
-    clap_enabled = clap_cfg.get("enabled", True)
+    ecfg = cfg.pipeline.get("events") or {}
+    clap_cfg = ecfg.get("clap") or {}
+    clap_enabled = bool(clap_cfg.get("enabled", True))
 
-    if cache.clap_emb is not None and clap_enabled:
+    if clap_emb is not None and clap_enabled:
         if text_emb is None:
             text_emb = text_embeddings_for(cfg)
 
         if text_emb is not None:
-            calib = clap_cfg.get("calibration", {})
+            calib = clap_cfg.get("calibration") or {}
             center = float(calib.get("center", 0.2))
             scale = float(calib.get("scale", 20.0))
 
-            sims = cache.clap_emb.astype(np.float32) @ text_emb.T
+            sims = clap_emb.astype(np.float32) @ text_emb.T
             clap_s = calibrate(sims, text_emb, center, scale)
 
             combine_mode = clap_cfg.get("combine", "max")
@@ -102,7 +108,62 @@ def class_scores(
                 combine=combine_mode,
             )
 
-    scores = np.clip(scores, 0.0, 1.0).astype(np.float32)
+    return np.clip(scores, 0.0, 1.0).astype(np.float32)
+
+
+def class_scores(
+    cache: ClipCache,
+    cfg: Config,
+    text_emb: np.ndarray | None = None,
+) -> FrameScores:
+    """Compute per-window vocabulary scores from a ClipCache."""
+    tagger_map = build_tagger_map(cfg, cache.audioset_names)
+    ecfg = cfg.pipeline.get("events") or {}
+    sep_cfg = ecfg.get("separation") or {}
+
+    sep_active = (
+        bool(sep_cfg.get("enabled", False))
+        and cache.sep_mask is not None
+        and cache.tagger_sep is not None
+    )
+
+    if sep_active:
+        if cache.tagger_sep.shape != cache.tagger_raw.shape:
+            raise ValueError(
+                f"tagger_sep shape {cache.tagger_sep.shape} does not match tagger_raw shape {cache.tagger_raw.shape}"
+            )
+        if cache.sep_mask.ndim != 1 or len(cache.sep_mask) != len(cache.times):
+            raise ValueError(
+                f"sep_mask length {len(cache.sep_mask)} does not match T={len(cache.times)}"
+            )
+
+        fusion = sep_cfg.get("fusion") or DEFAULT_SEP_FUSION
+        if fusion not in ("max", "sep", "weighted"):
+            raise ValueError(f"Unknown separation fusion mode: {fusion!r}")
+
+        clap_cfg = ecfg.get("clap") or {}
+        if bool(clap_cfg.get("enabled", True)) and text_emb is None:
+            if cache.clap_emb is not None or cache.clap_emb_sep is not None:
+                text_emb = text_embeddings_for(cfg)
+
+        raw_scores = _vocab_scores(cache.tagger_raw, cache.clap_emb, tagger_map, cfg, text_emb)
+        sep_clap = cache.clap_emb_sep if cache.clap_emb_sep is not None else cache.clap_emb
+        sep_scores = _vocab_scores(cache.tagger_sep, sep_clap, tagger_map, cfg, text_emb)
+
+        scores = raw_scores.copy()
+        sep_mask = cache.sep_mask.astype(bool)
+        if fusion == "max":
+            scores[sep_mask] = np.maximum(raw_scores[sep_mask], sep_scores[sep_mask])
+        elif fusion == "sep":
+            scores[sep_mask] = sep_scores[sep_mask]
+        elif fusion == "weighted":
+            sep_weight_val = sep_cfg.get("sep_weight")
+            sep_weight = float(DEFAULT_SEP_WEIGHT if sep_weight_val is None else sep_weight_val)
+            scores[sep_mask] = (
+                sep_weight * sep_scores[sep_mask] + (1.0 - sep_weight) * raw_scores[sep_mask]
+            ).astype(np.float32)
+    else:
+        scores = _vocab_scores(cache.tagger_raw, cache.clap_emb, tagger_map, cfg, text_emb)
 
     # VAD speech suppression
     regions = vad.speech_regions_from_probs(
@@ -113,12 +174,26 @@ def class_scores(
     )
     mask = vad.speech_mask(cache.times, regions)
     safety = cfg.safety_ids()
-    suppress = float(ecfg.get("vad", {}).get("suppress_under_speech", 0.3))
+    suppress = float((ecfg.get("vad") or {}).get("suppress_under_speech", 0.3))
     factor = np.array(
         [1.0 if c in safety else suppress for c in cfg.class_ids],
         dtype=np.float32,
     )
-    scores[mask] *= factor
+
+    if sep_active:
+        sep_suppress_val = sep_cfg.get("suppress_under_speech")
+        sep_suppress = float(
+            DEFAULT_SEP_SUPPRESS_UNDER_SPEECH if sep_suppress_val is None else sep_suppress_val
+        )
+        sep_factor = np.array(
+            [1.0 if c in safety else sep_suppress for c in cfg.class_ids],
+            dtype=np.float32,
+        )
+        sep_mask = cache.sep_mask.astype(bool)
+        scores[mask & ~sep_mask] *= factor
+        scores[mask & sep_mask] *= sep_factor
+    else:
+        scores[mask] *= factor
 
     return FrameScores(
         times=cache.times,

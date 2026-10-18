@@ -366,3 +366,299 @@ def test_text_embeddings_for_memo_and_disk(cfg: Config, monkeypatch: pytest.Monk
     p_disabled["events"]["clap"]["enabled"] = False
     cfg_disabled = replace(cfg, pipeline=p_disabled)
     assert text_embeddings_for(cfg_disabled) is None
+
+
+def test_replay_separation_disabled_with_sep_arrays_matches_without_them(cfg: Config):
+    """When separation is disabled in cfg, caches with sep arrays match caches without them."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    times = np.array([0.25, 0.5, 0.75, 1.0], dtype=np.float64)
+    tagger_raw = np.full((4, len(audioset_names)), 0.2, dtype=np.float16)
+    tagger_raw[1:3, 0] = 0.95
+    tagger_sep = np.full((4, len(audioset_names)), 0.8, dtype=np.float16)
+    sep_mask = np.array([False, True, True, False], dtype=bool)
+
+    cache_with_sep = ClipCache(
+        video_id="disabled_test",
+        duration=2.0,
+        key="key123",
+        window_sec=1.0,
+        hop=0.25,
+        times=times,
+        audioset_names=audioset_names,
+        tagger_raw=tagger_raw,
+        clap_emb=None,
+        vad_chunk_sec=0.032,
+        vad_probs=np.zeros(4, dtype=np.float32),
+        sep_mask=sep_mask,
+        tagger_sep=tagger_sep,
+        clap_emb_sep=None,
+    )
+    cache_no_sep = replace(cache_with_sep, sep_mask=None, tagger_sep=None, clap_emb_sep=None)
+
+    # Separation is disabled in cfg by default
+    assert not cfg.pipeline["events"]["separation"]["enabled"]
+
+    scores_with = class_scores(cache_with_sep, cfg)
+    scores_no = class_scores(cache_no_sep, cfg)
+    np.testing.assert_array_equal(scores_with.scores, scores_no.scores)
+
+    events_with = replay(cache_with_sep, None, cfg)
+    events_no = replay(cache_no_sep, None, cfg)
+    assert events_with == events_no
+
+
+def test_replay_separation_fusion_modes(cfg: Config):
+    """Enabled separation fuses masked rows according to mode and leaves unmasked rows as raw."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    sc0 = cfg.classes[0]
+    sc1 = cfg.classes[1]
+    name0 = sc0.audioset[0] if sc0.audioset else audioset_names[0]
+    name1 = sc1.audioset[0] if sc1.audioset else audioset_names[1]
+    idx0 = audioset_names.index(name0)
+    idx1 = audioset_names.index(name1)
+
+    times = np.array([0.25, 0.5, 0.75], dtype=np.float64)
+    tagger_raw = np.full((3, len(audioset_names)), 0.1, dtype=np.float16)
+    tagger_sep = np.full((3, len(audioset_names)), 0.1, dtype=np.float16)
+
+    # Window 0: unmasked
+    tagger_raw[0, idx0] = 0.5
+    tagger_sep[0, idx0] = 0.2
+    # Window 1: masked
+    tagger_raw[1, idx0] = 0.6  # raw > sep
+    tagger_sep[1, idx0] = 0.2
+    tagger_raw[1, idx1] = 0.3  # sep > raw
+    tagger_sep[1, idx1] = 0.8
+    # Window 2: unmasked
+    tagger_raw[2, idx1] = 0.4
+    tagger_sep[2, idx1] = 0.9
+
+    sep_mask = np.array([False, True, False], dtype=bool)
+
+    cache = ClipCache(
+        video_id="fusion_test",
+        duration=1.5,
+        key="key_fusion",
+        window_sec=1.0,
+        hop=0.25,
+        times=times,
+        audioset_names=audioset_names,
+        tagger_raw=tagger_raw,
+        clap_emb=None,
+        vad_chunk_sec=0.032,
+        vad_probs=np.zeros(4, dtype=np.float32),
+        sep_mask=sep_mask,
+        tagger_sep=tagger_sep,
+        clap_emb_sep=None,
+    )
+
+    # Base raw scores for comparison
+    p_off = copy.deepcopy(cfg.pipeline)
+    p_off["events"]["separation"]["enabled"] = False
+    cfg_off = replace(cfg, pipeline=p_off)
+    raw_scores = class_scores(cache, cfg_off).scores
+
+    # 1. fusion: max
+    p_max = copy.deepcopy(cfg.pipeline)
+    p_max["events"]["separation"]["enabled"] = True
+    p_max["events"]["separation"]["fusion"] = "max"
+    cfg_max = replace(cfg, pipeline=p_max)
+    scores_max = class_scores(cache, cfg_max).scores
+
+    # Unmasked rows equal raw
+    np.testing.assert_array_equal(scores_max[0], raw_scores[0])
+    np.testing.assert_array_equal(scores_max[2], raw_scores[2])
+    # Masked row 1 fused with max
+    assert scores_max[1, cfg.class_ids.index(sc0.id)] == pytest.approx(0.6, abs=1e-3)
+    assert scores_max[1, cfg.class_ids.index(sc1.id)] == pytest.approx(0.8, abs=1e-3)
+
+    # 2. fusion: sep
+    p_sep = copy.deepcopy(cfg.pipeline)
+    p_sep["events"]["separation"]["enabled"] = True
+    p_sep["events"]["separation"]["fusion"] = "sep"
+    cfg_sep = replace(cfg, pipeline=p_sep)
+    scores_sep = class_scores(cache, cfg_sep).scores
+
+    np.testing.assert_array_equal(scores_sep[0], raw_scores[0])
+    np.testing.assert_array_equal(scores_sep[2], raw_scores[2])
+    assert scores_sep[1, cfg.class_ids.index(sc0.id)] == pytest.approx(0.2, abs=1e-3)
+    assert scores_sep[1, cfg.class_ids.index(sc1.id)] == pytest.approx(0.8, abs=1e-3)
+
+    # 3. fusion: weighted
+    p_weighted = copy.deepcopy(cfg.pipeline)
+    p_weighted["events"]["separation"]["enabled"] = True
+    p_weighted["events"]["separation"]["fusion"] = "weighted"
+    p_weighted["events"]["separation"]["sep_weight"] = 0.25
+    cfg_weighted = replace(cfg, pipeline=p_weighted)
+    scores_weighted = class_scores(cache, cfg_weighted).scores
+
+    np.testing.assert_array_equal(scores_weighted[0], raw_scores[0])
+    np.testing.assert_array_equal(scores_weighted[2], raw_scores[2])
+    expected_sc0 = 0.25 * 0.2 + 0.75 * 0.6  # 0.50
+    expected_sc1 = 0.25 * 0.8 + 0.75 * 0.3  # 0.425
+    assert scores_weighted[1, cfg.class_ids.index(sc0.id)] == pytest.approx(expected_sc0, abs=1e-3)
+    assert scores_weighted[1, cfg.class_ids.index(sc1.id)] == pytest.approx(expected_sc1, abs=1e-3)
+
+
+def test_replay_separation_enabled_with_none_sep_arrays(cfg: Config):
+    """When separation is enabled but cache sep arrays are None, output is identical to raw."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    times = np.array([0.25, 0.5], dtype=np.float64)
+    tagger_raw = np.full((2, len(audioset_names)), 0.3, dtype=np.float16)
+
+    cache = ClipCache(
+        video_id="none_sep_arrays",
+        duration=1.0,
+        key="key_none",
+        window_sec=1.0,
+        hop=0.25,
+        times=times,
+        audioset_names=audioset_names,
+        tagger_raw=tagger_raw,
+        clap_emb=None,
+        vad_chunk_sec=0.032,
+        vad_probs=np.zeros(4, dtype=np.float32),
+        sep_mask=None,
+        tagger_sep=None,
+        clap_emb_sep=None,
+    )
+
+    p_enabled = copy.deepcopy(cfg.pipeline)
+    p_enabled["events"]["separation"]["enabled"] = True
+    cfg_enabled = replace(cfg, pipeline=p_enabled)
+
+    p_disabled = copy.deepcopy(cfg.pipeline)
+    p_disabled["events"]["separation"]["enabled"] = False
+    cfg_disabled = replace(cfg, pipeline=p_disabled)
+
+    scores_enabled = class_scores(cache, cfg_enabled)
+    scores_disabled = class_scores(cache, cfg_disabled)
+    np.testing.assert_array_equal(scores_enabled.scores, scores_disabled.scores)
+    assert replay(cache, None, cfg_enabled) == replay(cache, None, cfg_disabled)
+
+
+def test_replay_separation_vad_suppression(cfg: Config):
+    """Speech region overlapping masked and unmasked windows uses appropriate factors, leaving safety untouched."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    sc_safety = next(c for c in cfg.classes if c.safety and c.audioset)
+    sc_nonsafety = next(c for c in cfg.classes if not c.safety and c.audioset)
+    idx_safety = cfg.class_ids.index(sc_safety.id)
+    idx_nonsafety = cfg.class_ids.index(sc_nonsafety.id)
+
+    times = np.array([0.5, 1.5, 2.5, 3.5], dtype=np.float64)
+    duration = 4.0
+    vad_chunk_sec = 0.5
+    # Chunks 0..3 (0.0 to 2.0s) have speech (speech region [0.0, 2.1s] covering window 0 and 1)
+    vad_probs = np.array([0.9, 0.9, 0.9, 0.9, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
+    # Window 0 (0.5s): speech, unmasked
+    # Window 1 (1.5s): speech, masked
+    # Window 2 (2.5s): no speech, unmasked
+    # Window 3 (3.5s): no speech, masked
+    sep_mask = np.array([False, True, False, True], dtype=bool)
+
+    tagger_raw = np.full((4, len(audioset_names)), 0.0, dtype=np.float16)
+    tagger_sep = np.full((4, len(audioset_names)), 0.0, dtype=np.float16)
+
+    # Map audioset classes to 0.8 in both raw and sep so fusion doesn't change baseline score
+    tagger_raw[:, audioset_names.index(sc_safety.audioset[0])] = 0.8
+    tagger_sep[:, audioset_names.index(sc_safety.audioset[0])] = 0.8
+    tagger_raw[:, audioset_names.index(sc_nonsafety.audioset[0])] = 0.8
+    tagger_sep[:, audioset_names.index(sc_nonsafety.audioset[0])] = 0.8
+
+    cache = ClipCache(
+        video_id="vad_supp_test",
+        duration=duration,
+        key="key_vad",
+        window_sec=1.0,
+        hop=1.0,
+        times=times,
+        audioset_names=audioset_names,
+        tagger_raw=tagger_raw,
+        clap_emb=None,
+        vad_chunk_sec=vad_chunk_sec,
+        vad_probs=vad_probs,
+        sep_mask=sep_mask,
+        tagger_sep=tagger_sep,
+        clap_emb_sep=None,
+    )
+
+    p = copy.deepcopy(cfg.pipeline)
+    p["events"]["separation"]["enabled"] = True
+    p["events"]["separation"]["fusion"] = "max"
+    p["events"]["vad"]["suppress_under_speech"] = 0.2
+    p["events"]["separation"]["suppress_under_speech"] = 0.7
+    cfg_test = replace(cfg, pipeline=p)
+
+    scores = class_scores(cache, cfg_test).scores
+
+    # Window 0: speech + unmasked -> vad.suppress_under_speech (0.2)
+    assert scores[0, idx_nonsafety] == pytest.approx(0.8 * 0.2, abs=1e-3)
+    assert scores[0, idx_safety] == pytest.approx(0.8, abs=1e-3)  # safety untouched
+
+    # Window 1: speech + masked -> separation.suppress_under_speech (0.7)
+    assert scores[1, idx_nonsafety] == pytest.approx(0.8 * 0.7, abs=1e-3)
+    assert scores[1, idx_safety] == pytest.approx(0.8, abs=1e-3)  # safety untouched
+
+    # Window 2: no speech + unmasked -> no suppression (1.0)
+    assert scores[2, idx_nonsafety] == pytest.approx(0.8, abs=1e-3)
+    assert scores[2, idx_safety] == pytest.approx(0.8, abs=1e-3)
+
+    # Window 3: no speech + masked -> no suppression (1.0)
+    assert scores[3, idx_nonsafety] == pytest.approx(0.8, abs=1e-3)
+    assert scores[3, idx_safety] == pytest.approx(0.8, abs=1e-3)
+
+
+def test_replay_separation_validation_errors(cfg: Config):
+    """Unknown fusion mode or mismatched tagger_sep / sep_mask shapes raise ValueError."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    times = np.array([0.25, 0.5], dtype=np.float64)
+    tagger_raw = np.zeros((2, len(audioset_names)), dtype=np.float16)
+
+    cache = ClipCache(
+        video_id="val_err_test",
+        duration=1.0,
+        key="key_err",
+        window_sec=1.0,
+        hop=0.25,
+        times=times,
+        audioset_names=audioset_names,
+        tagger_raw=tagger_raw,
+        clap_emb=None,
+        vad_chunk_sec=0.032,
+        vad_probs=np.zeros(4, dtype=np.float32),
+        sep_mask=np.array([False, True], dtype=bool),
+        tagger_sep=np.zeros((2, len(audioset_names)), dtype=np.float16),
+        clap_emb_sep=None,
+    )
+
+    # 1. Unknown fusion mode
+    p_bad_fusion = copy.deepcopy(cfg.pipeline)
+    p_bad_fusion["events"]["separation"]["enabled"] = True
+    p_bad_fusion["events"]["separation"]["fusion"] = "unknown_mode"
+    cfg_bad_fusion = replace(cfg, pipeline=p_bad_fusion)
+
+    with pytest.raises(ValueError, match="Unknown separation fusion mode"):
+        class_scores(cache, cfg_bad_fusion)
+
+    # 2. Mismatched tagger_sep shape (e.g. 3 rows instead of 2)
+    p_valid = copy.deepcopy(cfg.pipeline)
+    p_valid["events"]["separation"]["enabled"] = True
+    p_valid["events"]["separation"]["fusion"] = "max"
+    cfg_valid = replace(cfg, pipeline=p_valid)
+
+    cache_bad_tagger = replace(
+        cache,
+        tagger_sep=np.zeros((3, len(audioset_names)), dtype=np.float16),
+    )
+    with pytest.raises(ValueError, match="tagger_sep shape"):
+        class_scores(cache_bad_tagger, cfg_valid)
+
+    # 3. Mismatched sep_mask length (e.g. length 3 instead of 2)
+    cache_bad_mask = replace(
+        cache,
+        sep_mask=np.array([True, False, True], dtype=bool),
+    )
+    with pytest.raises(ValueError, match="sep_mask length"):
+        class_scores(cache_bad_mask, cfg_valid)
+

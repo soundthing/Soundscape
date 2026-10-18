@@ -52,3 +52,15 @@ cause is gone.
   (e.g. safety vs non-safety) will have the non-safety event suppressed by `priority_filter`.
   When synthesizing multi-event test clips, space activations across non-overlapping time
   windows so both events are preserved.
+- **Demucs removes dialogue well but music only partly.** Demucs separates into drums,
+  bass, other, and vocals. The effects stem is mix minus vocals, so drums, bass, and
+  other instruments are kept in "effects" and can still mask sound events.
+- **Extraction is 16 kHz so separator input is band-limited.** Demucs expects 44.1 kHz
+  stereo. Upsampling 16 kHz mono to 44.1 kHz cannot restore high-frequency harmonics, so
+  separation quality above 8 kHz is unavailable.
+- **Separated audio is out of distribution for PANNs/CLAP.** Models were pretrained on
+  unseparated natural audio. Artifacts and altered stem balances from separation mean
+  thresholds tuned on raw audio may not transfer cleanly.
+- **Windows HF cache symlink warning is harmless.** On Windows without developer mode
+  enabled, huggingface_hub logs a warning about symlinks and falls back to file copies.
+  This is harmless and does not affect model loading or caching.

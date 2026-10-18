@@ -36,6 +36,8 @@ BOUNDS: dict[str, ParamSpec] = {
     "events.vad.min_speech_sec": ParamSpec("float", 0.05, 1.0),
     "events.vad.pad_sec": ParamSpec("float", 0.0, 0.5),
     "events.vad.merge_gap_sec": ParamSpec("float", 0.0, 1.0),
+    "events.separation.sep_weight": ParamSpec("float", 0.0, 1.0),
+    "events.separation.suppress_under_speech": ParamSpec("float", 0.0, 1.0),
     "events.postprocess.smoothing_sec": ParamSpec("float", 0.0, 2.0),
     "events.postprocess.min_event_sec": ParamSpec("float", 0.05, 1.5),
     "events.postprocess.merge_gap_sec": ParamSpec("float", 0.0, 2.0),
@@ -67,8 +69,13 @@ def describe_space(cfg: Config, dev_event_counts: dict[str, int] | None) -> list
     """
     entries: list[dict[str, Any]] = []
 
+    events_cfg = cfg.pipeline.get("events") or {}
+    sep_enabled = bool((events_cfg.get("separation") or {}).get("enabled", False))
+
     # 1. Non-class-specific entries from BOUNDS table
     for name, spec in BOUNDS.items():
+        if name.startswith("events.separation.") and not sep_enabled:
+            continue
         val: Any = None
         if name == "thresholds.default":
             val = cfg.thresholds.default

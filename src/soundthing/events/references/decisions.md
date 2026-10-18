@@ -79,3 +79,8 @@ harness moved to `soundthing/harness/` (2026-10-17). The model cache and replay 
 `events/` because production detection runs through them; they import the harness only
 lazily for the default cache location. Tuning decisions now live in
 [harness/references](../../harness/references/decisions.md).
+
+## Source separation is opt-in and gated — events
+What: rescore windows where speech or music masks sound events using an effects stem (mix minus vocals) from a source separator. Separation runs only on time spans gated by AudioSet speech/music labels or VAD, padded and crossfaded. Separated scores fuse with raw scores by max by default, with a separate VAD suppression factor (`suppress_under_speech`) on masked windows.
+Why: overlapping speech and music mask foreground sound events. Full-clip separation is too slow on CPU (~3x real time), so gating limits separation to relevant spans. Fusing by max preserves raw detections where separation might introduce artifacts.
+Rejected: separating every clip (untenable latency on CPU); replacing raw scores outright (causes false negatives on unmasked events); a DnR (dialogue/music/effects) model for now (packaging and dependency risk; can be added later as an alternative backend). Note: shipped without the masked-mix experiment; enable only after a tuning run with promote shows a gain (precision-first).

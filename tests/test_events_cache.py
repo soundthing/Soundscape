@@ -43,6 +43,55 @@ class FakeClap:
         return vec / np.linalg.norm(vec)
 
 
+class FakeSeparator:
+    def __init__(self, multiplier: float = 0.0) -> None:
+        self.multiplier = multiplier
+        self.call_count = 0
+
+    def __call__(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        self.call_count += 1
+        return (audio * self.multiplier).astype(np.float32)
+
+
+class AudioDependentFakeTagger:
+    def __init__(
+        self,
+        names: list[str],
+        gated_windows: set[int] | None = None,
+        gate_label: str = "Speech",
+        gate_prob: float = 0.9,
+    ) -> None:
+        self.names = names
+        self.gated_windows = gated_windows or set()
+        self.gate_idx = names.index(gate_label) if gate_label in names else 0
+        self.gate_prob = gate_prob
+        self.call_count = 0
+
+    def __call__(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        idx = self.call_count
+        self.call_count += 1
+        b = audio.shape[0] if audio.ndim > 1 else 1
+        mean_amp = float(np.mean(np.abs(audio)))
+        probs = np.full((b, len(self.names)), max(0.01, mean_amp * 0.1), dtype=np.float32)
+        if idx in self.gated_windows:
+            probs[:, self.gate_idx] = self.gate_prob
+        return probs
+
+
+class AudioDependentFakeClap:
+    def __init__(self, dim: int = 16) -> None:
+        self.dim = dim
+        self.call_count = 0
+
+    def embed_audio(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        self.call_count += 1
+        mean_amp = float(np.mean(np.abs(audio)))
+        vec = np.zeros(self.dim, dtype=np.float32)
+        vec[0] = mean_amp + 0.1
+        vec[1] = 1.0
+        return vec / np.linalg.norm(vec)
+
+
 @pytest.fixture(autouse=True)
 def set_tuning_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path / "tuning"))
@@ -246,3 +295,278 @@ def test_save_load_cache_round_trip(cfg: Config, tmp_path: Path):
     )
     with pytest.raises(ValueError, match="Cache version mismatch"):
         load_cache(bad_path)
+
+
+def test_save_load_cache_separation_fields(cfg: Config, tmp_path: Path):
+    base = ClipCache(
+        video_id="clip_sep",
+        duration=2.0,
+        key=cache_key(cfg),
+        window_sec=1.0,
+        hop=0.5,
+        times=np.array([0.5, 1.0, 1.5]),
+        audioset_names=["Label_A", "Label_B"],
+        tagger_raw=np.zeros((3, 2), dtype=np.float16),
+        clap_emb=None,
+        vad_chunk_sec=vad.VAD_CHUNK_SEC,
+        vad_probs=np.zeros(4, dtype=np.float32),
+    )
+    assert base.sep_mask is None and base.tagger_sep is None and base.clap_emb_sep is None
+
+    path_plain = tmp_path / "plain.npz"
+    save_cache(base, path_plain)
+    plain = load_cache(path_plain)
+    assert plain.sep_mask is None and plain.tagger_sep is None and plain.clap_emb_sep is None
+
+    sep = replace(
+        base,
+        sep_mask=np.array([False, True, True]),
+        tagger_sep=np.array([[0.0, 0.0], [0.7, 0.1], [0.6, 0.2]], dtype=np.float16),
+        clap_emb_sep=np.array([[0.0, 1.0], [1.0, 0.0], [0.6, 0.8]], dtype=np.float16),
+    )
+    path_sep = tmp_path / "sep.npz"
+    save_cache(sep, path_sep)
+    loaded = load_cache(path_sep)
+    assert loaded.sep_mask.dtype == bool
+    assert np.array_equal(loaded.sep_mask, sep.sep_mask)
+    assert loaded.tagger_sep.dtype == np.float16
+    assert np.array_equal(loaded.tagger_sep, sep.tagger_sep)
+    assert np.array_equal(loaded.clap_emb_sep, sep.clap_emb_sep)
+
+
+def test_cache_key_separation_dependencies(cfg: Config):
+    """Test cache_key dependencies for source separation."""
+    repo_key = cache_key(cfg)
+
+    # 1. Unchanged when disabled (compare to cfg without separation block AND to repo cfg)
+    p_no_sep = copy.deepcopy(cfg.pipeline)
+    p_no_sep["events"].pop("separation", None)
+    cfg_no_sep = replace(cfg, pipeline=p_no_sep)
+    assert cache_key(cfg_no_sep) == repo_key
+
+    p_disabled = copy.deepcopy(cfg.pipeline)
+    p_disabled["events"]["separation"] = {"enabled": False, "model": "other_model"}
+    assert cache_key(replace(cfg, pipeline=p_disabled)) == repo_key
+
+    # 2. Changes when enabled
+    p_enabled = copy.deepcopy(cfg.pipeline)
+    p_enabled["events"]["separation"] = {
+        "enabled": True,
+        "model": "htdemucs",
+        "gate_threshold": 0.3,
+        "gate_vad": True,
+        "pad_sec": 0.5,
+        "crossfade_sec": 0.05,
+        "chunk_sec": 10.0,
+    }
+    cfg_enabled = replace(cfg, pipeline=p_enabled)
+    enabled_key = cache_key(cfg_enabled)
+    assert enabled_key != repo_key
+
+    # 3. Changes with gate_threshold / model
+    p_thr = copy.deepcopy(p_enabled)
+    p_thr["events"]["separation"]["gate_threshold"] = 0.5
+    assert cache_key(replace(cfg, pipeline=p_thr)) != enabled_key
+
+    p_model = copy.deepcopy(p_enabled)
+    p_model["events"]["separation"]["model"] = "mdx_extra"
+    assert cache_key(replace(cfg, pipeline=p_model)) != enabled_key
+
+    # 4. Unchanged by replay-time keys (fusion, sep_weight, suppress_under_speech)
+    p_fusion = copy.deepcopy(p_enabled)
+    p_fusion["events"]["separation"]["fusion"] = "sep"
+    assert cache_key(replace(cfg, pipeline=p_fusion)) == enabled_key
+
+    p_weight = copy.deepcopy(p_enabled)
+    p_weight["events"]["separation"]["sep_weight"] = 0.8
+    assert cache_key(replace(cfg, pipeline=p_weight)) == enabled_key
+
+    p_suppress = copy.deepcopy(p_enabled)
+    p_suppress["events"]["separation"]["suppress_under_speech"] = 0.5
+    assert cache_key(replace(cfg, pipeline=p_suppress)) == enabled_key
+
+
+def test_build_cache_separation_disabled(cfg: Config, monkeypatch: pytest.MonkeyPatch):
+    """build_cache with separation disabled leaves sep fields as None."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    tagger_map = build_tagger_map(cfg, audioset_names)
+    separator = FakeSeparator()
+    models = EventModels(
+        tagger=FakeTagger(audioset_names),
+        clap=FakeClap(dim=16),
+        class_ids=list(cfg.class_ids),
+        tagger_map=tagger_map,
+        clap_text_emb=None,
+        audioset_names=audioset_names,
+        separator=separator,
+    )
+    monkeypatch.setattr(vad, "speech_probs", lambda audio, sr, c: np.array([], dtype=np.float32))
+
+    sr = 16000
+    audio = np.ones(int(2.0 * sr), dtype=np.float32) * 0.5
+    cache = build_cache(audio, sr, "clip_disabled", cfg, models=models)
+
+    assert cache.sep_mask is None
+    assert cache.tagger_sep is None
+    assert cache.clap_emb_sep is None
+    assert separator.call_count == 0
+
+
+def test_build_cache_separation_enabled(cfg: Config, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """build_cache rescores gated windows on separated audio."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    gate_label = "Speech" if "Speech" in audioset_names else audioset_names[0]
+    tagger_map = build_tagger_map(cfg, audioset_names)
+
+    sr = 16000
+    duration = 4.0
+    audio = np.ones(int(duration * sr), dtype=np.float32) * 0.5
+
+    p_sep = copy.deepcopy(cfg.pipeline)
+    p_sep["events"]["window_sec"] = 1.0
+    p_sep["events"]["hop_sec"] = 0.5
+    p_sep["events"]["separation"] = {
+        "enabled": True,
+        "model": "htdemucs",
+        "gate_labels": [gate_label],
+        "gate_threshold": 0.3,
+        "gate_vad": False,
+        "pad_sec": 0.5,
+        "crossfade_sec": 0.05,
+        "chunk_sec": 10.0,
+    }
+    cfg_sep = replace(cfg, pipeline=p_sep)
+
+    monkeypatch.setattr(vad, "speech_probs", lambda a, s, c: np.array([], dtype=np.float32))
+
+    separator = FakeSeparator(multiplier=0.0)
+    tagger = AudioDependentFakeTagger(audioset_names, gated_windows={3}, gate_label=gate_label, gate_prob=0.9)
+    clap = AudioDependentFakeClap(dim=16)
+
+    models = EventModels(
+        tagger=tagger,
+        clap=clap,
+        class_ids=list(cfg_sep.class_ids),
+        tagger_map=tagger_map,
+        clap_text_emb=None,
+        audioset_names=audioset_names,
+        separator=separator,
+    )
+
+    cache = build_cache(audio, sr, "clip_sep_enabled", cfg_sep, models=models)
+
+    # Separator called exactly once per clip
+    assert separator.call_count == 1
+
+    # sep_mask True only for windows fully inside padded span [1.0, 3.0]
+    expected_mask = np.array([False, False, True, True, True, False, False], dtype=bool)
+    assert cache.sep_mask is not None
+    assert cache.sep_mask.dtype == bool
+    assert np.array_equal(cache.sep_mask, expected_mask)
+
+    # tagger_sep differs exactly on masked rows; unmasked rows are equal
+    assert cache.tagger_sep is not None
+    assert cache.tagger_sep.dtype == np.float16
+    for i in range(len(cache.times)):
+        if cache.sep_mask[i]:
+            assert not np.array_equal(cache.tagger_sep[i], cache.tagger_raw[i])
+        else:
+            assert np.array_equal(cache.tagger_sep[i], cache.tagger_raw[i])
+
+    # clap_emb_sep differs exactly on masked rows when CLAP is on
+    assert cache.clap_emb is not None
+    assert cache.clap_emb_sep is not None
+    assert cache.clap_emb_sep.dtype == np.float16
+    for i in range(len(cache.times)):
+        if cache.sep_mask[i]:
+            assert not np.array_equal(cache.clap_emb_sep[i], cache.clap_emb[i])
+        else:
+            assert np.array_equal(cache.clap_emb_sep[i], cache.clap_emb[i])
+
+    # Save/load round trip preserves all separation fields
+    cache_file = tmp_path / "round_trip.npz"
+    save_cache(cache, cache_file)
+    loaded = load_cache(cache_file)
+    assert loaded.sep_mask.dtype == bool
+    assert np.array_equal(loaded.sep_mask, cache.sep_mask)
+    assert loaded.tagger_sep.dtype == np.float16
+    assert np.array_equal(loaded.tagger_sep, cache.tagger_sep)
+    assert loaded.clap_emb_sep.dtype == np.float16
+    assert np.array_equal(loaded.clap_emb_sep, cache.clap_emb_sep)
+
+    # When CLAP is off, clap_emb_sep is None
+    separator_no_clap = FakeSeparator(multiplier=0.0)
+    tagger_no_clap = AudioDependentFakeTagger(audioset_names, gated_windows={3}, gate_label=gate_label, gate_prob=0.9)
+    models_no_clap = replace(models, clap=None, tagger=tagger_no_clap, separator=separator_no_clap)
+    cache_no_clap = build_cache(audio, sr, "clip_no_clap", cfg_sep, models=models_no_clap)
+    assert cache_no_clap.clap_emb is None
+    assert cache_no_clap.clap_emb_sep is None
+    assert cache_no_clap.sep_mask is not None
+    assert np.array_equal(cache_no_clap.sep_mask, expected_mask)
+
+
+def test_build_cache_separation_no_gated_windows(cfg: Config, monkeypatch: pytest.MonkeyPatch):
+    """When enabled but no windows are gated: sep_mask all False, separator not called, tagger_sep == tagger_raw."""
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    tagger_map = build_tagger_map(cfg, audioset_names)
+
+    p_sep = copy.deepcopy(cfg.pipeline)
+    p_sep["events"]["separation"] = {
+        "enabled": True,
+        "model": "htdemucs",
+        "gate_labels": ["Speech"],
+        "gate_threshold": 0.5,
+        "gate_vad": False,
+    }
+    cfg_sep = replace(cfg, pipeline=p_sep)
+
+    monkeypatch.setattr(vad, "speech_probs", lambda a, s, c: np.array([], dtype=np.float32))
+
+    separator = FakeSeparator()
+    tagger = FakeTagger(audioset_names, default_prob=0.1)
+    models = EventModels(
+        tagger=tagger,
+        clap=FakeClap(dim=16),
+        class_ids=list(cfg_sep.class_ids),
+        tagger_map=tagger_map,
+        clap_text_emb=None,
+        audioset_names=audioset_names,
+        separator=separator,
+    )
+
+    sr = 16000
+    audio = np.ones(int(2.0 * sr), dtype=np.float32)
+    cache = build_cache(audio, sr, "clip_no_gates", cfg_sep, models=models)
+
+    assert cache.sep_mask is not None
+    assert not cache.sep_mask.any()
+    assert separator.call_count == 0
+    assert np.array_equal(cache.tagger_sep, cache.tagger_raw)
+    assert np.array_equal(cache.clap_emb_sep, cache.clap_emb)
+
+
+def test_build_cache_separation_missing_separator_raises(cfg: Config, monkeypatch: pytest.MonkeyPatch):
+    """When separation is enabled but models.separator is None, build_cache raises ValueError."""
+    monkeypatch.setattr(vad, "speech_probs", lambda a, s, c: np.array([], dtype=np.float32))
+
+    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
+    tagger_map = build_tagger_map(cfg, audioset_names)
+
+    p_sep = copy.deepcopy(cfg.pipeline)
+    p_sep["events"]["separation"] = {"enabled": True}
+    cfg_sep = replace(cfg, pipeline=p_sep)
+
+    models = EventModels(
+        tagger=FakeTagger(audioset_names),
+        clap=None,
+        class_ids=list(cfg_sep.class_ids),
+        tagger_map=tagger_map,
+        clap_text_emb=None,
+        audioset_names=audioset_names,
+        separator=None,
+    )
+
+    sr = 16000
+    audio = np.zeros(sr, dtype=np.float32)
+    with pytest.raises(ValueError, match="separator"):
+        build_cache(audio, sr, "clip_err", cfg_sep, models=models)

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 
+import copy
+from dataclasses import replace
+
 import pytest
 
 from soundthing import contracts as C
@@ -24,8 +27,11 @@ def test_describe_space_defaults_and_repo_config(cfg):
     space = describe_space(cfg, None)
     idx = space_index(space)
 
-    # Contains every BOUNDS key
+    # Contains every BOUNDS key (skipping separation keys when disabled in repo config)
     for key, spec in BOUNDS.items():
+        if key.startswith("events.separation."):
+            assert key not in idx, f"Separation key should be skipped when disabled: {key}"
+            continue
         assert key in idx, f"Missing BOUNDS key: {key}"
         entry = idx[key]
         assert entry["type"] == spec.type
@@ -215,3 +221,50 @@ def test_is_shared_and_dev_event_counts(cfg, tmp_path, monkeypatch):
     # Default labels dir via paths.dev_labels_dir()
     default_counts = dev_event_counts()
     assert default_counts == {cid0: 3, cid1: 1}
+
+
+def test_describe_space_separation(cfg):
+    """Separation keys absent when disabled, present with correct bounds/current when enabled."""
+    space_disabled = describe_space(cfg, None)
+    idx_disabled = space_index(space_disabled)
+    assert "events.separation.sep_weight" not in idx_disabled
+    assert "events.separation.suppress_under_speech" not in idx_disabled
+
+    p_enabled = copy.deepcopy(cfg.pipeline)
+    p_enabled["events"]["separation"]["enabled"] = True
+    cfg_enabled = replace(cfg, pipeline=p_enabled)
+
+    space_enabled = describe_space(cfg_enabled, None)
+    idx_enabled = space_index(space_enabled)
+
+    assert "events.separation.sep_weight" in idx_enabled
+    entry_weight = idx_enabled["events.separation.sep_weight"]
+    assert entry_weight["type"] == "float"
+    assert entry_weight["bounds"] == [0.0, 1.0]
+    assert entry_weight["current"] == 0.5
+    assert entry_weight["shared"] is False
+
+    assert "events.separation.suppress_under_speech" in idx_enabled
+    entry_suppress = idx_enabled["events.separation.suppress_under_speech"]
+    assert entry_suppress["type"] == "float"
+    assert entry_suppress["bounds"] == [0.0, 1.0]
+    assert entry_suppress["current"] == 1.0
+    assert entry_suppress["shared"] is False
+
+    # validate_overrides accepts them when enabled
+    validate_overrides(
+        {
+            "events.separation.sep_weight": 0.75,
+            "events.separation.suppress_under_speech": 0.5,
+        },
+        space_enabled,
+    )
+
+    # validate_overrides rejects out of bounds
+    with pytest.raises(ValueError, match="outside bounds"):
+        validate_overrides({"events.separation.sep_weight": 1.5}, space_enabled)
+
+    # validate_overrides rejects when disabled
+    with pytest.raises(ValueError, match="Unknown parameter 'events.separation.sep_weight'"):
+        validate_overrides({"events.separation.sep_weight": 0.5}, space_disabled)
+
