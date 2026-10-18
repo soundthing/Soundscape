@@ -29,9 +29,17 @@ not from changing it.
 Both modes see the same audio, scoring and speech masking; only conditioning differs.
 Loading and scoring once per run halves the cost.
 
-## Post-processing may use future context — events
-Processing is offline, so smoothing is two-sided. A streaming mode would need causal
-variants.
+## Temporal smoothing and display suppression removed — events, user-requested reversal
+
+Previously, offline median smoothing removed isolated score spikes, a 60-second
+cooldown hid repeated sustained events, and a concurrent-caption cap discarded
+overlapping events. The user requested removing all three to retain qualifying
+sounds and recurrences. Their implementations and default settings are removed;
+legacy copies of those settings are ignored. More eligible captions can now appear,
+but caption accuracy has not been measured. Thresholds, minimum duration, gap
+merging, hierarchy suppression and readability timing remain separate decisions.
+Existing `sustained` vocabulary metadata stays accepted for compatibility and no
+longer suppresses recurrences.
 
 ## Speech masking scales scores down, doesn't remove them — agreed
 Non-safety scores are multiplied by `suppress_under_speech` inside speech; safety classes

@@ -58,7 +58,9 @@ List of `{start, end, label, class_id, confidence, modifiers}`.
 - `modifiers` ⊆ `left, right, distant, nearby, approaching, receding, loud, quiet, continues`.
   Rendered as `[door slams, right]`.
 - These are **final, display-ready** events: thresholding, merging, coarse collapsing and
-  priority filtering already applied. Person 3 only clamps cue durations for readability.
+  hierarchy suppression already applied. Scores are not temporally smoothed; repeated
+  sustained events and simultaneous unrelated events are retained without a caption-count
+  limit. Person 3 only clamps cue durations for readability.
 
 `baseline` = audio-only, no environment conditioning (`segments=None`).
 `conditioned` = with Person 2's segments.
@@ -184,7 +186,7 @@ Existing `coarse` membership also makes that group an ancestor for display purpo
 Person 1 suppresses a qualifying ancestor only during intervals covered by a
 qualifying descendant. Parent and child meet their own thresholds independently;
 siblings and unrelated simultaneous events remain eligible. Apply this after
-thresholds/minimum event duration and before the concurrent-caption limit.
+thresholds/minimum event duration; there is no subsequent concurrent-caption limit.
 Person 3 uses the same hierarchy when extending cue durations, so readability
 padding cannot reintroduce parent/child duplicates. The hierarchy does not add event JSON fields; Person 2's environment payload is unchanged.
 See `docs/examples/hierarchy.yaml` for a configuration-only example.

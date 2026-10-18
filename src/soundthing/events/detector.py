@@ -127,13 +127,10 @@ def detect(
     if segments is not None:  # None = unconditioned baseline
         scores = apply_priors(scores, segments, cfg)
 
-    pcfg = ecfg["postprocess"]
-    scores = pp.smooth(scores, pcfg["smoothing_sec"])
     scores = add_generic_scores(scores, rms_dbfs, cfg)
     events = pp.threshold_to_events(scores, cfg)
     events = pp.collapse_confusable(events, scores, cfg)
     events = suppress_ancestors(events, cfg.hierarchy())
-    events = pp.priority_filter(events, cfg)
 
     stereo_sr = getattr(inputs, "sample_rate", 16000)
     if inputs.audio_stereo_path is not None and Path(inputs.audio_stereo_path).exists():

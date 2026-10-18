@@ -41,12 +41,9 @@ events:             # Person 1
     pad_sec: 0.1
     merge_gap_sec: 0.3
   postprocess:
-    smoothing_sec: 0.5          # two-sided median filter width
     min_event_sec: 0.3
     merge_gap_sec: 0.5
     coarse_margin: 0.1          # top-2 within this margin and same coarse group -> coarse label
-    sustained_repeat_sec: 60.0  # re-caption a sustained sound at most this often
-    max_on_screen: 2
   prior_estimation:
     alpha: 200.0
     min_class: 20

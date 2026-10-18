@@ -11,10 +11,11 @@ cause is gone.
 - **Onsets can come out early.** A 1 s window starts scoring when a sound enters its
   trailing edge, so window-centre timing can lead the real onset by up to ~0.5 s — the
   whole eval tolerance. Measure the offset on labeled clips before correcting it.
-- **Over-smoothing kills impulsive sounds.** Gunshots and door slams span only a few
-  windows; a wide median filter erases them.
+- **Minimum duration can still remove isolated detections.** Removing score smoothing
+  does not remove the 0.3-second minimum event duration. A lone 0.25-second detection
+  is still dropped unless gap merging joins it with another run.
 - **Short events stay on screen longer than their span.** The caption writer extends cues
-  to a minimum duration, which matters when capping captions on screen.
+  to a minimum duration and then trims ancestor overlap, which can make parents shorter.
 - **Small eval set overfits fast.** 10–20 clips: tune on part, check on the rest, and
   prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail

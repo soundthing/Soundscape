@@ -115,7 +115,6 @@ def test_real_detector_uses_activity_gate_and_can_retune_cached_scores(cfg, tmp_
     copy.pipeline['events']['generic_fallbacks'] = {
         'enabled': True, 'groups': ['broad_one'], 'min_rms_dbfs': -60,
     }
-    copy.pipeline['events']['postprocess']['smoothing_sec'] = 0
     copy.pipeline['events']['modifiers']['enabled'] = False
     copy.validate()
     audio = tmp_path / 'audio.wav'

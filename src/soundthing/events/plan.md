@@ -76,6 +76,13 @@ support, uses a measured activity gate on real audio, and leaves native model
 scores unchanged. Default config leaves this disabled. Exact new live group ids
 and optional coarse-group ancestry await their separate interface approval.
 
+**Post-processing simplification:** the user requested removing temporal score
+smoothing, the 60-second sustained-event cooldown and the concurrent-caption
+limit. All qualifying unrelated events and repeated sustained events now survive
+those former filters. Legacy settings cannot reactivate them. Thresholds, minimum
+duration, gap merging, coarse labels, hierarchy suppression, modifiers and the
+caption writer's existing duration limits remain.
+
 **Next:** label clips and measure precision/recall and false positives before
 tuning thresholds. The expanded conditioned path has completed a real-video run.
 
@@ -86,9 +93,10 @@ tuning thresholds. The expanded conditioned path has completed a real-video run.
    *Code done; PANNs is now the sole event scorer. Labeled accuracy numbers pending.*
 2. **Event CLAP removed:** the user requested PANNs-only sound classification after reviewing the untuned zero-shot conversion and max-fusion behavior. Environment CLAP remains. The five unmapped classes were removed from the vocabulary and priors; schema-version-1 runs require regeneration.
 3. **Speech masking:** add VAD so dialogue stops triggering false events. *Code done.*
-4. **Post-processing:** smoothing, merging, coarse fallback when unsure between similar
-   sounds, once-only captions for sustained sounds, and a cap on captions on screen.
-   *Done; hierarchy-aware ancestor suppression and cue-padding protection added.*
+4. **Post-processing:** merging, minimum event duration, coarse fallback when unsure
+   between similar sounds, hierarchy-aware suppression and cue-padding protection.
+   *Done. Smoothing, sustained-repeat suppression and the caption-count limit were
+   subsequently removed at user request.*
 5. **Conditioned vs baseline:** compare both modes on the eval clips, including clips
    where the environment is deliberately wrong. *Tooling done (`soundthing eval` plus the
    wrong-env experiment); needs labeled clips.*
@@ -108,8 +116,9 @@ tuning thresholds. The expanded conditioned path has completed a real-video run.
   down.
 - **Conditioning:** already implemented; applies Person 2's environment probabilities
   through the priors table.
-- **Post-processing:** offline, so it can look at future context. Precision over recall:
-  when in doubt, don't caption, except for safety sounds.
+- **Post-processing:** preserve qualifying detections without temporal smoothing,
+  sustained-repeat suppression or a caption-count cap. Retain per-class thresholds,
+  event duration checks, gap merging and hierarchy suppression.
 - **Tuning:** agents hill-climb one fixed objective through an MCP harness over cached
   model scores ([tuning-plan.md](tuning-plan.md)); results are recorded in
   [references/tuning-log.md](references/tuning-log.md).

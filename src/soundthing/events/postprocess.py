@@ -1,7 +1,4 @@
-"""Post-processing: FrameScores -> display-ready CaptionEvents.
-
-Offline, so smoothing may use future context (two-sided filters).
-"""
+"""Threshold, merge and label events without score smoothing or display limits."""
 
 from __future__ import annotations
 
@@ -19,28 +16,6 @@ def _safe_coarse_of(class_id: str, cfg: Config) -> str | None:
         return cfg.coarse_of(class_id)
     except KeyError:
         return None
-
-
-def smooth(scores: FrameScores, width_sec: float) -> FrameScores:
-    """Two-sided running median filter along time, per class.
-
-    Window length in frames k = round(width_sec / scores.hop), forced odd (k+1 if even).
-    k <= 1 or width_sec <= 0 returns input unchanged. Edge-padded so output has the same shape.
-    """
-    if width_sec <= 0 or scores.scores.shape[0] <= 1:
-        return scores
-
-    k = int(round(width_sec / scores.hop))
-    if k % 2 == 0:
-        k += 1
-    if k <= 1:
-        return scores
-
-    r = (k - 1) // 2
-    padded = np.pad(scores.scores, ((r, r), (0, 0)), mode="edge")
-    windows = np.lib.stride_tricks.sliding_window_view(padded, window_shape=k, axis=0)
-    smoothed = np.median(windows, axis=-1)
-    return scores.copy_with(smoothed.astype(scores.scores.dtype, copy=False))
 
 
 def threshold_to_events(scores: FrameScores, cfg: Config) -> list[CaptionEvent]:
@@ -213,87 +188,6 @@ def collapse_confusable(
     return merged_events
 
 
-def priority_filter(events: list[CaptionEvent], cfg: Config) -> list[CaptionEvent]:
-    """Caption sustained classes once per sustained_repeat_sec; cap concurrent
-    events at max_on_screen, keeping safety classes first, then by confidence."""
-    if not events:
-        return []
-
-    pcfg = cfg.pipeline.get("events", {}).get("postprocess", {})
-    sustained_repeat_sec = float(pcfg.get("sustained_repeat_sec", 60.0))
-    max_on_screen = int(pcfg.get("max_on_screen", 2))
-    min_cue_sec = float(cfg.pipeline.get("captions", {}).get("min_cue_sec", 1.0))
-
-    # a. Sustained filtering
-    events_sorted = sorted(events, key=lambda e: (e.start, e.end))
-    kept_sustained: list[CaptionEvent] = []
-    last_kept_start_by_class: dict[str, float] = {}
-
-    for ev in events_sorted:
-        is_sustained = False
-        try:
-            sc = cfg.sound_class(ev.class_id)
-            is_sustained = sc.sustained
-        except KeyError:
-            is_sustained = False
-
-        if is_sustained:
-            if ev.class_id in last_kept_start_by_class:
-                last_start = last_kept_start_by_class[ev.class_id]
-                if (ev.start - last_start) < sustained_repeat_sec:
-                    continue
-            last_kept_start_by_class[ev.class_id] = ev.start
-
-        kept_sustained.append(ev)
-
-    # b. On-screen cap
-    safety_ids = cfg.safety_ids()
-
-    def priority_key(ev: CaptionEvent) -> tuple:
-        is_safety = ev.class_id in safety_ids
-        return (
-            0 if is_safety else 1,
-            -ev.confidence,
-            ev.start,
-            ev.end,
-            ev.class_id,
-        )
-
-    priority_ordered = sorted(kept_sustained, key=priority_key)
-    accepted: list[CaptionEvent] = []
-    accepted_spans: list[tuple[float, float]] = []
-
-    for ev in priority_ordered:
-        disp_start = ev.start
-        disp_end = max(ev.end, ev.start + min_cue_sec)
-
-        overlapping_spans = [
-            (s, e)
-            for s, e in accepted_spans
-            if max(disp_start, s) < min(disp_end, e)
-        ]
-
-        can_accept = True
-        if len(overlapping_spans) >= max_on_screen:
-            test_instants = {disp_start}
-            for s, e in overlapping_spans:
-                if disp_start <= s < disp_end:
-                    test_instants.add(s)
-
-            for t in test_instants:
-                count = sum(1 for s, e in overlapping_spans if s <= t < e)
-                if count >= max_on_screen:
-                    can_accept = False
-                    break
-
-        if can_accept:
-            accepted.append(ev)
-            accepted_spans.append((disp_start, disp_end))
-
-    accepted.sort(key=lambda e: (e.start, e.end, e.class_id))
-    return accepted
-
-
 def _compute_clip_median_db(mono: np.ndarray, frame_len: int, eps: float = 1e-12) -> float | None:
     clip_n_frames = len(mono) // frame_len
     if clip_n_frames == 0:
@@ -408,4 +302,3 @@ def add_modifiers(
         out_events.append(replace(ev, modifiers=merged_mods))
 
     return out_events
-

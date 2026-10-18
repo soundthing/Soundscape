@@ -60,7 +60,7 @@ def test_detector_filters_ancestors_with_independent_thresholds(cfg, monkeypatch
     copy.classes = [SoundClass('parent','parent',audioset=['Animal']),
                     SoundClass('child','child',audioset=['Bark'],parents=['parent']),
                     SoundClass('sibling','sibling',audioset=['Bird'],parents=['parent'])]
-    copy.pipeline['events']['postprocess'].update(smoothing_sec=0, coarse_margin=0, max_on_screen=3)
+    copy.pipeline['events']['postprocess']['coarse_margin'] = 0
     copy.pipeline['events']['modifiers']['enabled'] = False
     audio=tmp_path/'audio.wav'; sf.write(audio,np.zeros(32000),16000)
     inputs=ExtractedInputs('clip','video',str(audio),str(tmp_path),1,2)
