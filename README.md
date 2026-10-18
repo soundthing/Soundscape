@@ -30,9 +30,9 @@ video ─ ffmpeg ─┬─ audio (16 kHz) ────────────�
 3. **Events** (`events/`): PANNs CNN14 tags sliding 1 s windows, Silero VAD masks speech,
    and per-environment priors reweight class scores. Post-processing smooths, thresholds,
    merges and filters into final caption events.
-4. **Captions and product** (`captions.py`, `server/`, `extension/`): a VTT/SRT writer, a
-   FastAPI demo with baseline and conditioned players side by side, and a Chrome extension
-   that overlays captions on YouTube.
+4. **Captions and product** (`captions.py`, `server/`, `extension/`): a VTT/SRT writer,
+   a local FastAPI backend, and a Chrome extension whose popup controls synchronized
+   captions and soundtrack direction waves on YouTube.
 5. **Evaluation** (`evaluate.py`, `harness/`): event F1 and false positives per minute on
    the AudioSet strong-label eval set, plus a harness that tunes each stage.
 
@@ -109,6 +109,9 @@ soundthing eval --runs runs --labels labels
 ```bash
 soundthing serve
 ```
+
+`serve` starts the local API used by the Chrome extension. The toolbar popup is the
+app interface; there is no separate browser workspace.
 
 `run` writes `runs/<video_id>/` with the extracted inputs, environment segments, and
 baseline/conditioned events and VTT files. The Chrome extension is documented in

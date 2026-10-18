@@ -7,7 +7,39 @@ YouTube player. No Studio handoff, manual MP4 import, or browser download dialog
 required for this flow. Use only your own public or unlisted uploads.
 
 Caption borders also display soundtrack direction waves. No extra toggle or
-microphone permission is required; the popup reports the detected audio mode.
+microphone permission is required.
+
+## Beach popup
+
+The popup is the only app interface. Its Monocraft title changes from `soundscape.`
+to `soundscape!` when the large switch is on; a tilted `click!` caption appears
+briefly when switched on. Original pixel artwork uses sand, sea glass, deep teal,
+and coral. Waves move even when the switch is off. While it is on, shore hits cycle
+through `splish`, `splosh`, `splish`, `splash`, at randomized shoreline positions.
+The complete rotated words stay at least 24 px from the artwork edges, including
+their entrance/exit movement. These are visual effects. The wave period is 5.3
+seconds, with arrivals staggered half a cycle apart. Status text grows downwards
+without moving the label or toggle upwards.
+Body text uses bundled [Departure Mono](https://departuremono.com/) 1.500; its SIL
+Open Font License is included in `assets/DepartureMono-LICENSE.txt`.
+All fonts and artwork load locally. Reduced-motion settings keep the beach still
+and use a simple fade for `click!`.
+
+A short line beside the switch reports the current video's state. **Try again**
+or **Regenerate** appears only when needed. The old upload library and standalone
+backend player have been removed; the server's root now returns JSON API health.
+
+## Caption display timing
+
+Each YouTube caption stays on screen for an extra **0.75 seconds after its VTT end**,
+fading to transparent during that extra time. Overlapping lines fade independently,
+so a new caption stays fully visible while an older one fades. The VTT text, parsed
+start/end times, generated files, and backend processing remain unchanged.
+
+The tail follows media time: pausing freezes the fade, seeking recalculates it,
+and playback speed changes its pace. At the end of a video the last caption can
+finish fading after the media clock stops. The empty panel and direction border
+remain visible. Tune `CAPTION_TAIL_SEC` in `settings.mjs` to change the display tail.
 
 ## Direction waves
 
@@ -28,9 +60,11 @@ not a measurement of a recorded object's physical location.
 - The simple translucent caption panel remains visible and empty between captions,
   with no branding, mode badge, or processing text. It has a minimum size
   of 192 × 64 px (clamped for narrow players). It smoothly grows for longer or
-  overlapping captions and shrinks during gaps. A single closed wave forms the
-  panel border and translucent fill, with all active speaker directions deforming
-  that shared shape. It follows resizing and retains the speaker angles.
+  overlapping captions and shrinks during gaps. A single continuous wave forms the
+  border and translucent fill. Bulges pulse outward and sway slightly along the
+  border, staying close to their speaker directions. Louder channels expand farther;
+  quieter simultaneous directions remain visible. Text layout stays stable while
+  the border deforms, and speaker angles follow panel resizing.
 - Captions use the bundled Minecraft-style [Monocraft v4.2.1](https://github.com/IdreesInc/Monocraft/tree/v4.2.1)
   font. No font service or system font install is needed. The original font and
   its SIL Open Font License are in `assets/Monocraft.ttf` and `assets/Monocraft-LICENSE.txt`.
@@ -39,7 +73,18 @@ not a measurement of a recorded object's physical location.
   during caption gaps, even when no sound class meets its caption threshold.
   Waves follow seeking/playback speed, freeze on pause, and disappear during ads
   or when Soundthing is off. Silence produces a quiet panel rather than invented
-  motion. Reduced-motion preferences disable size transitions and oscillation.
+  motion. Reduced-motion preferences disable size transitions, pulsing, and sway while
+  preserving the directional shape.
+
+Tune `DOA_VISUAL` in `settings.mjs`: `noiseFloor` (0.04), `loudnessExponent` (2.4),
+`directionBias` (0.45), `maxDisplacementPx` (44), `spanScale` (0.8), `pulseDepth`
+(0.2), `pulseHz` (1.4), `swayPx` (8), and `swayHz` (0.14, about 7 seconds per cycle).
+Sway is capped at 8% of each wave's span to preserve closely spaced speaker directions. The exponent
+expands the contrast of the backend's compressed levels. Direction bias reduces
+weaker-channel motion by at most 45%,
+without boosting a quiet recording to full scale. Pulse depth is the fraction by
+which a bulge contracts each cycle; reduced motion uses its full static extent.
+These settings affect display only; existing direction caches and VTT remain valid.
 
 Downloads prefer available six-channel audio in the selected soundtrack language,
 otherwise stereo. FFprobe verifies the downloaded layout. YouTube may expose only
@@ -185,6 +230,19 @@ tabs so the new content script loads. There is no frontend build step.
 The equivalent Python CLI commands are `soundthing doctor` and
 `soundthing sync-extension --destination PATH`.
 
+The popup uses the saved local server address, defaulting to
+`http://127.0.0.1:8000`. To use a different port, open the popup's DevTools
+(right-click the popup, then **Inspect**) and run:
+
+```js
+const { updatePreferences } = await import(chrome.runtime.getURL("preferences.mjs"));
+await updatePreferences({ server: "http://127.0.0.1:8123" });
+```
+
+The setting persists and the popup stays focused on its single toggle. The sync
+helper also removes the four retired library files from existing installations,
+while preserving unrelated files.
+
 ## YouTube authentication
 
 If the popup says YouTube requires browser authentication, you can explicitly
@@ -216,7 +274,7 @@ Follow [yt-dlp's YouTube cookie-export guidance](https://github.com/yt-dlp/yt-dl
    is `www.youtube.com_cookies.txt`. The `--cookies` option is equivalent to setting
    `SOUNDTHING_YOUTUBE_COOKIES` and validates the file before starting the server.
 
-6. Click **Retry this video** in the Soundthing popup. No extension reload or
+6. Click **Try again** in the Soundthing popup. No extension reload or
    new Chrome permissions are required for cookie-file support.
 
 The configured file must be readable and begin with `# Netscape HTTP Cookie File`
@@ -305,9 +363,6 @@ subtitle files in your video player.
   popup. Cookies are used only when an exported file is explicitly configured
   on the backend as described above. Updating yt-dlp may be needed
   when YouTube changes: `python -m pip install -U 'yt-dlp[default]'`.
-- **Open video workspace** preserves the original file-upload library, playback,
-  and original/VTT downloads as a secondary workflow. Its server setting remains
-  independent of the popup setting.
 
 ## Developer playback setting
 
@@ -355,23 +410,16 @@ with an empty `removed` list. Active download/processing/direction jobs return H
 409; wait for that video to finish and retry. Refresh the tab afterward to request
 new processing. A successful clear immediately removes loaded captions and
 direction from the calling tab and pauses automatic processing there. The popup
-shows **Video cache cleared** with a **Regenerate captions** button. Refreshing,
+shows **Video cache cleared** with a **Regenerate** link. Refreshing,
 choosing regeneration, or turning captions off/on allows fresh processing.
 The helper is available in both the normal page and extension DevTools contexts,
 and prints a `[Soundthing] Cache cleared` confirmation on success.
 
-For a specific URL or ID, open the local backend page (normally
-`http://127.0.0.1:8000`) and run:
-
-```js
-await soundthing.clearCache("https://www.youtube.com/watch?v=lpQPfGkmkr8")
-```
-
 The YouTube-tab helper accepts an optional URL/ID too, but requires it to match
-that tab's current watch video. It uses the extension's configured local server,
-so a cross-origin fetch from YouTube is unnecessary.
+that tab's current watch video. It uses the extension's configured local server.
 
-The HTTP equivalent, from the local backend console, is:
+For a specific URL or ID, open the local API address (normally
+`http://127.0.0.1:8000`) and use its DevTools console:
 
 ```js
 await fetch(`/api/youtube/cache?url=${encodeURIComponent("https://youtu.be/lpQPfGkmkr8")}`, {
@@ -404,8 +452,7 @@ environment, extraction, and stage interfaces are unchanged. Job status is in
 memory; generated files use the documented contracts.
 The server is a single-process local demo, not a multi-user job service.
 
-`chrome.storage.local.soundthingPreferences` holds `{enabled, server}`. The old
-`soundthingWorkspace` library metadata is preserved separately. Video bytes and
+`chrome.storage.local.soundthingPreferences` holds `{enabled, server}`. Video bytes and
 VTT tracks are not saved in extension storage. Content-script state is ephemeral:
 reopening a video asks the server to reuse any completed job.
 
@@ -417,8 +464,7 @@ and isolated shadow styles rather than interpreting captions as HTML.
 
 ## Permissions
 
-- `storage`: persistent global preference, server address, and the secondary library.
-- `downloads`: save originals/VTT files from the secondary workspace only.
+- `storage`: persistent global preference and server address.
 - `http://127.0.0.1/*` and `http://localhost/*`: local API access.
 - `https://www.youtube.com/*`: watch-page detection and isolated content script.
 

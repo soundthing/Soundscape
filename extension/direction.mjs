@@ -1,3 +1,27 @@
+import { DOA_VISUAL } from "./settings.mjs";
+
+// Backend levels are compressed dB values. Expand visual contrast without
+// normalizing a quiet soundtrack into loud-looking activity.
+export function directionActivity(levels, settings = DOA_VISUAL) {
+  const drive = Object.fromEntries(Object.entries(levels).map(([channel, level]) => [channel,
+    (Math.max(0, Math.min(1, (level - settings.noiseFloor) / (1 - settings.noiseFloor)))) ** settings.loudnessExponent]));
+  const peak = Math.max(0, ...Object.values(drive));
+  return Object.fromEntries(Object.entries(drive).map(([channel, value]) => [channel,
+    peak ? value * (1 - settings.directionBias + settings.directionBias * value / peak) : 0]));
+}
+
+export function waveDisplacement(delta, span, activity, time, reducedMotion = false, settings = DOA_VISUAL) {
+  // Small tangential sway, capped for closely spaced speakers and narrow panels.
+  const sway = reducedMotion ? 0 : Math.min(settings.swayPx, span * .08) * Math.sin(time * Math.PI * 2 * settings.swayHz);
+  const t = (delta - sway) / span + .5;
+  if (t <= 0 || t >= 1 || !activity) return 0;
+  const envelope = Math.sin(t * Math.PI) ** 2;
+  const profile = .8 + .2 * Math.cos((t - .5) * Math.PI * 4);
+  // Outward pulsing and limited sway keep motion close to the sound's direction.
+  const pulse = reducedMotion ? 1 : 1 - settings.pulseDepth * (.5 - .5 * Math.cos(time * Math.PI * 2 * settings.pulseHz));
+  return settings.maxDisplacementPx * activity * envelope * profile * pulse;
+}
+
 // Consumer validation for the documented DirectionTrack wire format.
 export function validateDirection(track) {
   const layouts = { stereo: ["FL", "FR"], surround51: ["FL", "FR", "FC", "SL", "SR"], unavailable: [] };
@@ -123,6 +147,7 @@ export class DirectionWaves {
   render(time, visible) {
     this.lastTime = time; this.lastVisible = visible;
     const levels = visible ? levelsAt(this.track, time) : {};
+    const activity = directionActivity(levels);
     this.svg.style.visibility = visible ? "visible" : "hidden";
     if (!this.width || !this.height) this.measure();
     if (!this.width || !this.height) return;
@@ -136,6 +161,7 @@ export class DirectionWaves {
           const gap = Math.abs(anchor.distance - neighbor.distance);
           anchor.span = Math.min(anchor.span, Math.min(gap, anchor.perimeter - gap) * 1.15);
         }
+        anchor.span *= DOA_VISUAL.spanScale;
       }
     }
     const radius = Math.min(12, this.width / 2, this.height / 2);
@@ -148,21 +174,17 @@ export class DirectionWaves {
       const edge = roundedBorder(this.width, this.height, radius, distance);
       let outward = 0;
       for (const [channel, anchor] of this.anchors) {
-        const strength = levels[channel] || 0;
-        if (strength <= .04) continue;
+        const strength = activity[channel] || 0;
+        if (!strength) continue;
         const delta = ((distance - anchor.distance + perimeter * 1.5) % perimeter) - perimeter / 2;
-        const t = delta / anchor.span + .5;
-        if (t <= 0 || t >= 1) continue;
-        const envelope = Math.sin(t * Math.PI) ** 1.5;
-        const swell = this.motion?.matches ? 0 : .55 + .45 * Math.sin(t * Math.PI * 3.4 - time * 3.4);
-        outward += envelope * strength * (2 + (9 + strength * 23) * swell);
+        outward += waveDisplacement(delta, anchor.span, strength, time, this.motion?.matches);
       }
-      outward = Math.min(40, outward);
+      outward = Math.min(DOA_VISUAL.maxDisplacementPx, outward);
       points.push(`${i ? "L" : "M"}${(edge.x + edge.nx * outward).toFixed(2)},${(edge.y + edge.ny * outward).toFixed(2)}`);
     }
     const geometry = points.join(" ") + " Z";
     if (this.path.getAttribute("d") !== geometry) this.path.setAttribute("d", geometry);
-    const strength = Math.max(0, ...Object.values(levels));
+    const strength = Math.max(0, ...Object.values(activity));
     this.path.setAttribute("stroke-opacity", String(.18 + .28 * strength));
   }
 

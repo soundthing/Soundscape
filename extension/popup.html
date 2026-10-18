@@ -1,15 +1,50 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Soundthing captions</title><link rel="stylesheet" href="popup.css"><script type="module" src="popup.js"></script></head>
-<body>
-  <header><span class="brand">▥ soundthing<span>.</span></span><span class="tag">SOUND CAPTIONS</span></header>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>soundscape.</title>
+  <link rel="preload" href="assets/Monocraft.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/DepartureMono-1.500.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body data-enabled="false">
   <main>
-    <div class="toggle-row"><div><h1>Hear the whole picture.</h1><p>Sound captions on YouTube</p></div><label class="switch"><input id="enabled" type="checkbox" role="switch" aria-label="Enable Soundthing on YouTube"><span></span></label></div>
-    <section class="status-panel" aria-live="polite"><span id="status-dot"></span><div><h2 id="status-title">Soundthing is off</h2><p id="status-detail">Turn on to caption the videos you open.</p></div></section>
-    <p id="demo" hidden>Demo captions · your server is using stub model backends.</p>
-    <button id="retry" class="primary" type="button" hidden>Retry this video</button>
-    <p class="hint">For your own public and unlisted uploads. Captions appear at the bottom right of the YouTube player.</p>
-    <details><summary>Local server connection</summary><form id="connection"><label for="server">Server address</label><div class="input-row"><input id="server" type="url" required><button type="submit">Save</button></div><p id="connection-message" role="status"></p></form></details>
+    <header class="masthead">
+      <h1 id="title">soundscape<span id="title-mark">.</span></h1>
+    </header>
+    <figure class="beach" aria-hidden="true">
+      <img class="beach-art" src="assets/beach.svg" width="384" height="204" alt="" draggable="false">
+      <svg class="surf" viewBox="0 0 192 102" fill="none">
+        <g class="shore-wave">
+          <path fill="#78a99c" fill-opacity=".45" d="M-12 61h22v3h24v2h25v-3h22v-3h22v-3h22v-3h25v-3h25v-3h29v17h-29v3h-25v3h-25v3h-22v3H81v3H59v3H34v-2H10v-3h-22z"/>
+          <path stroke="#f6e5be" stroke-width="2" d="M-12 78h22v3h24v2h25v-3h22v-3h22v-3h22v-3h25v-3h25v-3h29"/>
+          <path stroke="#f6e5be" stroke-opacity=".5" d="M-5 74h13m23 4h18m24-3h10m22-6h15m18-4h18m20-5h12"/>
+        </g>
+        <g class="shore-wave shore-wave-later">
+          <path stroke="#f6e5be" stroke-width="1.5" d="M-12 78h22v3h24v2h25v-3h22v-3h22v-3h22v-3h25v-3h25v-3h29"/>
+        </g>
+      </svg>
+      <span class="surf-caption"></span>
+    </figure>
+    <section class="controls" aria-label="Sound captions">
+      <div class="control-copy">
+        <p id="toggle-label">Sound captions<br>for your videos.</p>
+        <p id="status-detail" role="status" aria-live="polite" aria-atomic="true">Turn on for YouTube.</p>
+        <button id="retry" type="button" hidden>Try again</button>
+      </div>
+      <label class="toggle">
+        <input id="enabled" type="checkbox" role="switch" aria-label="Sound captions on YouTube" aria-describedby="status-detail" disabled>
+        <span class="toggle-track" aria-hidden="true">
+          <span class="toggle-word toggle-word-on">on</span>
+          <span class="toggle-word toggle-word-off">off</span>
+          <span class="toggle-thumb"></span>
+        </span>
+        <span id="click-caption" aria-hidden="true">click!</span>
+      </label>
+    </section>
   </main>
-  <footer><button id="workspace" type="button">Open video workspace ↗</button><span>More than words.</span></footer>
-</body></html>
+</body>
+</html>

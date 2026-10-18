@@ -4,7 +4,7 @@ import { parseVtt, activeCaption } from '../vtt.mjs';
 import { watchVideoId } from '../settings.mjs';
 import { readPreferences, updatePreferences } from '../preferences.mjs';
 import { handlePlayerRequest } from '../worker.mjs';
-import { CaptionController } from '../player.mjs';
+import { CaptionController, displayedCaptions } from '../player.mjs';
 
 const id='aB3dE_fG-12', url=`https://www.youtube.com/watch?v=${id}`;
 const vtt='WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n[footsteps]\n\nsecond\n00:00:02.000 --> 00:00:04.000\n[door slams]\nsecond line\n';
@@ -20,6 +20,22 @@ test('VTT handles overlap, seek boundaries, multiline text, BOM, CRLF, identifie
   assert.equal(parseVtt('WEBVTT\n\n01:00:00.000 --> 01:00:02.000\n[test]\n')[0].start,3600);
   for(const text of ['not VTT','WEBVTT\n\n00:00:03.000 --> 00:00:01.000\nwrong\n','WEBVTT\n\n00:70:00.000 --> 00:71:00.000\nwrong\n'])assert.throws(()=>parseVtt(text));
   assert.deepEqual(parseVtt('WEBVTT\n\n'),[]);
+});
+
+test('display adds a 0.75-second fade per cue without changing VTT timing or fading newer captions',()=>{
+  const cues = Object.freeze(parseVtt(vtt).map(cue => Object.freeze(cue)));
+  const original = JSON.stringify(cues);
+  const at = time => displayedCaptions(cues, time).map(({cue, opacity}) => [cue.text, opacity]);
+  assert.deepEqual(at(.99), []);
+  assert.deepEqual(at(3), [['[footsteps]', 1], ['[door slams]\nsecond line', 1]]);
+  assert.deepEqual(at(3.375), [['[footsteps]', .5], ['[door slams]\nsecond line', 1]]);
+  assert.deepEqual(at(3.75), [['[door slams]\nsecond line', 1]]);
+  assert.deepEqual(at(4.375), [['[door slams]\nsecond line', .5]]);
+  assert.deepEqual(at(4.75), []);
+  // Seeking backwards restores the original line and its full opacity.
+  assert.deepEqual(at(1), [['[footsteps]', 1]]);
+  assert.equal(JSON.stringify(cues), original);
+  assert.equal(activeCaption(cues, 4.375), ''); // Original VTT semantics remain unchanged.
 });
 
 test('only standard www.youtube.com watch pages enable automatic processing',()=>{
