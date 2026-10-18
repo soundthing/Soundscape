@@ -44,6 +44,26 @@ events:             # Person 1
     min_speech_sec: 0.25
     pad_sec: 0.1
     merge_gap_sec: 0.3
+  separation:
+    enabled: false
+    model: htdemucs             # demucs pretrained model name
+    gate_labels:                # AudioSet labels that trigger separation of a window
+      - "Speech"
+      - "Male speech, man speaking"
+      - "Female speech, woman speaking"
+      - "Conversation"
+      - "Narration, monologue"
+      - "Music"
+      - "Singing"
+      - "Song"
+    gate_threshold: 0.3         # window gated if max gate-label prob >= this
+    gate_vad: true              # also gate VAD speech regions
+    pad_sec: 0.5                # pad gated spans on both sides
+    crossfade_sec: 0.05         # linear crossfade at span and chunk edges
+    chunk_sec: 10.0             # longest piece passed to the separator at once
+    fusion: max                 # max | sep | weighted   (masked windows only)
+    sep_weight: 0.5             # weighted: sep_weight*sep + (1-sep_weight)*raw
+    suppress_under_speech: 1.0  # VAD suppression factor for non-safety classes on masked windows
   postprocess:
     smoothing_sec: 0.5          # two-sided median filter width
     min_event_sec: 0.3
