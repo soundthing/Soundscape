@@ -62,3 +62,11 @@ Captions and pipeline evaluation match predicted caption cues against labeled ev
 ## Pipeline search space is the de-duplicated union of constituent components — pipeline
 The pipeline component search space aggregates parameters from the events, environment, and captions stages by querying `space()` on each component and dropping duplicate parameter entries.
 
+## Trusted scorer overlay isolates candidate code — harness
+Scoring candidate code changes uses an overlay directory created by archiving the pinned commit (default HEAD of main checkout) for `src`, `config`, and `pyproject.toml`. Only the component's declared `code_paths` and non-shared `config/` files are copied from the candidate worktree, with the `eval:` section in `pipeline.yaml` strictly restored from the pinned commit and shared yaml files (`environments.yaml`, `vocabulary.yaml`, `priors.yaml`) preserved from pinned. This guarantees that candidate code cannot alter the objective, harness, or evaluation parameters.
+
+## Code experiments run in short worktrees and prune unaccepted branches — harness
+Code experiments run in dedicated git worktrees located under `<main_checkout parent>/.wt/soundthing-exp-<id>` to mitigate Windows MAX_PATH limitations. If the candidate fails limit checks or paired bootstrap acceptance against current best, its worktree and branch are automatically removed to prevent repo clutter. Accepted runs keep their branch for promotion.
+
+## Code promotion targets review branches with tamper verification — harness
+`promote_code` verifies that the experiment was accepted, validates the patch SHA against the recorded ledger entry to detect any tampering, enforces holdout gating on events, and creates a local `harness/review/<run_id>` branch. It never automatically merges into user branches or pushes to remotes, keeping human review as the final gate for code promotion.
