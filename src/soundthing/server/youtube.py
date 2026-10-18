@@ -19,6 +19,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from ..pipeline import MODES, run_video
 from .. import contracts as C
@@ -26,6 +27,35 @@ from ..direction import ensure_direction
 
 VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}\Z")
 COOKIE_ENV = "SOUNDTHING_YOUTUBE_COOKIES"
+
+
+class CacheBusyError(RuntimeError):
+    pass
+
+
+def youtube_id_from_url(value: str) -> str:
+    """Parse a supported YouTube link or ID without fetching any remote URL."""
+    value = value.strip()
+    if VIDEO_ID.fullmatch(value):
+        return value
+    parsed = urlsplit(value)
+    if (parsed.scheme not in {"http", "https"} or parsed.username or parsed.password
+            or parsed.port is not None):
+        raise ValueError("Provide a YouTube video URL or its 11-character ID.")
+    parts = parsed.path.strip("/").split("/")
+    youtube_id = None
+    if parsed.hostname == "youtu.be":
+        youtube_id = parts[0]
+    elif parsed.hostname in {"youtube.com", "www.youtube.com", "m.youtube.com"}:
+        if parsed.path.rstrip("/") == "/watch":
+            youtube_id = parse_qs(parsed.query).get("v", [None])[0]
+        elif len(parts) == 2 and parts[0] in {"shorts", "live", "embed"}:
+            youtube_id = parts[1]
+    elif parsed.hostname == "studio.youtube.com" and len(parts) >= 2 and parts[0] == "video":
+        youtube_id = parts[1]
+    if not youtube_id or not VIDEO_ID.fullmatch(youtube_id):
+        raise ValueError("Provide a YouTube video URL or its 11-character ID.")
+    return youtube_id
 
 
 def audio_format(metadata: dict) -> str:
@@ -153,6 +183,36 @@ class YouTubeJobs:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="soundthing-youtube")
         self.lock = threading.Lock()
         self.direction_pending = set()
+
+    def clear_cache(self, youtube_id: str) -> dict:
+        """Clear one idle video's results/downloads, serialized against submission."""
+        if not VIDEO_ID.fullmatch(youtube_id):
+            raise ValueError("Invalid YouTube video ID")
+        video_id = f"youtube_{youtube_id}"
+        with self.lock:
+            active = self.status.get(video_id, {}).get("status")
+            if active in {"queued", "downloading", "processing"} or video_id in self.direction_pending:
+                raise CacheBusyError("This video is still processing. Wait for it to finish, then clear its cache.")
+            targets = [(self.runs / video_id, self.runs, "results"),
+                       (self.uploads / "youtube" / youtube_id, self.uploads, "downloads")]
+            # Older acquisition paths may hold the same video's original directly.
+            targets.extend((self.uploads / f"{video_id}.{ext}", self.uploads, "downloads")
+                           for ext in ("mp4", "mkv", "webm", "mov"))
+            for path, root, _ in targets:
+                if not path.parent.resolve().is_relative_to(root.resolve()):
+                    raise ValueError("The video cache is outside the configured storage directory.")
+            removed = []
+            self.status.pop(video_id, None)
+            for path, _, kind in targets:
+                if path.is_symlink() or path.is_file():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    continue
+                if kind not in removed:
+                    removed.append(kind)
+            return {"video_id": video_id, "cleared": True, "removed": removed}
 
     def queue_direction(self, video_id: str) -> None:
         """Backfill older runs on the same serialized executor without blocking captions."""

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -23,11 +24,12 @@ from . import contracts as C
 from .captions import merge_subtitle_files, read_subtitles, write_captions
 from .config import Config, ConfigError, load_config, read_audioset_labels
 from .evaluate import EventCounts, check_labels, env_accuracy, score_events
-from .extract import extract, video_id_for
+from .extract import extract, video_id_for, prepare_analysis_video
 from .direction import ensure_direction
 from .stages import get_environment_classifier, get_event_detector
 
 MODES = ("baseline", "conditioned")
+LOG = logging.getLogger(__name__)
 
 
 def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES,
@@ -45,11 +47,22 @@ def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES
         run_dir = source.parent
     else:
         run_dir = Path(runs_dir) / video_id_for(source)
+        LOG.info("Extracting audio and frames: %s", source)
         inputs = extract(source, run_dir, cfg)
         C.save_inputs(inputs, run_dir / "inputs.json")
 
+    # Soundtrack direction is independent of event confidence/model success.
+    # Make it available to the player before the slower caption stages.
+    ensure_direction(inputs.video_path, run_dir, inputs.duration)
+    if cfg.pipeline["environment"]["backend"] == "real":
+        compatible = prepare_analysis_video(inputs.video_path, run_dir)
+        if str(compatible) != inputs.video_path:
+            inputs.video_path = str(compatible)
+            C.save_inputs(inputs, run_dir / "inputs.json")
+
     segments = None
     if "conditioned" in modes:
+        LOG.info("Classifying environment (%s backend): %s", cfg.pipeline["environment"]["backend"], inputs.video_id)
         segments = get_environment_classifier(cfg)(inputs, cfg)
         C.validate_segments(segments, inputs.duration)
         C.save_segments(segments, run_dir / "env_segments.json")
@@ -57,14 +70,15 @@ def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES
     detect = get_event_detector(cfg)
     ccfg = cfg.pipeline["captions"]
     for mode in modes:
+        LOG.info("Detecting %s events (%s backend): %s", mode, cfg.pipeline["events"]["backend"], inputs.video_id)
         events = detect(inputs, segments if mode == "conditioned" else None, cfg)
         C.save_events(events, run_dir / f"events.{mode}.json")
         caption_path = run_dir / f"captions.{mode}.vtt"
         write_captions(events, caption_path, ccfg["min_cue_sec"], ccfg["max_cue_sec"], hierarchy=cfg.hierarchy())
+        LOG.info("Wrote %s (%d events)", caption_path, len(events))
         if speech_subtitles is not None:
             # Keep canonical sound-only captions intact for the YouTube overlay.
             merge_subtitle_files(caption_path, speech_subtitles, run_dir / f"captions.{mode}.merged.vtt")
-    ensure_direction(inputs.video_path, run_dir, inputs.duration)
     return run_dir
 
 

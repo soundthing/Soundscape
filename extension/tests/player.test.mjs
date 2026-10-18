@@ -4,6 +4,7 @@ import { parseVtt, activeCaption } from '../vtt.mjs';
 import { watchVideoId } from '../settings.mjs';
 import { readPreferences, updatePreferences } from '../preferences.mjs';
 import { handlePlayerRequest } from '../worker.mjs';
+import { CaptionController } from '../player.mjs';
 
 const id='aB3dE_fG-12', url=`https://www.youtube.com/watch?v=${id}`;
 const vtt='WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n[footsteps]\n\nsecond\n00:00:02.000 --> 00:00:04.000\n[door slams]\nsecond line\n';
@@ -39,6 +40,23 @@ test('preferences default off and persist toggle separately from the old library
 const sender={id:'extension',frameId:0,tab:{id:1},url};
 const deps={extensionId:'extension',getTab:async()=>({url}),preferences:async()=>({enabled:true,server:'http://localhost:8000'})};
 
+test('console cache deletion is scoped to the current video and works while captions are off',async()=>{
+  const calls=[];
+  const options={...deps,preferences:async()=>({enabled:false,server:'http://localhost:8000'}),fetcher:async(address,init)=>{
+    calls.push([address,init]);
+    return Response.json({video_id:`youtube_${id}`,cleared:true,removed:['results','downloads']});
+  }};
+  const message={youtubeId:id,action:'clearCache',url};
+  const result=await handlePlayerRequest(message,sender,options);
+  assert.equal(result.cleared,true);
+  assert.equal(calls[0][0],`http://localhost:8000/api/youtube/cache?url=${id}`);
+  assert.equal(calls[0][1].method,'DELETE');
+  await assert.rejects(handlePlayerRequest({...message,url:'https://youtu.be/xY3dE_fG-12'},sender,options),/Open that video's/);
+  await assert.rejects(handlePlayerRequest(message,{...sender,frameId:1},options),/Unsupported/);
+  await assert.rejects(handlePlayerRequest(message,sender,{...options,fetcher:async()=>Response.json({detail:'Still processing'},{status:409})}),/Still processing/);
+  assert.equal(calls.length,1);
+});
+
 test('worker constructs local requests from verified sender IDs and returns status / VTT',async()=>{
   const calls=[];
   const options={...deps,fetcher:async(address,init)=>{
@@ -64,4 +82,50 @@ test('worker rejects foreign frames, stale videos, disabled state, and arbitrary
   await assert.rejects(handlePlayerRequest({...message,youtubeId:'xY3dE_fG-12'},sender,{...deps,fetcher}),/changed/);
   await assert.rejects(handlePlayerRequest({...message,action:'fetch',url:'https://evil.test'},sender,{...deps,fetcher}),/Unknown/);
   await assert.rejects(handlePlayerRequest(message,sender,{...deps,fetcher,preferences:async()=>({enabled:false})}),/off/);
+});
+
+test('worker retrieves scenes through the existing verified environment endpoint',async()=>{
+  const scenes=[{start:0,end:4,env:'general',confidence:.8,probs:{general:1}}];
+  const options={...deps,fetcher:async address=>{
+    assert.equal(address,`http://localhost:8000/api/videos/youtube_${id}/env_segments`);
+    return Response.json(scenes);
+  }};
+  assert.deepEqual(await handlePlayerRequest({youtubeId:id,action:'scenes'},sender,options),{scenes});
+  await assert.rejects(handlePlayerRequest({youtubeId:id,action:'scenes'},{...sender,frameId:1},options));
+  await assert.rejects(handlePlayerRequest({youtubeId:id,action:'scenes'},sender,{...options,fetcher:async()=>Response.json({unexpected:true})}),/invalid environment scenes/);
+});
+
+test('completion logs full VTT and scenes once without affecting the ready state',async()=>{
+  const messages=[],scenes=[{start:0,end:4,env:'general',confidence:1,probs:{general:1}}];
+  const session={id,server:'http://localhost:8000',demo:false,status:'done'};
+  let requests=0;
+  const controller={window:{console:{log:(...args)=>messages.push(args)}},isCurrent:s=>s===session,
+    request:async(s,action)=>{assert.equal(action,'scenes');requests++;return {scenes}}};
+  await Promise.all([CaptionController.prototype.logCompletion.call(controller,session,vtt),CaptionController.prototype.logCompletion.call(controller,session,vtt)]);
+  assert.equal(requests,1);
+  assert.equal(messages.length,3);
+  const metadata=JSON.parse(messages[0][0].split('\n').slice(1).join('\n'));
+  assert.equal(metadata.youtubeId,id);
+  assert.equal(metadata.demo,false);
+  assert.ok(messages[1][0].endsWith(vtt));
+  assert.deepEqual(JSON.parse(messages[2][0].split('\n').slice(1).join('\n')),scenes);
+  assert.equal(session.status,'done');
+});
+
+test('scene diagnostics do not break captions and stale completion responses are ignored',async()=>{
+  const messages=[],session={id,server:'http://localhost:8000',status:'done'};
+  const controller={window:{console:{log:(...args)=>messages.push(args)}},isCurrent:()=>true,
+    request:async()=>{throw Error('Scenes endpoint unavailable')}};
+  await CaptionController.prototype.logCompletion.call(controller,session,vtt);
+  assert.ok(messages[1][0].includes(vtt));
+  assert.equal(messages[2][0],'[Soundthing] Scenes unavailable: Scenes endpoint unavailable');
+  assert.equal(session.status,'done');
+  let current=true,resolve;
+  controller.isCurrent=()=>current;
+  controller.request=()=>new Promise(r=>resolve=r);
+  const pending=CaptionController.prototype.logCompletion.call(controller,{...session,completionLogged:false},vtt);
+  current=false;
+  resolve({scenes:[]});
+  await pending;
+  assert.equal(messages.length,3);
 });

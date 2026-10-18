@@ -29,6 +29,16 @@
 const $ = (id) => document.getElementById(id);
 let segments = [];
 
+window.soundthing = {
+  async clearCache(url) {
+    if (typeof url !== "string" || !url.trim()) throw new Error("Provide a YouTube URL or video ID.");
+    const response = await fetch(`/api/youtube/cache?url=${encodeURIComponent(url)}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "Couldn't clear the video cache.");
+    return result;
+  }
+};
+
 function load(videoId) {
   for (const mode of ["baseline", "conditioned"]) {
     const v = $(mode);

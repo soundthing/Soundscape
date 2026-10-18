@@ -27,7 +27,7 @@ export function uploadFilename(file, token) {
 
 export function apiUrl(server, videoId, resource = "") {
   if (typeof videoId !== "string" || !/^[A-Za-z0-9_-]+$/.test(videoId)) throw new Error("The server returned an invalid video ID.");
-  if (!["", "/video", "/captions/baseline.vtt", "/captions/conditioned.vtt", "/direction"].includes(resource)) {
+  if (!["", "/video", "/captions/baseline.vtt", "/captions/conditioned.vtt", "/direction", "/env_segments"].includes(resource)) {
     throw new Error("Unknown video resource.");
   }
   return `${normalizeServer(server)}/api/videos/${videoId}${resource}`;
