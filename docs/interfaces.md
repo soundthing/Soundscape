@@ -14,7 +14,7 @@ video ──► [P3 extract] ──inputs.json──┬──► [P2 environment
 Every JSON file is wrapped in an envelope so stale files fail loudly:
 
 ```json
-{ "schema_version": 1, "kind": "<kind>", "data": ... }
+{ "schema_version": 2, "kind": "<kind>", "data": ... }
 ```
 
 Loaders also accept the bare `data` payload, so hand-written fakes can skip the envelope.
@@ -70,7 +70,7 @@ with fine class ids only. See [`labels/README.md`](../labels/README.md).
 
 ## Direction track — Person 3 analyzer → server/extension (`runs/<id>/direction.json`)
 
-Independent of event/environment models. Uses the existing schema-version-1 envelope
+Independent of event/environment models. Uses the schema-version-2 envelope
 with `kind: "direction"`. This additive artifact does not change existing payloads.
 
 `DirectionTrack = {duration: float, mode: str, channels: list[str], frames: list[DirectionFrame]}`;
@@ -116,7 +116,7 @@ streaming wrapper can reuse it.
 | file | owner | what |
 |---|---|---|
 | `environments.yaml` | P2 | environment ids + CLIP/CLAP prompts; must include `general` |
-| `vocabulary.yaml` | P1 | caption classes, AudioSet mapping, CLAP prompts, coarse groups, `safety`, `sustained` |
+| `vocabulary.yaml` | P1 | caption classes, required AudioSet mapping, coarse groups, `safety`, `sustained` |
 | `priors.yaml` | **P2 (single owner)** | `P(event \| env)` weights; semantics below |
 | `thresholds.yaml` | P1 | per-class thresholds |
 | `pipeline.yaml` | per section | window/hop, models, fusion weights, post-processing, eval tolerance |
@@ -146,7 +146,7 @@ thresholds from `thresholds.yaml` apply to the conditioned score.
 ## Optional sound hierarchy
 
 A sound class in `vocabulary.yaml` may include `parents: [class_id, ...]`.
-The default is `[]`, so existing config and schema-version-1 artifacts remain valid.
+The default is `[]`; the optional hierarchy field does not change the JSON payload shape.
 Parents must reference vocabulary classes or coarse groups. Multiple parents are
 allowed; unknown ids, duplicate parents and cycles are rejected by `check-config`.
 Existing `coarse` membership also makes that group an ancestor for display purposes.
@@ -157,23 +157,20 @@ qualifying descendant. Parent and child meet their own thresholds independently;
 siblings and unrelated simultaneous events remain eligible. Apply this after
 thresholds/minimum event duration and before the concurrent-caption limit.
 Person 3 uses the same hierarchy when extending cue durations, so readability
-padding cannot reintroduce parent/child duplicates. The event JSON fields and
-schema version do not change; Person 2's environment outputs are unchanged.
+padding cannot reintroduce parent/child duplicates. The hierarchy does not add event JSON fields; Person 2's environment payload is unchanged.
 See `docs/examples/hierarchy.yaml` for a configuration-only example.
 
 ### Full AudioSet vocabulary
 
-The live vocabulary contains 527 independently scored AudioSet labels plus five
-existing CLAP-only classes. Every PANNs output maps to exactly one caption class.
+The live vocabulary contains exactly 527 independently scored AudioSet labels. Every PANNs output maps to exactly one caption class.
 Existing class ids are retained for their first (primary) AudioSet label. Former
 aliases become independent classes; this prevents a broad label such as `Dog`
 from directly scoring the existing `dog_bark` class. New ids are
 `audioset_` plus the AudioSet machine id with slashes replaced by underscores
-(e.g. `/m/09x0r` becomes `audioset_m_09x0r`). No existing id is renamed.
+(e.g. `/m/09x0r` becomes `audioset_m_09x0r`). No retained AudioSet class id is renamed.
 `parents` comes from all paths in the AudioSet ontology, projected through any
 unscored intermediate nodes to the nearest scored ancestors. Multiple inheritance
-is retained. Existing labels and stored JSON stay loadable; regenerating runs is
-necessary to see expanded detection and hierarchy filtering.
+is retained. See the schema-version-2 migration below for stored JSON and retired ids.
 
 ## Prior application modes
 
@@ -195,8 +192,39 @@ The resulting unit-range score is not a calibrated real-world probability.
 The fitted table replaces manually chosen scene coefficients. It estimates weak
 annotation enrichment from Sound-VECaps context descriptions joined with AudioSet
 training annotations, with video-id holdout, excluded evaluation ids, shrinkage and
-neutral unsupported cases. It covers all 527 PANNs labels; the five CLAP-only
-classes have no dataset label mapping and remain neutral. Person 2 owns this table;
-Person 1 consumes it, and Person 3 receives the same schema-version-1 event JSON.
-No environment id or stored JSON field changes. See `docs/environment-priors.md`,
+neutral unsupported cases. It covers all 527 PANNs labels. Person 2 owns this table;
+Person 1 consumes it, and Person 3 receives schema-version-2 event JSON.
+No environment id or stored JSON payload field changes. See `docs/environment-priors.md`,
 `docs/research/sound-priors-report.json`, and `docs/examples/priors-odds.yaml`.
+
+
+## Schema version 2: PANNs-only sound events
+
+Sound-event classification uses only PANNs. CLAP remains in Person 2's audio
+branch for environment inference; its environment model and prompts are unchanged.
+`SoundClass.clap` and vocabulary `clap` fields have been removed. Every sound
+class must have an AudioSet mapping; validation is stricter, not relaxed.
+The event-stage CLAP model/calibration settings have been removed.
+
+The five unmapped ids `kettle_whistle`, `mouse_click`, `turn_signal`, `seatbelt`,
+and `ball_bounce` and their prior entries are retired. They are not replaced
+with generic click/whistle detections that would imply unsupported specificity.
+All 527 AudioSet labels, their existing ids, hierarchy, and coefficients remain.
+
+This breaks old configuration and persisted-run compatibility, so `SCHEMA_VERSION`
+is 2. Version-1 envelopes are rejected for inputs, environments, events, direction,
+and hand labels. Reprocess source media to regenerate `inputs.json`,
+`env_segments.json`, `events.{baseline,conditioned}.json`, `direction.json`, and
+both VTT tracks. Review hand labels separately: remove or deliberately relabel
+annotations using retired ids before saving them with version 2. Do not simply
+change old model-output version numbers, because that would preserve CLAP captions.
+Bare payloads remain supported for hand-written fakes under the current vocabulary.
+
+The server validates input and event artifacts before treating a cached run as
+complete or serving its VTT. A stale run is queued for fresh processing on the
+next YouTube submission. No API routes or JSON payload fields are renamed.
+
+The original priors research report remains an immutable record of its fitting
+run, including five zero-support neutral columns and its original diagnostic
+losses. The live table is the projection onto the 527 retained classes; retained
+coefficients are unchanged and reproduce from the corresponding report columns.

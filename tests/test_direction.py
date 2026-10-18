@@ -111,6 +111,7 @@ def test_direction_endpoint_backfills_once_without_reprocessing_captions(tmp_pat
     run.mkdir(parents=True)
     C.save_inputs(C.ExtractedInputs(key, "old.mp4", "audio.wav", str(run), 1, 2), run / "inputs.json")
     for mode in ("baseline", "conditioned"):
+        C.save_events([], run / f"events.{mode}.json")
         (run / f"captions.{mode}.vtt").write_text("WEBVTT\n\n")
     entered, release = threading.Event(), threading.Event()
 

@@ -106,7 +106,7 @@ Shared and changed only by agreement: `contracts.py`, `config.py`, `stages.py`,
 The full spec is in [docs/interfaces.md](docs/interfaces.md). The source of truth is
 [src/soundthing/contracts.py](src/soundthing/contracts.py), and valid examples are in
 [docs/examples/](docs/examples/). Every JSON file uses the envelope
-`{"schema_version": 1, "kind": ..., "data": ...}`, so a stale or mismatched file fails
+`{"schema_version": 2, "kind": ..., "data": ...}`, so a stale or mismatched file fails
 loudly. Loaders also accept the bare payload for hand-written fakes.
 
 | Contract | Direction | File | Shape |
@@ -146,8 +146,8 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
 
 | File | Owner | Contents |
 |---|---|---|
-| `environments.yaml` | P2 | 7 environments (`general` + 6), each with CLIP visual prompts and CLAP audio prompts |
-| `vocabulary.yaml` | P1 | 61 classes (10 safety) with caption text, AudioSet label mapping, legacy unused CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
+| `environments.yaml` | P2 | 14 environments (`general` + 13), each with CLIP visual prompts and CLAP audio prompts |
+| `vocabulary.yaml` | P1 | 527 classes (18 safety) with caption text, required AudioSet label mapping, coarse group, `safety` and `sustained` flags; 7 coarse groups |
 | `priors.yaml` | P2 | per-environment coefficients, `floor`, `application`, `max_gain` |
 | `thresholds.yaml` | P1 | default 0.5, safety default 0.6, per-class overrides (e.g. gunshot 0.75) |
 | `pipeline.yaml` | per section | backends, extraction rate/fps, segmentation, model names, fusion weights, window/hop, VAD suppression, post-processing params, caption cue limits, eval tolerance |

@@ -6,8 +6,7 @@
 #   audioset AudioSet ontology display names whose tagger scores map to this class
 #            (class score = max over listed labels). Must match the tagger's label
 #            CSV exactly; `soundthing check-config --audioset <csv>` verifies this.
-#   clap     zero-shot CLAP prompts, used for classes AudioSet covers poorly or
-#            as a second opinion. A class needs at least one of audioset/clap.
+#            Every class must have at least one AudioSet mapping.
 #   coarse   optional coarse group id; used when the detector is unsure between
 #            confusable fine classes (e.g. door_slam vs gunshot -> impact).
 #   safety   true = safety-critical: bypasses environment conditioning.
@@ -15,7 +14,7 @@
 #
 # parents  optional direct ancestors; unknown ids and cycles are rejected.
 #
-# Full 527-class PANNs vocabulary plus the five existing CLAP-only classes.
+# Full 527-class PANNs vocabulary; sound-event scoring uses only PANNs.
 # Existing class ids keep their primary AudioSet label; former aliases have their
 # own output class so a parent score cannot falsely trigger its specific child.
 # Hierarchy derived from Google's AudioSet ontology, CC BY-SA 4.0:
@@ -38,17 +37,17 @@ classes:
   - {id: alarm_ringing, caption: alarm ringing, audioset: [Alarm], coarse: alarm, safety: true, parents: []}
   - {id: car_alarm, caption: car alarm, audioset: [Car alarm], coarse: alarm, safety: true, parents: [alarm_ringing, audioset_m_0k4j]}
   - {id: car_horn, caption: car horn honks, audioset: ['Vehicle horn, car horn, honking'], coarse: vehicle, safety: true, parents: [alarm_ringing, audioset_m_0k4j]}
-  - {id: glass_break, caption: glass shatters, audioset: [Shatter], clap: [glass shattering], coarse: impact, safety: true, parents: [audioset_m_039jq]}
+  - {id: glass_break, caption: glass shatters, audioset: [Shatter], coarse: impact, safety: true, parents: [audioset_m_039jq]}
   - {id: scream, caption: someone screams, audioset: [Screaming], safety: true, parents: []}
   - {id: gunshot, caption: gunshot, audioset: ['Gunshot, gunfire'], coarse: impact, safety: true, parents: [explosion]}
   - {id: explosion, caption: explosion, audioset: [Explosion], coarse: impact, safety: true, parents: []}
   - {id: baby_cry, caption: baby crying, audioset: ['Baby cry, infant cry'], safety: true, parents: [audioset_m_0463cq4]}
 
   # --- household / indoor ------------------------------------------------------
-  - {id: door_slam, caption: door slams, audioset: [Slam], clap: [a door slamming shut], coarse: impact, parents: [door_open_close]}
+  - {id: door_slam, caption: door slams, audioset: [Slam], coarse: impact, parents: [door_open_close]}
   - {id: door_knock, caption: knocking on door, audioset: [Knock], coarse: impact, parents: [door_open_close]}
   - {id: doorbell, caption: doorbell rings, audioset: [Doorbell], parents: [alarm_ringing, door_open_close]}
-  - {id: door_open_close, caption: door opens, audioset: [Door], clap: [a door creaking open], parents: []}
+  - {id: door_open_close, caption: door opens, audioset: [Door], parents: []}
   - {id: footsteps, caption: footsteps, audioset: ['Walk, footsteps'], parents: []}
   - {id: phone_ring, caption: phone ringing, audioset: [Telephone bell ringing], coarse: beeping, parents: [audioset_m_07cx4]}
   - {id: keys_jingle, caption: keys jingling, audioset: [Keys jangling], parents: []}
@@ -57,19 +56,17 @@ classes:
   - {id: crash, caption: crash, audioset: ['Smash, crash'], coarse: impact, parents: []}
 
   # --- kitchen -----------------------------------------------------------------
-  - {id: microwave_beep, caption: microwave beeps, audioset: [Microwave oven], clap: [a microwave oven beeping], coarse: beeping, parents: []}
+  - {id: microwave_beep, caption: microwave beeps, audioset: [Microwave oven], coarse: beeping, parents: []}
   - {id: sizzling, caption: food sizzling, audioset: [Frying (food)], sustained: true, parents: []}
   - {id: faucet, caption: water running, audioset: ['Water tap, faucet'], coarse: water, sustained: true, parents: []}
   - {id: dishes, caption: dishes clattering, audioset: ['Dishes, pots, and pans'], parents: []}
   - {id: blender, caption: blender whirring, audioset: [Blender], parents: []}
   - {id: chopping, caption: chopping, audioset: [Chopping (food)], parents: []}
-  - {id: kettle_whistle, caption: kettle whistling, clap: [a tea kettle whistling]}
   - {id: boiling, caption: water boiling, audioset: [Boiling], coarse: water, sustained: true, parents: [audioset_m_04k94]}
 
   # --- office ------------------------------------------------------------------
   - {id: typing, caption: typing, audioset: [Typing], sustained: true, parents: []}
   - {id: printer, caption: printer running, audioset: [Printer], parents: [audioset_t_dd00077]}
-  - {id: mouse_click, caption: mouse clicking, clap: [a computer mouse clicking]}
 
   # --- street / vehicles -------------------------------------------------------
   - {id: car_passing, caption: car passes by, audioset: [Car passing by], coarse: vehicle, parents: [audioset_m_0k4j]}
@@ -79,8 +76,6 @@ classes:
   - {id: engine_start, caption: engine starts, audioset: [Engine starting], coarse: vehicle, parents: [audioset_m_02mk9]}
   - {id: engine_rev, caption: engine revving, audioset: ['Accelerating, revving, vroom'], coarse: vehicle, parents: [audioset_m_02mk9]}
   - {id: reversing_beep, caption: reversing beeps, audioset: [Reversing beeps], coarse: beeping, parents: [audioset_m_07r04]}
-  - {id: turn_signal, caption: turn signal ticking, clap: [a car turn signal clicking]}
-  - {id: seatbelt, caption: seatbelt clicks, clap: [a car seatbelt buckling]}
   - {id: train, caption: train passing, audioset: [Train], coarse: vehicle, parents: [audioset_m_06d_3]}
   - {id: train_horn, caption: train horn, audioset: [Train horn], coarse: vehicle, parents: [train]}
   - {id: helicopter, caption: helicopter overhead, audioset: [Helicopter], coarse: vehicle, parents: [aircraft]}
@@ -103,7 +98,6 @@ classes:
   - {id: crowd_murmur, caption: crowd murmuring, audioset: [Crowd], coarse: crowd_noise, sustained: true, parents: []}
   - {id: laughter, caption: laughter, audioset: [Laughter], parents: []}
   - {id: whistle, caption: whistle blows, audioset: [Whistle], parents: [alarm_ringing]}
-  - {id: ball_bounce, caption: ball bouncing, clap: [a basketball bouncing on a court]}
   - {id: cough, caption: coughing, audioset: [Cough], parents: []}
   - {id: fireworks, caption: fireworks, audioset: [Fireworks], coarse: impact, parents: [explosion]}
 

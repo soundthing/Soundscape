@@ -36,7 +36,6 @@ class SoundClass:
     id: str
     caption: str
     audioset: list[str] = field(default_factory=list)
-    clap: list[str] = field(default_factory=list)
     coarse: str | None = None
     safety: bool = False
     sustained: bool = False
@@ -164,8 +163,8 @@ class Config:
                 errors.append(f"environment {e.id}: needs visual_prompts or audio_prompts")
 
         for c in self.classes:
-            if not (c.audioset or c.clap):
-                errors.append(f"class {c.id}: needs audioset labels or clap prompts")
+            if not c.audioset:
+                errors.append(f"class {c.id}: needs audioset labels")
             if c.coarse is not None and c.coarse not in self.coarse_groups:
                 errors.append(f"class {c.id}: unknown coarse group {c.coarse!r}")
             if audioset_labels is not None:

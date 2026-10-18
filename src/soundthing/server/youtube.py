@@ -77,9 +77,15 @@ def _cookie_arguments():
 
 
 def complete_run(run: Path) -> bool:
-    return (run / "inputs.json").is_file() and all(
-        (run / f"captions.{mode}.vtt").is_file() for mode in MODES
-    )
+    if not all((run / f"captions.{mode}.vtt").is_file() for mode in MODES):
+        return False
+    try:
+        C.load_inputs(run / "inputs.json")
+        for mode in MODES:
+            C.load_events(run / f"events.{mode}.json")
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+    return True
 
 
 def _invoke(arguments: list[str], timeout: int) -> str:

@@ -47,6 +47,9 @@ Lecture-hall evidence is particularly limited. General/unknown remains neutral.
 The full source SHA-256 hashes, class counts, and per-environment counts are in
 [`research/sound-priors-report.json`](research/sound-priors-report.json).
 No source captions or downloaded audio are redistributed in the repository.
+The report preserves the original fit, including five zero-support classes later
+retired with event CLAP. The live table retains only the 527 AudioSet columns,
+with their coefficients unchanged; the diagnostic losses describe the original fit.
 
 ## Coefficients
 
@@ -55,7 +58,8 @@ For an environment with `n` matched clips and `k` positives,
 `pe = (k + 200*p0)/(n + 200)`. The enrichment is `pe/p0`; its log is shrunk by
 `global_positive_count/(global_positive_count + 20)` and then clamped to 0.25–4.
 Fewer than 20 class positives or fewer than 50 environment clips gives neutral
-weight 1. Safety sounds and the five CLAP-only classes remain neutral. Absent
+weight 1. Safety sounds remain neutral. The five former CLAP-only classes have
+been removed from the live vocabulary and priors. Absent
 annotations are not verified acoustic negatives; these are dataset associations.
 
 Examples from this fit: kitchen/sizzling, office/typing, nature/birdsong,

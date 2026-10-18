@@ -12,7 +12,7 @@ Background knowledge (stack details, decisions, pitfalls, tuning results) lives 
 2. **Speech masking:** turn down non-safety guesses where people are talking.
 3. **Conditioning:** reweight likely events by environment; the safety set bypasses this.
 4. **Post-processing:** turn raw scores into clean, display-ready captions.
-5. **Vocabulary and thresholds:** all 527 AudioSet labels, hierarchy filtering, and per-class thresholds. Five legacy unmapped classes remain in shared configuration pending approved cleanup.
+5. **Vocabulary and thresholds:** all 527 AudioSet labels, hierarchy filtering, and per-class thresholds. The five former CLAP-only classes and their configuration were retired with user approval.
 6. **Baseline vs conditioned:** both outputs every run, to show the environment layer helps.
 
 Also: hand-label a share of the eval clips. Prior changes go through Person 2.
@@ -39,12 +39,18 @@ masking, all post-processing steps, modifiers, the end-to-end `detect` flow with
 and raw scores shared across both modes, and the wrong-environment experiment
 (`python -m soundthing.events.experiments`).
 
-**Expanded detection:** all 527 PANNs labels map independently into 532 caption
-classes, with the 61 original ids retained. Hierarchy suppression and cue-padding
+**Expanded detection:** all 527 PANNs labels now map independently into exactly
+527 caption classes. The original expansion retained 61 ids and included five
+CLAP-only classes; those five have since been retired. Hierarchy suppression and cue-padding
 protection have synthetic integration tests. Real environment + PANNs + CLAP inference was run on a 63.616-second cached
 YouTube video: 34 baseline and 43 conditioned events. The 532 × 527 mapping,
 VTT output, ancestor suppression, and new AudioSet-class outputs were verified. There are still no labeled-clip F1 / FP-per-minute measurements.
 That run predates removal of event CLAP and does not validate PANNs-only caption quality. Default thresholds remain untuned placeholders. CLAP is now used only by environment detection.
+
+**PANNs-only verification:** 213 tests pass. A short local real-model run generated
+both schema-version-2 VTT tracks, with zero baseline events and one conditioned
+vehicle event, while real environment CLAP and SigLIP inference remained active.
+These counts verify execution, not caption accuracy.
 
 **Data-derived prior proposal:** Sound-VECaps context captions joined with AudioSet
 training annotations cover all 527 labels. Estimation excludes official evaluation
@@ -60,7 +66,7 @@ tuning thresholds. The expanded conditioned path has completed a real-video run.
 1. **Baseline detection:** load the tagger, score windows with it alone, threshold into
    events. Get the first event F1 and false-positives-per-minute numbers.
    *Code done; PANNs is now the sole event scorer. Labeled accuracy numbers pending.*
-2. **Event CLAP removed:** the user requested PANNs-only sound classification after reviewing the untuned zero-shot conversion and max-fusion behavior. Environment CLAP remains. The five legacy unmapped classes cannot fire in the real detector.
+2. **Event CLAP removed:** the user requested PANNs-only sound classification after reviewing the untuned zero-shot conversion and max-fusion behavior. Environment CLAP remains. The five unmapped classes were removed from the vocabulary and priors; schema-version-1 runs require regeneration.
 3. **Speech masking:** add VAD so dialogue stops triggering false events. *Code done.*
 4. **Post-processing:** smoothing, merging, coarse fallback when unsure between similar
    sounds, once-only captions for sustained sounds, and a cap on captions on screen.

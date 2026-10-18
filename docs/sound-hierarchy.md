@@ -1,14 +1,13 @@
 # Full sound vocabulary and hierarchy
 
 PANNs still runs the same CNN14 checkpoint. Each of its 527 output labels now has
-an independent caption class, for 527 detectable classes. The shared vocabulary
-still contains five legacy classes with no AudioSet mapping; event CLAP has been
-removed, so these five cannot fire in real detection. A class still needs its own
-threshold and minimum event
-duration. Speech and music classes are included in this expanded vocabulary.
+an independent caption class, for 527 detectable classes. Event CLAP, its prompts,
+and the five unmapped classes have been removed. A class still needs its own
+threshold and minimum event duration. Speech and music classes are included in this expanded vocabulary.
 
-Existing ids stay attached to their primary AudioSet label, preserving evaluation
-labels and saved JSON. The 26 former alias mappings are split into independent
+Retained ids stay attached to their primary AudioSet label. Schema version 2
+requires regenerated runs and review of old hand labels; see
+[the migration notes](interfaces.md#schema-version-2-panns-only-sound-events). The 26 former alias mappings are split into independent
 classes. For example, `dog_bark` now uses `Bark`, while `Dog` has its own broader
 class. Otherwise a high generic dog score could incorrectly force a barking caption.
 The expansion does not calibrate the new classes' thresholds or prove their accuracy.

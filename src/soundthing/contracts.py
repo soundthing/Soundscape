@@ -18,7 +18,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, TypeVar
 
-SCHEMA_VERSION = 1
+# Version 2 retires the five unmapped event classes and requires PANNs-only runs.
+SCHEMA_VERSION = 2
 
 # Fallback environment used when the classifier is not confident. It must also
 # exist in config/environments.yaml.

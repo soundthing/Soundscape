@@ -32,11 +32,9 @@ environments:
       dishes: 0.25
       blender: 0.25
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.25
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 4.0
       traffic: 4.0
       motorcycle: 4.0
@@ -44,8 +42,6 @@ environments:
       engine_start: 0.719642
       engine_rev: 2.966803
       reversing_beep: 1.987471
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 1.196587
       train_horn: 2.431562
       helicopter: 0.447851
@@ -64,7 +60,6 @@ environments:
       crowd_murmur: 2.131692
       laughter: 0.252023
       whistle: 0.986722
-      ball_bounce: 1.0
       cough: 0.25
       fireworks: 0.885477
       audioset_m_09x0r: 0.983699
@@ -549,11 +544,9 @@ environments:
       dishes: 4.0
       blender: 4.0
       chopping: 4.0
-      kettle_whistle: 1.0
       boiling: 4.0
       typing: 0.25
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 0.25
       traffic: 0.25
       motorcycle: 0.25
@@ -561,8 +554,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.25
       reversing_beep: 0.444303
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.25
       train_horn: 0.25
       helicopter: 0.25
@@ -581,7 +572,6 @@ environments:
       crowd_murmur: 0.25
       laughter: 3.522926
       whistle: 1.188745
-      ball_bounce: 1.0
       cough: 1.831092
       fireworks: 0.25
       audioset_m_09x0r: 1.441428
@@ -1066,11 +1056,9 @@ environments:
       dishes: 0.784808
       blender: 0.25
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.579715
       typing: 4.0
       printer: 4.0
-      mouse_click: 1.0
       car_passing: 0.25
       traffic: 0.25
       motorcycle: 0.25
@@ -1078,8 +1066,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.25
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.25
       train_horn: 0.25
       helicopter: 0.313505
@@ -1098,7 +1084,6 @@ environments:
       crowd_murmur: 0.25
       laughter: 1.522202
       whistle: 0.778561
-      ball_bounce: 1.0
       cough: 1.538432
       fireworks: 0.25
       audioset_m_09x0r: 1.567433
@@ -1583,11 +1568,9 @@ environments:
       dishes: 0.25
       blender: 0.25
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.944362
       typing: 0.488024
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 1.257278
       traffic: 0.362835
       motorcycle: 1.40336
@@ -1595,8 +1578,6 @@ environments:
       engine_start: 0.396353
       engine_rev: 0.784863
       reversing_beep: 0.331278
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 3.213227
       train_horn: 3.460385
       helicopter: 1.861667
@@ -1615,7 +1596,6 @@ environments:
       crowd_murmur: 0.25
       laughter: 0.25
       whistle: 4.0
-      ball_bounce: 1.0
       cough: 0.404901
       fireworks: 0.437419
       audioset_m_09x0r: 0.832456
@@ -2100,11 +2080,9 @@ environments:
       dishes: 0.25
       blender: 0.25
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 1.275878
       typing: 0.25
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 0.996751
       traffic: 0.25
       motorcycle: 0.25
@@ -2112,8 +2090,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.25
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.25
       train_horn: 0.3228
       helicopter: 0.432771
@@ -2132,7 +2108,6 @@ environments:
       crowd_murmur: 4.0
       laughter: 0.299542
       whistle: 0.393027
-      ball_bounce: 1.0
       cough: 0.25
       fireworks: 0.763944
       audioset_m_09x0r: 1.206646
@@ -2617,11 +2592,9 @@ environments:
       dishes: 0.37277
       blender: 0.25
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.25
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 4.0
       traffic: 2.968195
       motorcycle: 4.0
@@ -2629,8 +2602,6 @@ environments:
       engine_start: 4.0
       engine_rev: 4.0
       reversing_beep: 2.7745
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.25572
       train_horn: 0.25
       helicopter: 0.25
@@ -2649,7 +2620,6 @@ environments:
       crowd_murmur: 0.25
       laughter: 0.25
       whistle: 0.271469
-      ball_bounce: 1.0
       cough: 0.25
       fireworks: 0.25
       audioset_m_09x0r: 0.905352
@@ -3134,11 +3104,9 @@ environments:
       dishes: 0.622309
       blender: 0.624458
       chopping: 0.698565
-      kettle_whistle: 1.0
       boiling: 0.640806
       typing: 0.620656
       printer: 0.619776
-      mouse_click: 1.0
       car_passing: 0.619508
       traffic: 0.622544
       motorcycle: 0.618424
@@ -3146,8 +3114,6 @@ environments:
       engine_start: 0.625234
       engine_rev: 0.617971
       reversing_beep: 0.645889
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.617902
       train_horn: 0.621087
       helicopter: 0.619541
@@ -3166,7 +3132,6 @@ environments:
       crowd_murmur: 1.712756
       laughter: 1.281996
       whistle: 0.624216
-      ball_bounce: 1.0
       cough: 0.627324
       fireworks: 0.619675
       audioset_m_09x0r: 1.271209
@@ -3651,11 +3616,9 @@ environments:
       dishes: 4.0
       blender: 0.817687
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.430935
       printer: 0.341352
-      mouse_click: 1.0
       car_passing: 0.25
       traffic: 1.143543
       motorcycle: 0.431179
@@ -3663,8 +3626,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.363303
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.274436
       train_horn: 0.852504
       helicopter: 0.317463
@@ -3683,7 +3644,6 @@ environments:
       crowd_murmur: 0.649364
       laughter: 3.848529
       whistle: 0.25
-      ball_bounce: 1.0
       cough: 3.032466
       fireworks: 0.25
       audioset_m_09x0r: 1.375735
@@ -4168,11 +4128,9 @@ environments:
       dishes: 0.735169
       blender: 1.001527
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.529212
       printer: 0.724262
-      mouse_click: 1.0
       car_passing: 1.470351
       traffic: 2.035216
       motorcycle: 1.642035
@@ -4180,8 +4138,6 @@ environments:
       engine_start: 1.097058
       engine_rev: 0.363092
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.25
       train_horn: 0.25
       helicopter: 0.25
@@ -4200,7 +4156,6 @@ environments:
       crowd_murmur: 0.99495
       laughter: 1.419781
       whistle: 0.25
-      ball_bounce: 1.0
       cough: 1.352415
       fireworks: 0.406866
       audioset_m_09x0r: 1.024406
@@ -4685,11 +4640,9 @@ environments:
       dishes: 0.25
       blender: 0.25
       chopping: 0.263861
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.794531
       printer: 0.63051
-      mouse_click: 1.0
       car_passing: 0.25
       traffic: 3.047671
       motorcycle: 0.25
@@ -4697,8 +4650,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.25
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 4.0
       train_horn: 4.0
       helicopter: 0.25
@@ -4717,7 +4668,6 @@ environments:
       crowd_murmur: 0.760132
       laughter: 0.527282
       whistle: 3.930696
-      ball_bounce: 1.0
       cough: 0.25
       fireworks: 0.25
       audioset_m_09x0r: 0.70284
@@ -5202,11 +5152,9 @@ environments:
       dishes: 0.25
       blender: 1.601433
       chopping: 0.277935
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.851372
       printer: 4.0
-      mouse_click: 1.0
       car_passing: 0.62224
       traffic: 0.25
       motorcycle: 0.25
@@ -5214,8 +5162,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.25
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.78949
       train_horn: 0.25
       helicopter: 0.628804
@@ -5234,7 +5180,6 @@ environments:
       crowd_murmur: 0.815002
       laughter: 0.25
       whistle: 0.25
-      ball_bounce: 1.0
       cough: 0.25
       fireworks: 0.25
       audioset_m_09x0r: 1.085489
@@ -5719,11 +5664,9 @@ environments:
       dishes: 0.25
       blender: 0.25
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.25
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 0.510536
       traffic: 4.0
       motorcycle: 0.626707
@@ -5731,8 +5674,6 @@ environments:
       engine_start: 1.596864
       engine_rev: 0.995057
       reversing_beep: 4.0
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.787052
       train_horn: 0.452737
       helicopter: 1.792347
@@ -5751,7 +5692,6 @@ environments:
       crowd_murmur: 0.25
       laughter: 0.25
       whistle: 0.25
-      ball_bounce: 1.0
       cough: 0.25
       fireworks: 0.315629
       audioset_m_09x0r: 1.00673
@@ -6236,11 +6176,9 @@ environments:
       dishes: 0.636957
       blender: 0.476778
       chopping: 0.25
-      kettle_whistle: 1.0
       boiling: 0.25
       typing: 0.829185
       printer: 0.25
-      mouse_click: 1.0
       car_passing: 0.25
       traffic: 0.25
       motorcycle: 0.25
@@ -6248,8 +6186,6 @@ environments:
       engine_start: 0.25
       engine_rev: 0.25
       reversing_beep: 0.25
-      turn_signal: 1.0
-      seatbelt: 1.0
       train: 0.25
       train_horn: 0.25
       helicopter: 0.25
@@ -6268,7 +6204,6 @@ environments:
       crowd_murmur: 0.6496
       laughter: 2.661419
       whistle: 0.462262
-      ball_bounce: 1.0
       cough: 2.331112
       fireworks: 0.25
       audioset_m_09x0r: 1.316721

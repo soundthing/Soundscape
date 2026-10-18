@@ -20,11 +20,12 @@ def detect_stub(
     inputs: ExtractedInputs, segments: list[EnvSegment] | None, cfg: Config
 ) -> list[CaptionEvent]:
     cfg.hierarchy()  # Exercise the same optional hierarchy contract as real configs.
+    classes = [c for c in cfg.classes if c.audioset]
     rng = np.random.default_rng(zlib.crc32(inputs.video_id.encode()))
     events: list[CaptionEvent] = []
     t = float(rng.uniform(0.5, 2.0))
     while t < inputs.duration - 0.5:
-        c = cfg.classes[int(rng.integers(len(cfg.classes)))]
+        c = classes[int(rng.integers(len(classes)))]
         score = float(rng.uniform(0.5, 0.95))
         if segments is not None:
             w = prior_weights(cfg, env_probs_at(segments, t), [c.id])[0]

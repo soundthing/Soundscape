@@ -14,6 +14,22 @@ Conditioned: F1 fine x.xx / coarse x.xx, FP/min x.x
 Outcome: <kept / reverted, and why>
 ```
 
+## 2026-10-17 — remove event CLAP at user request
+
+The event scorer now uses PANNs alone; environment CLAP remains. The user also
+approved retiring five unmapped classes, their prompts and priors, with schema
+version 2 so stale CLAP-generated runs require regeneration.
+
+Runtime check: the same short local clip used for the earlier expanded smoke
+completed real environment CLAP/SigLIP plus PANNs inference. Baseline: 0 events;
+conditioned: 1 vehicle event. Both VTT tracks were written. The old smoke's
+seatbelt/turn-signal/kettle/ball-bounce labels are no longer eligible. No human
+labels were used, so these counts do not establish precision or recall.
+
+Validation: 213 tests and check-config pass. Retained class definitions,
+coefficients, environment code and environment prompts are unchanged. The original
+fitting report remains historical evidence rather than rewriting its diagnostics.
+
 ## 2026-10-17 — dataset-derived environment enrichment
 
 Data: 1,315,263 joined training records, 329,391 held-out

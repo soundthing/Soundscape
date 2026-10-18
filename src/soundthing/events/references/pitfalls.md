@@ -7,7 +7,7 @@ cause is gone.
 - **AudioSet names must match exactly.** `vocabulary.yaml` names are matched against the
   tagger's label list character for character. Mismatches fail at model load. Check with
   `soundthing check-config --audioset <csv>`.
-- **Legacy unmapped classes are silent.** Shared configuration still contains five classes without AudioSet mappings. Event CLAP has been removed, so those classes cannot fire in real detection. Do not map a generic click or whistle to a specific object merely to restore their captions.
+- **Retired specific labels must not become generic aliases.** The five former CLAP-only classes have no AudioSet mappings and were removed. Do not map a generic click or whistle to a specific object merely to restore their captions. Version-1 stored runs must be regenerated, not relabeled as version 2.
 - **Onsets can come out early.** A 1 s window starts scoring when a sound enters its
   trailing edge, so window-centre timing can lead the real onset by up to ~0.5 s — the
   whole eval tolerance. Measure the offset on labeled clips before correcting it.

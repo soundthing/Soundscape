@@ -117,7 +117,7 @@ def get_direction(video_id: str):
 @app.get("/api/videos/{video_id}/captions/{mode}.vtt")
 def get_captions(video_id: str, mode: str):
     path = RUNS / video_id / f"captions.{mode}.vtt"
-    if mode not in MODES or not path.exists():
+    if mode not in MODES or not path.exists() or not complete_run(RUNS / video_id):
         raise HTTPException(404)
     return FileResponse(path, media_type="text/vtt")
 

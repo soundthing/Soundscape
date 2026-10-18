@@ -19,7 +19,7 @@ can always qualify. Legacy configs retain multiplication. Low scene confidence
 still blends toward neutral `general`, and safety classes bypass the table.
 
 ## PANNs-only event classification — events, reverses max fusion
-Previously each class took the maximum of PANNs and an untuned CLAP sigmoid score. The user requested removing event CLAP after reviewing how ambiguous similarities could override PANNs or supply unsupported specific labels. Remove the event scorer rather than leave a flag that can reactivate it; environment CLAP is independent and retained. This is a requested simplification, not a measured accuracy improvement. The shared legacy unmapped ids remain silent until their separately approved cleanup.
+Previously each class took the maximum of PANNs and an untuned CLAP sigmoid score. The user requested removing event CLAP after reviewing how ambiguous similarities could override PANNs or supply unsupported specific labels. Remove the event scorer rather than leave a flag that can reactivate it; environment CLAP is independent and retained. This is a requested simplification, not a measured accuracy improvement. The user separately approved removing the five unmapped ids and shared prompt fields; schema version 2 prevents reuse of stale CLAP-generated outputs.
 
 ## `score_window` stays a pure single-window function — agreed
 So a streaming wrapper can reuse it later. Offline speed comes from batching around it,
@@ -70,7 +70,7 @@ Readability padding must obey the same relationship or duplicate parents reappea
 ## Every PANNs output has an independent class — events
 A broad alias must not directly score a specific class: a high `Dog` score does not
 prove barking. Retain the original ids for primary labels, give remaining AudioSet
-labels machine-id-based ids. Five legacy CLAP-only classes were originally preserved separately; after event CLAP removal they remain configured but cannot fire pending shared-interface cleanup.
+labels machine-id-based ids. Five legacy CLAP-only classes were originally preserved separately; the user subsequently approved retiring them with event CLAP. The remaining 527 AudioSet mappings and coefficients are preserved.
 This expands coverage without replacing the model or claiming new accuracy.
 
 ## Dataset enrichment is a weak association estimate — events
