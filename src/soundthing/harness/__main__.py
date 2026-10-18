@@ -135,6 +135,17 @@ def _handle_recache(args: argparse.Namespace, tools: Any) -> int:
     return 0
 
 
+def _handle_rebaseline(args: argparse.Namespace, tools: Any) -> int:
+    from soundthing.harness import clipset
+
+    if args.status:
+        res = clipset.status(args.component)
+    else:
+        res = clipset.rebaseline(args.component, force=args.force)
+    print(json.dumps(res, indent=2, default=str))
+    return 0
+
+
 def _handle_serve_mcp(args: argparse.Namespace, tools: Any) -> int:
     from soundthing.harness.mcp_server import main as serve
 
@@ -316,6 +327,14 @@ def main(argv: list[str] | None = None, tools: Any = None) -> int:
     p_bc.add_argument("--labels", required=True, type=str, help="Labels directory")
     p_bc.add_argument("--audio", required=True, type=str, help="Audio directory (<video_id>.wav)")
     p_bc.set_defaults(func=_handle_build_cache)
+
+    p_rb = subparsers.add_parser(
+        "rebaseline", help="Snapshot the cached dev clips and re-score the best on them"
+    )
+    p_rb.add_argument("--component", type=str, default="events", help="Component")
+    p_rb.add_argument("--force", action="store_true", help="Re-score even if the snapshot is unchanged")
+    p_rb.add_argument("--status", action="store_true", help="Only report cached vs active clips")
+    p_rb.set_defaults(func=_handle_rebaseline)
 
     if not argv:
         parser.print_help(sys.stderr)

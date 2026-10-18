@@ -176,6 +176,10 @@ def run_experiment(
                 check=True,
             )
 
+        if trusted_score_fn is None:
+            from soundthing.harness import clipset
+
+            clipset.maybe_rebaseline(component)
         score_fn = trusted_score_fn or trusted_score
         score_res = score_fn(wt_path, component, overrides, pinned=base_sha)
 
