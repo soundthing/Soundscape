@@ -36,8 +36,8 @@ def match_environment(caption: str, patterns: dict[str, list[re.Pattern]], uncer
 
 
 def estimate_coefficients(global_counts, total, env_counts, env_total, *, alpha=200., min_class=20, min_environment=50,
-                          floor=.25, max_gain=4., safety=()):
-    """Beta shrinkage toward global frequency, then bounded relative enrichment."""
+                          floor=.25, max_gain=4., safety=(), apply_floor=True):
+    """Positive relative enrichment, optionally retaining estimates below the runtime floor."""
     global_counts = np.asarray(global_counts, dtype=float)
     env_counts = np.asarray(env_counts, dtype=float)
     if total <= 0 or alpha <= 0 or not 0 < floor <= 1 <= max_gain:
@@ -48,7 +48,9 @@ def estimate_coefficients(global_counts, total, env_counts, env_total, *, alpha=
     conditional = (env_counts + alpha * base) / (env_total + alpha)
     reliability = global_counts / (global_counts + min_class)
     weights = np.exp(np.log(np.maximum(conditional, 1e-15) / base) * reliability)
-    weights = np.clip(weights, floor, max_gain)
+    weights = np.minimum(weights, max_gain)
+    if apply_floor:
+        weights = np.maximum(weights, floor)
     weights[global_counts < min_class] = 1.
     if env_total < min_environment:
         weights[:] = 1.
@@ -57,6 +59,13 @@ def estimate_coefficients(global_counts, total, env_counts, env_total, *, alpha=
 
 
 def fit(cfg: Config, data: Path, settings: dict, labels_path: Path, *, progress=print):
+    settings = dict(settings)
+    unfloored = cfg.priors.coefficient_format == "unfloored"
+    # New-format fitting and inference share one minimum in priors.yaml.
+    if unfloored:
+        settings['floor'] = cfg.priors.floor
+    else:
+        settings.setdefault('floor', cfg.priors.floor)
     with labels_path.open() as source:
         labels = list(csv.DictReader(source))
     model_index = {row['mid']: i for i, row in enumerate(labels)}
@@ -152,7 +161,8 @@ def fit(cfg: Config, data: Path, settings: dict, labels_path: Path, *, progress=
         raise ValueError('No training records joined')
     safety = [i for i, sound in enumerate(cfg.classes) if sound.safety]
     params = {k: settings[k] for k in ['alpha','min_class','min_environment','floor','max_gain']}
-    priors = {'application': 'odds', 'floor': settings['floor'], 'max_gain': settings['max_gain'],
+    priors = {'application': 'odds', 'coefficient_format': cfg.priors.coefficient_format,
+              'floor': settings['floor'], 'max_gain': settings['max_gain'],
               'environments': {GENERAL_ENV: {'default': 1., 'classes': {}}}}
     report = {'coefficient_representation': 'Safety classes use neutral default=1; all classes were considered in estimation.',
               'dataset': 'Sound-VECaps 1.0 + AudioSet training annotations',
@@ -161,6 +171,7 @@ def fit(cfg: Config, data: Path, settings: dict, labels_path: Path, *, progress=
                              'AudioSet labels are incomplete positives; missing labels are not verified negatives.',
                              'Frequencies describe this selected dataset, not real-world event probabilities.',
                              'Held-out scores measure annotation association, not detector accuracy.'],
+              'coefficient_format': cfg.priors.coefficient_format,
               'settings': settings, 'training_clips': total, 'heldout_clips': heldout,
               'joined_clips': joined, 'unjoined_or_excluded': missing, 'duplicate_captions': duplicate,
               'excluded_video_ids': len(forbidden), 'ambiguous_segments_excluded': len(ambiguous),
@@ -170,10 +181,13 @@ def fit(cfg: Config, data: Path, settings: dict, labels_path: Path, *, progress=
         if env == GENERAL_ENV:
             continue
         weights, base, conditional = estimate_coefficients(global_counts, total, counts.get(env,np.zeros(width)), sizes.get(env,0),
-                                                          safety=safety, **params)
-        priors['environments'][env] = {'default': 1., 'classes': {cid: round(float(w),6) for cid,w in zip(cfg.class_ids,weights) if cid not in cfg.safety_ids()}}
+                                                          safety=safety, apply_floor=not unfloored, **params)
+        def stored_weight(weight):
+            return float(f'{weight:.12g}') if unfloored else round(float(weight),6)
+        priors['environments'][env] = {'default': 1., 'classes': {cid: stored_weight(w) for cid,w in zip(cfg.class_ids,weights) if cid not in cfg.safety_ids()}}
         n = test_sizes.get(env,0); positives = test_counts.get(env,np.zeros(width))
-        adjusted = base * weights / (1-base+base*weights)
+        effective = np.clip(weights, settings['floor'], settings['max_gain']) if unfloored else weights
+        adjusted = base * effective / (1-base+base*effective)
         def logloss(probs):
             p = np.clip(probs,1e-12,1-1e-12)
             return float(-np.sum(positives*np.log(p)+(n-positives)*np.log1p(-p))/(n*width)) if n else None

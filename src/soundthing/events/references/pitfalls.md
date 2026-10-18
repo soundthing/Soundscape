@@ -40,3 +40,8 @@ cause is gone.
 - **AudioSet label absence is not a verified negative.** Derived environment
   coefficients describe annotated co-occurrence in a selected corpus, not calibrated
   real-world event rates. Generated context captions can also be wrong.
+
+- **Stored estimates and effective weights now differ.** In the optional unfloored
+  format, a value below the configured minimum is valid evidence. Apply the bound
+  before mixing environments; clamping only the final mixture changes uncertain
+  scene behavior. Keep legacy bounded validation strict.

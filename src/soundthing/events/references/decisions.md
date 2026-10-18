@@ -13,7 +13,7 @@ thresholds because they bypass conditioning and would otherwise false-alarm more
 
 ## Conditioning keeps every sound possible — agreed, revised with user approval
 The old multiplicative floor could prevent unlikely classes reaching threshold.
-The fitted table instead uses positive bounded odds coefficients (0.25–4): relevant
+The fitted table instead uses positive odds coefficients with configurable runtime bounds (default 0.25–4): relevant
 sounds can be boosted and unlikely ones downweighted, while strong enough audio
 can always qualify. Legacy configs retain multiplication. Low scene confidence
 still blends toward neutral `general`, and safety classes bypass the table.
@@ -87,3 +87,14 @@ threshold even with perfect acoustic evidence. Positive bounded odds adjustment
 preserves scores at 0 and 1, changes the evidence required in between, and supports
 both enrichment and downweighting. Existing configurations retain multiplication
 unless they explicitly select the new application. Safety and general remain neutral.
+
+
+## Preserve estimates separately from the runtime minimum — events, user-approved
+
+Baking 0.25 into the table erased the distinction between 3,045 fitted associations.
+The optional unfloored representation restores those estimates from the original
+counts; the shared `floor` setting alone controls the runtime minimum. Bound each
+environment before mixing so default uncertain-scene behavior stays unchanged.
+Legacy bounded configs keep their original validation. Lowering the minimum does
+not establish better accuracy, and zero positive scene annotations remain unknown
+evidence rather than verified absence. The maximum cap and safety bypass remain.

@@ -31,6 +31,15 @@ def test_unsupported_environments_and_classes_are_neutral():
     assert weights[-1]==1
 
 
+def test_estimator_can_preserve_unfloored_evidence_with_support_and_safety_guards():
+    raw,*_=estimate_coefficients([100,100,1],100000,[0,0,0],10000,safety=[1],apply_floor=False)
+    bounded,*_=estimate_coefficients([100,100,1],100000,[0,0,0],10000,safety=[1])
+    expected=(200/(10000+200))**(100/(100+20))
+    assert raw[0]==pytest.approx(expected)
+    assert 0<raw[0]<.25 and bounded[0]==.25
+    assert raw[1]==raw[2]==1
+
+
 def test_caption_environment_matching_rejects_ambiguity_and_uncertainty():
     patterns={'kitchen':[re.compile(r'\bkitchen\b',re.I)], 'office':[re.compile(r'\boffice\b',re.I)]}
     uncertainty=re.compile(r'\bpossibly\b',re.I)
@@ -54,6 +63,7 @@ def test_fit_joins_only_training_ids_excludes_evaluation_and_deduplicates(cfg, t
     from soundthing.config import SoundClass
     from soundthing.events.prior_fit import fit
     copy=deepcopy(cfg)
+    copy.priors.floor=.05  # A stale settings floor must not override the single runtime knob.
     copy.classes=[SoundClass('dog','dog',audioset=['Dog']),SoundClass('bark','bark',audioset=['Bark'],parents=['dog']),
                   SoundClass('speech','speech',audioset=['Speech'])]
     labels=tmp_path/'labels.csv'
@@ -83,3 +93,13 @@ def test_fit_joins_only_training_ids_excludes_evaluation_and_deduplicates(cfg, t
     assert priors['environments']['office']['classes']=={'dog':1.,'bark':1.,'speech':1.}
     assert priors['environments']['kitchen']['classes']['speech']==1.
     assert report['sources']['Sound-VECaps_full.csv']['sha256']
+    assert priors['coefficient_format']=='unfloored'
+    assert priors['floor']==copy.priors.floor
+    assert report['coefficient_format']=='unfloored'
+
+
+def test_runtime_minimum_does_not_change_unfloored_estimates():
+    # The public estimator must not change recovered evidence when policy changes.
+    first,*_=estimate_coefficients([100],100000,[0],10000,floor=.25,apply_floor=False)
+    second,*_=estimate_coefficients([100],100000,[0],10000,floor=.05,apply_floor=False)
+    np.testing.assert_array_equal(first,second)

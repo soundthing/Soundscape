@@ -48,15 +48,18 @@ The full source SHA-256 hashes, class counts, and per-environment counts are in
 [`research/sound-priors-report.json`](research/sound-priors-report.json).
 No source captions or downloaded audio are redistributed in the repository.
 The report preserves the original fit, including five zero-support classes later
-retired with event CLAP. The live table retains only the 527 AudioSet columns,
-with their coefficients unchanged; the diagnostic losses describe the original fit.
+retired with event CLAP. The live table retains only the 527 AudioSet columns.
+The 3,045 coefficients originally clamped to 0.25 have been recovered from its
+recorded counts; all other stored coefficients are unchanged. With the default
+runtime minimum, effective coefficients still match the original table. The
+diagnostic losses describe the original fit.
 
 ## Coefficients
 
 For each sound, let `p0 = (global_positive_count + 0.5)/(training_clips + 1)`.
 For an environment with `n` matched clips and `k` positives,
 `pe = (k + 200*p0)/(n + 200)`. The enrichment is `pe/p0`; its log is shrunk by
-`global_positive_count/(global_positive_count + 20)` and then clamped to 0.25–4.
+`global_positive_count/(global_positive_count + 20)` and capped at 4.
 Fewer than 20 class positives or fewer than 50 environment clips gives neutral
 weight 1. Safety sounds remain neutral. The five former CLAP-only classes have
 been removed from the live vocabulary and priors. Absent
@@ -64,9 +67,36 @@ annotations are not verified acoustic negatives; these are dataset associations.
 
 Examples from this fit: kitchen/sizzling, office/typing, nature/birdsong,
 sports/cheering, and street/traffic have coefficient 4. Kitchen/train horn has
-coefficient 0.25. These are relative evidence adjustments, not event probabilities.
+stored fitted coefficient about 0.012356, with effective coefficient 0.25 under
+the default minimum. These are relative evidence adjustments, not event probabilities.
 
-At runtime, mix coefficients using the full environment probability distribution.
+### Adjust the runtime minimum in one place
+
+The live `config/priors.yaml` contains:
+
+```yaml
+coefficient_format: unfloored
+floor: 0.25  # Change this minimum; no coefficient refit is needed.
+```
+
+For example, `floor: 0.05` permits lower effective coefficients while leaving all
+stored estimates intact. Each environment coefficient is bounded before mixing
+environment probabilities. Changing the minimum does not change the fitted
+estimates. The duplicate fitter `floor` setting in `pipeline.yaml` was removed;
+unfloored fitting reads this shared setting, including when an older settings file
+still contains a floor. Restart the backend and regenerate a video's cached
+captions to observe a changed minimum. New-format fitting reports record
+`coefficient_format` and the resolved floor; their held-out diagnostic uses the
+effective coefficients that runtime inference would apply.
+
+All 3,045 former 0.25 entries were reconstructed using the original smoothing,
+support rules, and counts, with estimates ranging from about 0.009001 to 0.249735.
+Of these pairs, 2,331 had no positive scene annotation; their nonzero values come
+from smoothing. These are dataset-derived estimates, not measured real-world rates.
+The upper cap, safety exceptions, and unsupported-case neutral defaults are unchanged.
+
+At runtime, bound coefficients using the configurable minimum/maximum, then mix
+them using the full environment probability distribution.
 Then `adjusted_score = score*w/(1-score+score*w)`. A score of 0 stays 0; a score
 of 1 stays 1. Positive coefficients ensure every sound can cross its threshold
 in any environment, given sufficiently strong audio. No environment blacklists a
@@ -95,7 +125,8 @@ Keep the public metadata (about 500 MiB, no audio) in `data/audioset/`:
   (publisher MD5: `e975cb5bbf37538962a5c6434ba97c8f`).
 
 Scene phrases and fitting parameters live in the Person 1 section
-`events.prior_estimation` of `config/pipeline.yaml`. To generate separate proposals:
+`events.prior_estimation` of `config/pipeline.yaml`; the minimum lives only in
+`config/priors.yaml`. To generate separate proposals:
 
 ```bash
 .venv/bin/python -m soundthing.events.prior_fit \

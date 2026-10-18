@@ -58,6 +58,11 @@ and AudioCaps validation/test ids, splits remaining records by video id, and shr
 sparse cases toward neutral. These are weak annotation associations, not measured
 real-world occurrence probabilities or detector-accuracy improvements.
 
+**Prior storage:** the optional unfloored format restores all 3,045 estimates
+previously clamped to 0.25, with the shared `floor` as the sole adjustable runtime
+minimum. Default effective weights remain unchanged; old bounded configs retain
+their validation and behavior. No JSON schema change is required.
+
 **Next:** label clips and measure precision/recall and false positives before
 tuning thresholds. The expanded conditioned path has completed a real-video run.
 

@@ -2,6 +2,7 @@
 
 When env segments are given, applies the configured multiplicative/odds priors so baseline vs
 conditioned output differ visibly in the demo even before real models exist.
+Unfloored coefficients use the same runtime minimum and mixing as real detection.
 """
 
 from __future__ import annotations

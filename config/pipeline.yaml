@@ -51,7 +51,6 @@ events:             # Person 1
     alpha: 200.0
     min_class: 20
     min_environment: 50
-    floor: 0.25
     max_gain: 4.0
     uncertainty_pattern: \b(?:possibly|perhaps|might|could|such as|seems|likely|probably)\b
     environment_patterns:

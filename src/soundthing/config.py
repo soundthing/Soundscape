@@ -54,6 +54,7 @@ class EnvPriors:
     classes: dict[str, float]
 
     def weight(self, class_id: str) -> float:
+        """Stored estimate; conditioning applies the optional unfloored runtime bound."""
         return self.classes.get(class_id, self.default)
 
 
@@ -63,6 +64,7 @@ class Priors:
     environments: dict[str, EnvPriors]
     application: str = "multiplicative"
     max_gain: float = 4.0
+    coefficient_format: str = "bounded"
 
 
 @dataclass
@@ -194,14 +196,21 @@ class Config:
         if self.priors.application not in {"multiplicative", "odds"}:
             errors.append("priors.yaml: application must be multiplicative or odds")
         odds = self.priors.application == "odds"
+        if self.priors.coefficient_format not in ("bounded", "unfloored"):
+            errors.append("priors.yaml: coefficient_format must be bounded or unfloored")
+        unfloored = self.priors.coefficient_format == "unfloored"
+        if unfloored and not odds:
+            errors.append("priors.yaml: unfloored coefficients require application: odds")
         if not math.isfinite(self.priors.max_gain) or self.priors.max_gain < 1:
             errors.append("priors.yaml: max_gain must be finite and >= 1")
         if odds and not 0 < self.priors.floor <= 1:
             errors.append("priors.yaml: odds floor must be in (0, 1]")
-        lower, upper = (self.priors.floor, self.priors.max_gain) if odds else (0., 1.)
+        lower, upper = ((0. if unfloored else self.priors.floor), self.priors.max_gain) if odds else (0., 1.)
+        bounds = f"({lower}, {upper}]" if unfloored else f"[{lower}, {upper}]"
 
         def valid_prior(value):
-            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and lower <= value <= upper
+            return (isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+                    and (lower < value if unfloored else lower <= value) and value <= upper)
 
         for env_id in env_ids:
             if env_id not in self.priors.environments:
@@ -210,12 +219,12 @@ class Config:
             if env_id not in env_ids:
                 errors.append(f"priors.yaml: unknown environment {env_id!r}")
             if not valid_prior(ep.default):
-                errors.append(f"priors.yaml: {env_id}.default not in [{lower}, {upper}]")
+                errors.append(f"priors.yaml: {env_id}.default not in {bounds}")
             for cid, w in ep.classes.items():
                 if cid not in class_ids:
                     errors.append(f"priors.yaml: {env_id}: unknown class {cid!r}")
                 if not valid_prior(w):
-                    errors.append(f"priors.yaml: {env_id}.{cid}={w} not in [{lower}, {upper}]")
+                    errors.append(f"priors.yaml: {env_id}.{cid}={w} not in {bounds}")
                 if cid in self.safety_ids():
                     warnings.append(f"priors.yaml: {env_id}.{cid} is a safety class; prior is ignored")
         if odds:
@@ -264,6 +273,7 @@ def load_config(config_dir: str | Path | None = None, validate: bool = True) -> 
             floor=float(priors_raw.get("floor", 0.0)),
             application=priors_raw.get("application", "multiplicative"),
             max_gain=float(priors_raw.get("max_gain", 4.0)),
+            coefficient_format=priors_raw.get("coefficient_format", "bounded"),
             environments={
                 k: EnvPriors(default=float(v.get("default", 1.0)), classes=dict(v.get("classes") or {}))
                 for k, v in (priors_raw.get("environments") or {}).items()

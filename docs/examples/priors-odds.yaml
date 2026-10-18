@@ -1,5 +1,7 @@
 # Illustrative fragment; a full config needs a block for every environment.
 application: odds
+coefficient_format: unfloored
+# The only minimum to change; applies before environment mixing at runtime.
 floor: 0.25
 max_gain: 4.0
 environments:
@@ -8,5 +10,6 @@ environments:
     default: 1.0
     classes:
       sizzling: 4.0
-      train_horn: 0.25
+      train_horn: 0.012355994078
+# train_horn's effective kitchen coefficient is max(floor, 0.012355994078).
 # Safety sounds such as siren use effective weight 1.0 in every environment.

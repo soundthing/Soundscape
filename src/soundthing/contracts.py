@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable, TypeVar
 
 # Version 2 retires the five unmapped event classes and requires PANNs-only runs.
+# Optional prior coefficient formats affect configuration, not these JSON payloads.
 SCHEMA_VERSION = 2
 
 # Fallback environment used when the classifier is not confident. It must also

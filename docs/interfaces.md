@@ -181,8 +181,19 @@ In `odds` mode `floor` must be positive, coefficients/defaults must be finite an
 in `[floor, max_gain]`, and the general environment must have neutral weight 1.
 Safety classes always have effective weight 1 regardless of the table.
 
+`coefficient_format: bounded | unfloored` is optional and defaults to `bounded`.
+Bounded configurations retain the strict `[floor, max_gain]` validation above.
+`unfloored` requires `application: odds` and validates stored coefficients/defaults
+as finite, strictly positive values in `(0, max_gain]`. It stores fitted estimates
+before the lower clamp, while `floor` remains the effective runtime minimum.
+General must still be neutral, and safety handling is unchanged. This additive
+configuration field does not change JSON payloads or `SCHEMA_VERSION` (2).
+
 Person 1 mixes coefficients with Person 2's existing `probs` distribution:
-`w = sum_e probs[e] * coefficient[e][class]`. Odds mode applies
+in unfloored mode, first set `effective[e][c] = clip(stored[e][c], floor, max_gain)`,
+then `w = sum_e probs[e] * effective[e][class]`. Bounded configurations use their
+stored coefficients directly. Applying the minimum before mixing preserves the
+previous behavior for uncertain environment distributions. Odds mode applies
 `adjusted = score*w / (1-score+score*w)`, with `w` bounded by `floor`/`max_gain`.
 Unlike multiplying a probability by a small coefficient, positive odds weights
 permit every class to meet its threshold when acoustic evidence is strong enough.
@@ -227,4 +238,6 @@ next YouTube submission. No API routes or JSON payload fields are renamed.
 The original priors research report remains an immutable record of its fitting
 run, including five zero-support neutral columns and its original diagnostic
 losses. The live table is the projection onto the 527 retained classes; retained
-coefficients are unchanged and reproduce from the corresponding report columns.
+coefficients reproduce from the corresponding report columns. The later optional
+unfloored format restores the 3,045 lower-clamped estimates from those counts;
+effective weights with the default floor 0.25 remain unchanged.

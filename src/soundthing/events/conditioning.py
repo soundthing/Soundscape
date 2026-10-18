@@ -14,12 +14,15 @@ from .types import FrameScores
 
 
 def prior_weights(cfg: Config, env_probs: dict[str, float], class_ids: list[str]) -> np.ndarray:
-    """(C,) weight(c) = sum_e p(e) * w[e][c]; safety classes -> 1."""
+    """Mix effective environment coefficients; unfloored estimates are bounded first."""
     safety = cfg.safety_ids()
     w = np.zeros(len(class_ids))
     for env_id, p in env_probs.items():
         ep = cfg.priors.environments[env_id]
-        w += p * np.array([ep.weight(c) for c in class_ids])
+        coefficients = np.array([ep.weight(c) for c in class_ids])
+        if cfg.priors.coefficient_format == "unfloored":
+            coefficients = np.clip(coefficients, cfg.priors.floor, cfg.priors.max_gain)
+        w += p * coefficients
     w[[i for i, c in enumerate(class_ids) if c in safety]] = 1.0
     return w
 
