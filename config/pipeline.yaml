@@ -82,6 +82,9 @@ events:             # Person 1
       audioset_m_025rv6n: 0.7
       rain: 0.8
       audioset_m_03j1ly: 0.65
+    relabel_children:           # parent -> children; parent events take the best child's label
+      audioset_m_09x0r: [audioset_m_05zppz, audioset_m_02zsn]
+    relabel_min_score: 0.02     # keep the parent label if no child reaches this mean score
   prior_estimation:
     alpha: 200.0
     min_class: 20

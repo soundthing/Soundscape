@@ -173,8 +173,12 @@ def collapse_confusable(
 
         relabeled.append(ev)
 
-    # After relabelling, merge overlapping (or touching) events that now share the same class_id
-    # into one (min start, max end, max confidence).
+    return _merge_same_class(relabeled)
+
+
+def _merge_same_class(relabeled: list[CaptionEvent]) -> list[CaptionEvent]:
+    """Merge overlapping (or touching) events that share the same class_id
+    into one (min start, max end, max confidence)."""
     class_order = list(dict.fromkeys(e.class_id for e in relabeled))
     merged_events: list[CaptionEvent] = []
 
@@ -209,6 +213,47 @@ def collapse_confusable(
 
     merged_events.sort(key=lambda e: (e.start, e.end, e.class_id))
     return merged_events
+
+
+def relabel_children(
+    events: list[CaptionEvent], scores: FrameScores, cfg: Config
+) -> list[CaptionEvent]:
+    """Relabel each parent event in postprocess.relabel_children (parent -> children)
+    to the child with the highest mean score over the event's span. The parent still
+    decides whether and where an event fires; only its label changes. Ground truth
+    names the specific child (man/woman speaking, not speech), and onset matching
+    gives a parent label no credit. Relabeled events merge with overlapping events
+    of the same child. A parent whose best child mean is below relabel_min_score
+    keeps its own label (no evidence for any child)."""
+    pcfg = cfg.pipeline.get("events", {}).get("postprocess", {})
+    mapping = pcfg.get("relabel_children") or {}
+    min_score = float(pcfg.get("relabel_min_score", 0.02))
+    if not events or not mapping or scores.scores.shape[0] == 0:
+        return events
+
+    index = {cid: i for i, cid in enumerate(scores.class_ids)}
+    out: list[CaptionEvent] = []
+    changed = False
+    for ev in events:
+        children = [c for c in (mapping.get(ev.class_id) or []) if c in index]
+        if not children:
+            out.append(ev)
+            continue
+        in_span = (scores.times >= ev.start - 1e-6) & (scores.times <= ev.end + 1e-6)
+        if np.any(in_span):
+            frame_scores = scores.scores[in_span, :]
+        else:
+            nearest = int(np.argmin(np.abs(scores.times - (ev.start + ev.end) / 2.0)))
+            frame_scores = scores.scores[nearest : nearest + 1, :]
+        means = [float(np.mean(frame_scores[:, index[c]])) for c in children]
+        best = int(np.argmax(means))
+        if means[best] < min_score:
+            out.append(ev)
+            continue
+        child = children[best]
+        out.append(replace(ev, class_id=child, label=cfg.caption_for(child)))
+        changed = True
+    return _merge_same_class(out) if changed else events
 
 
 def _compute_clip_median_db(mono: np.ndarray, frame_len: int, eps: float = 1e-12) -> float | None:
