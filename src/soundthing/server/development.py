@@ -87,5 +87,11 @@ def sync_extension(destination: str | Path | None, *, source: Path | None = None
             dest = target / relative
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, dest)
+    # Retired library assets must also disappear from existing unpacked installs.
+    # Limit cleanup to these known files; preserve users' other destination files.
+    for name in ("index.html", "app.js", "styles.css", "tokens.css"):
+        retired = target / name
+        if retired.is_file() or retired.is_symlink():
+            retired.unlink()
     print("Extension files synced. In chrome://extensions click Reload, then refresh your YouTube tabs.")
     return target

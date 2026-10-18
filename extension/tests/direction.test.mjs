@@ -1,11 +1,71 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateDirection, levelsAt, channelAngle, borderPoint, roundedBorder, directionAnchor} from '../direction.mjs';
+import {validateDirection, levelsAt, channelAngle, borderPoint, roundedBorder, directionAnchor, directionActivity, waveDisplacement} from '../direction.mjs';
 import {handlePlayerRequest} from '../worker.mjs';
+import {DOA_VISUAL} from '../settings.mjs';
 
 const track = {duration:2,mode:'stereo',channels:['FL','FR'],frames:[
   {time:0,levels:{FL:1,FR:0}}, {time:1,levels:{FL:0,FR:1}}
 ]};
+
+test('direction contrast preserves absolute loudness, symmetry and weaker simultaneous sources',()=>{
+  const quiet=directionActivity({FL:.5,FR:.5}), loud=directionActivity({FL:.9,FR:.9});
+  assert.equal(quiet.FL,quiet.FR);
+  assert.equal(loud.FL,loud.FR);
+  assert.ok(loud.FL/quiet.FL>4);
+  assert.deepEqual(directionActivity({FL:0,FR:DOA_VISUAL.noiseFloor}),{FL:0,FR:0});
+  assert.deepEqual(directionActivity({FL:1,FR:1}),{FL:1,FR:1});
+  assert.deepEqual(directionActivity({}),{});
+  const biased=directionActivity({FL:.9,FR:.5});
+  assert.equal(biased.FL,loud.FL);
+  assert.ok(biased.FR>0 && biased.FR<quiet.FR);
+  assert.ok(biased.FR>=quiet.FR*(1-DOA_VISUAL.directionBias));
+  assert.ok(biased.FL/biased.FR>loud.FL/quiet.FR);
+  assert.deepEqual(directionActivity({FL:.5,FR:.9}),{FL:biased.FR,FR:biased.FL});
+  const neutral=directionActivity({FL:.9,FR:.5},{...DOA_VISUAL,directionBias:0,loudnessExponent:1});
+  assert.ok(Math.abs(neutral.FR-(.5-.04)/.96)<1e-10);
+});
+
+test('outward pulses remain bounded and tunable when tangential sway is disabled',()=>{
+  const span=120;
+  const stationary={...DOA_VISUAL,swayPx:0};
+  const wave=(delta,activity,time,reduced=false)=>waveDisplacement(delta,span,activity,time,reduced,stationary);
+  for(const time of [0,.1,.35,.7,1.3,8.9]){
+    const peak=wave(0,1,time);
+    assert.ok(peak>=DOA_VISUAL.maxDisplacementPx*(1-DOA_VISUAL.pulseDepth)-1e-8);
+    assert.ok(peak<=DOA_VISUAL.maxDisplacementPx);
+    for(const delta of [10,20,40,59]){
+      const left=wave(-delta,1,time);
+      assert.ok(left<peak);
+      assert.ok(Math.abs(left-wave(delta,1,time))<1e-8);
+    }
+    for(const delta of [-100,-60,60,100])assert.equal(wave(delta,1,time),0);
+    assert.equal(wave(0,0,time),0);
+    assert.equal(wave(0,1,time,true),DOA_VISUAL.maxDisplacementPx);
+    assert.ok(Math.abs(wave(0,.5,time)-peak/2)<1e-8);
+  }
+  assert.equal(waveDisplacement(0,span,1,0,false,{...DOA_VISUAL,maxDisplacementPx:20}),20);
+});
+
+test('tangential sway moves both ways near the source and stops for reduced motion',()=>{
+  const peakAt=(span,time,reduced=false)=>{
+    let peak={delta:0,height:-1};
+    for(let delta=-20;delta<=20;delta+=.1){
+      const height=waveDisplacement(delta,span,1,time,reduced);
+      if(height>peak.height)peak={delta,height};
+    }
+    return peak.delta;
+  };
+  const quarter=1/(4*DOA_VISUAL.swayHz);
+  for(const span of [20,120]){
+    assert.ok(peakAt(span,quarter)>1);
+    assert.ok(peakAt(span,quarter*3)<-1);
+    for(const time of [0,quarter,quarter*2,quarter*3]){
+      assert.ok(Math.abs(peakAt(span,time))<=Math.min(DOA_VISUAL.swayPx,span*.08)+.1);
+      assert.ok(Math.abs(peakAt(span,time,true))<.1);
+    }
+  }
+});
 
 test('direction consumer validates unavailable, stereo and surround tracks',()=>{
   assert.equal(validateDirection(track),track);

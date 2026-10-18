@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="204" viewBox="0 0 192 102">
+  <defs>
+    <filter id="haze" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <pattern id="sand" width="11" height="9" patternUnits="userSpaceOnUse">
+      <path fill="#e99163" opacity=".4" d="M1 3h1v1H1zm6 4h2v1H7z"/>
+    </pattern>
+  </defs>
+  <path fill="#f6e5be" d="M0 0h192v102H0z"/>
+  <path fill="#e99163" opacity=".1" d="M0 29h192v21H0z"/>
+  <path fill="#e99163" opacity=".2" d="M0 38h192v12H0z"/>
+  <path fill="#e99163" opacity=".3" filter="url(#haze)" d="M112 12h40v6h6v30h-52V18h6z"/>
+  <path fill="#e99163" d="M125 15h14v3h6v3h4v5h3v14h-3v5h-4v3h-6v3h-14v-3h-6v-3h-4v-5h-3V26h3v-5h4v-3h6z"/>
+  <!-- Flat water and broken reflections; no gradients or borrowed imagery. -->
+  <path fill="#78a99c" d="M0 46h192v40H0z"/>
+  <path fill="#173d3b" opacity=".18" d="M0 46h192v9H0z"/>
+  <path fill="#e99163" d="M118 47h28v2h-28zm5 5h18v2h-18zm-7 6h29v2h-29zm9 6h15v2h-15z"/>
+  <path fill="#f6e5be" opacity=".65" d="M8 53h16v1H8zm38-3h10v1H46zm27 7h17v1H73zm89-5h18v1h-18zM6 65h24v1H6zm35-4h14v1H41zm47 7h14v1H88zm65-8h21v1h-21z"/>
+  <!-- A stepped shoreline wraps a quiet, wide stretch of sand. -->
+  <path fill="#f6e5be" d="M0 76h11v3h23v2h25v-3h22v-3h22v-3h22v-3h25v-3h25v-3h17v39H0z"/>
+  <path fill="#78a99c" opacity=".3" d="M0 77h11v3h23v2h25v-3h22v-3h22v-3h22v-3h25v-3h25v-3h17v3h-17v3h-25v3h-25v3h-22v3H81v3H59v3H34v-2H11v-3H0z"/>
+  <path fill="url(#sand)" d="M0 86h77v-4h52v-6h63v26H0z"/>
+  <!-- Foreground beach grass joins the deep-teal control surface. -->
+  <path fill="#173d3b" d="M0 98h18v2h30v2h94v-3h22v-3h14v-3h14v9H0z"/>
+  <path fill="#173d3b" d="M9 91h2v11H9zm-3-3h2v6H6zm-3-4h2v5H3zm10 5h2v5h-2zm3-4h2v5h-2zM178 88h2v11h-2zm-3-5h2v7h-2zm-3-4h2v5h-2zm10 5h2v6h-2zm3-5h2v6h-2z"/>
+</svg>

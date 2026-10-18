@@ -133,12 +133,57 @@ def main():
             popup = context.new_page()
             popup.goto(f"{origin}/popup.html")
             expect(popup.locator("#enabled")).not_to_be_checked()
+            expect(popup.locator("h1")).to_have_text("soundscape.")
+            popup.evaluate("document.fonts.ready")
+            expect(popup.locator(".surf-caption")).to_be_hidden()
+            wave_before = popup.locator(".shore-wave").first.evaluate("el => getComputedStyle(el).transform")
+            popup.wait_for_timeout(400)
+            assert popup.locator(".shore-wave").first.evaluate("el => getComputedStyle(el).transform") != wave_before
+            popup.locator("body").screenshot(path=str(work / "popup-off.png"))
+            popup.evaluate("() => document.querySelectorAll('.shore-wave').forEach(el=>el.getAnimations().forEach(animation=>animation.pause()))")
             assert not downloads
-            popup.locator("summary").click()
-            popup.locator("#server").fill("http://127.0.0.1:8766")
-            popup.locator("#connection button").click()
-            expect(popup.locator("#connection-message")).to_contain_text("Connected")
+            # Server configuration is test setup, not part of the minimal popup.
+            popup.evaluate("chrome.storage.local.set({soundthingPreferences:{enabled:false,server:'http://127.0.0.1:8766'}})")
             popup.locator("#enabled").check()
+            expect(popup.locator("h1")).to_have_text("soundscape!")
+            popup.wait_for_function("() => getComputedStyle(document.querySelector('#click-caption')).opacity > .8")
+            positions = []
+            # Extreme random values must keep the full rotated word safely inset.
+            for word, value in zip(["splish", "splosh", "splish", "splash", "splish"], [0, 1, .35, .65, .2]):
+                popup.evaluate("""value => {
+                  const original=Math.random;
+                  Math.random=()=>value;
+                  try {
+                    document.querySelector('.shore-wave').dispatchEvent(new AnimationEvent('animationiteration',{animationName:'shore-wash',bubbles:true}));
+                  } finally { Math.random=original; }
+                  const animation=document.querySelector('.surf-caption').getAnimations()[0];
+                  animation.pause(); animation.currentTime=400;
+                }""", value)
+                expect(popup.locator(".surf-caption")).to_have_text(word)
+                expect(popup.locator(".surf-caption")).to_have_css("opacity", "1")
+                caption = popup.locator(".surf-caption").bounding_box()
+                shore = popup.locator(".beach").bounding_box()
+                assert caption["x"] >= shore["x"] + 23.5
+                assert caption["y"] >= shore["y"] + 23.5
+                assert caption["x"] + caption["width"] <= shore["x"] + shore["width"] - 23.5
+                assert caption["y"] + caption["height"] <= shore["y"] + shore["height"] - 23.5
+                positions.append(caption["x"])
+            assert max(positions) - min(positions) > 100
+            # Long status messages grow the controls down without moving their top.
+            layout = popup.evaluate("""() => {
+              const copy=document.querySelector('.control-copy'),toggle=document.querySelector('.toggle'),controls=document.querySelector('.controls');
+              const before={copy:copy.getBoundingClientRect().top,toggle:toggle.getBoundingClientRect().top,height:controls.getBoundingClientRect().height};
+              const detail=document.querySelector('#status-detail'),saved=detail.textContent;
+              detail.textContent='Reconnecting to the local server. Start the server and retry this video once the connection has been restored.';
+              const after={copy:copy.getBoundingClientRect().top,toggle:toggle.getBoundingClientRect().top,height:controls.getBoundingClientRect().height};
+              detail.textContent=saved;
+              return {before,after};
+            }""")
+            assert layout["before"]["copy"] == layout["after"]["copy"]
+            assert layout["before"]["toggle"] == layout["after"]["toggle"]
+            assert layout["after"]["height"] > layout["before"]["height"]
+            print("PASS: ordered shore words, randomized positions with safe edges, and downward-growing status text", flush=True)
+            popup.locator("body").screenshot(path=str(work / "popup-click.png"))
             popup.close()  # Popup lifetime must not own downloads or polling.
             page.bring_to_front()
             page.wait_for_function("document.querySelector('#soundthing-caption-overlay')?.shadowRoot?.querySelector('div')?.hasAttribute('data-status') === false", timeout=15000)
@@ -175,6 +220,18 @@ def main():
             page.wait_for_timeout(100)
             assert overlay.locator('[data-wave="border"]').get_attribute("d") == static
             page.emulate_media(reduced_motion="no-preference")
+            raw_track = (backend.RUNS / f"youtube_{ID}" / "captions.conditioned.vtt").read_bytes()
+            # Each caption fades from its own VTT end, following the video clock.
+            page.evaluate("document.querySelector('video').pause();document.querySelector('video').currentTime=3.375")
+            expect(overlay.locator(".caption-line").first).to_have_css("opacity", "0.5")
+            assert overlay.locator(".caption-line").count() == 2
+            page.wait_for_timeout(150)
+            expect(overlay.locator(".caption-line").first).to_have_css("opacity", "0.5")
+            page.evaluate("document.querySelector('video').currentTime=1.5")
+            expect(overlay.locator(".caption-line")).to_have_count(1)
+            expect(overlay.locator(".caption-line")).to_have_css("opacity", "1")
+            assert (backend.RUNS / f"youtube_{ID}" / "captions.conditioned.vtt").read_bytes() == raw_track
+            print("PASS: independent 0.75-second display tails, media-time fade, pause/seek recovery, and unchanged VTT", flush=True)
             print("PASS: stereo waves, independent recovery from direction 503/404, pause and reduced motion", flush=True)
             page.screenshot(path=str(work / "overlay.png"))
             print("PASS: global toggle, real worker/API/VTT overlay, and closing the popup during processing", flush=True)
@@ -243,12 +300,12 @@ def main():
             deadline = time.monotonic() + 3
             while True:
                 left, top, right, bottom = wave_bounds(overlay)
-                if top < -2 and right > overlay.bounding_box()["width"] + 2:
+                if top < -2 and bottom > overlay.bounding_box()["height"] + 2:
                     break
                 if time.monotonic() >= deadline:
                     break
                 page.wait_for_timeout(50)
-            assert top < -2 and right > overlay.bounding_box()["width"] + 2
+            assert top < -2 and bottom > overlay.bounding_box()["height"] + 2
             page.screenshot(path=str(work / "surround-waves.png"))
             print("PASS: automatic stereo-to-5.1 switch, front/surround activity combined in one wave border", flush=True)
             print("PASS: cross-tab deduplication and automatic processing on YouTube SPA navigation", flush=True)
@@ -307,11 +364,20 @@ def main():
             popup = context.new_page()
             popup.goto(f"{origin}/popup.html")
             expect(popup.locator("#enabled")).to_be_checked()
-            popup.locator("#enabled").uncheck()
+            expect(popup.locator("h1")).to_have_text("soundscape!")
+            popup.locator("#enabled").focus()
+            popup.keyboard.press("Space")
+            expect(popup.locator("#enabled")).not_to_be_checked()
+            expect(popup.locator("h1")).to_have_text("soundscape.")
+            expect(popup.locator(".surf-caption")).to_be_hidden()
+            expect(popup.locator("#click-caption")).to_be_hidden()
             expect(page.locator("#soundthing-caption-overlay")).to_have_count(0)
             expect(second.locator("#soundthing-caption-overlay")).to_have_count(0)
-            popup.screenshot(path=str(work / "popup.png"))
+            popup.emulate_media(reduced_motion="reduce")
+            assert popup.locator(".shore-wave").first.evaluate("el => el.getAnimations().length") == 0
+            popup.locator("body").screenshot(path=str(work / "popup.png"))
             print("PASS: toggle persists and disabling clears every tab", flush=True)
+            print("PASS: beach waves move with captions off; shoreline text is enabled-only; reduced motion is respected", flush=True)
 
             # The normal page console reaches the extension worker, even while off.
             cleared = page.evaluate("async () => soundthing.clearCache()")
@@ -322,15 +388,17 @@ def main():
             assert page.evaluate("async () => (await soundthing.clearCache()).removed") == []
             wrong_video = page.evaluate("async id => { try { await soundthing.clearCache('https://youtu.be/'+id); } catch (error) { return error.message; } }", OTHER)
             assert "Open that video's" in wrong_video
-            workspace = context.new_page()
-            workspace.goto("http://127.0.0.1:8766")
-            assert workspace.evaluate("async id => (await soundthing.clearCache('https://youtu.be/'+id)).cleared", OTHER)
-            workspace.close()
+            api_page = context.new_page()
+            response = api_page.goto("http://127.0.0.1:8766")
+            assert response.json() == {"name": "soundthing", "status": "ok"}
+            assert api_page.evaluate("async id => (await fetch('/api/youtube/cache?url='+id,{method:'DELETE'}).then(r=>r.json())).cleared", OTHER)
+            api_page.close()
             assert not (backend.RUNS / f"youtube_{OTHER}").exists()
             assert (backend.RUNS / f"youtube_{ID}").is_dir()
             print("PASS: per-video cache deletion from YouTube and localhost consoles, with other videos preserved", flush=True)
 
             # Test both developer policies against the same production controller.
+            popup.emulate_media(reduced_motion="no-preference")
             popup.evaluate("""async origin => {
               const {CaptionController}=await import(origin+'/player.mjs');
               window.makePolicyFixture=policy=>{
@@ -357,12 +425,46 @@ def main():
             }""", origin)
             popup.evaluate("makePolicyFixture('keep-playing')")
             assert popup.evaluate("pauseCalls") == 0
-            popup.wait_for_function("policyController.session.waves.track?.mode==='stereo'")
+            popup.wait_for_function("() => policyController.session.waves.track?.mode==='stereo'")
             expect(popup.locator('#soundthing-caption-overlay').locator('[data-wave="border"]')).to_be_visible()
             assert popup.evaluate("policyController.session.status!=='done'")
             assert popup.locator('#soundthing-caption-overlay').locator('section').inner_text() == ""
+            # Exercise actual SVG geometry with constant tracks, avoiding layout changes.
+            contrast = popup.evaluate("""async () => {
+              const {DOA_VISUAL}=await import('./settings.mjs');
+              const waves=policyController.session.waves, original=waves.track;
+              const sample=(FL,FR,time=0)=>{
+                waves.setTrack({duration:5,mode:'stereo',channels:['FL','FR'],frames:[{time:0,levels:{FL,FR}}]});
+                waves.render(time,true);
+                const points=[...waves.path.getAttribute('d').matchAll(/[ML](-?[\\d.]+),(-?[\\d.]+)/g)].map(p=>({x:+p[1],y:+p[2]}));
+                const left=points.reduce((a,b)=>a.x<b.x?a:b),right=points.reduce((a,b)=>a.x>b.x?a:b);
+                return {left:-left.x,right:right.x-waves.width,peakY:left.y,height:waves.height};
+              };
+              const result={quiet:sample(.5,0),loud:sample(.9,0),mixed:sample(.9,.5),symmetric:sample(.9,.9),pulsed:sample(.9,0,1/(4*DOA_VISUAL.swayHz))};
+              waves.setTrack(original);policyController.render();
+              return result;
+            }""")
+            assert contrast["loud"]["left"] > contrast["quiet"]["left"] * 4
+            assert contrast["mixed"]["left"] > contrast["mixed"]["right"] * 5
+            assert contrast["mixed"]["right"] > 1
+            assert abs(contrast["symmetric"]["left"] - contrast["symmetric"]["right"]) < .1
+            sway = abs(contrast["loud"]["peakY"] - contrast["pulsed"]["peakY"])
+            assert 2 < sway < 10
+            assert abs(contrast["loud"]["peakY"] - contrast["loud"]["height"] / 2) < 2
+            print("PASS: SVG contrast, preserved quieter direction, stereo symmetry, and limited tangential sway", flush=True)
             popup.evaluate("finishPolicy()")
-            popup.wait_for_function("policyController.state.status==='done'")
+            popup.wait_for_function("() => policyController.state.status==='done'")
+            popup.evaluate("""() => {
+              const session=policyController.session;
+              session.video.currentTime=5;
+              Object.defineProperty(session.video,'ended',{get:()=>true});
+              session.endedAt=performance.now()-375;
+              policyController.render();
+            }""")
+            opacity = popup.locator('#soundthing-caption-overlay .caption-line').evaluate("el=>+getComputedStyle(el).opacity")
+            assert .4 < opacity < .55
+            expect(popup.locator('#soundthing-caption-overlay .caption-line')).to_have_count(0)
+            print("PASS: the final caption finishes its fade after the video ends", flush=True)
             popup.evaluate("policyController.session.cues=[];policyController.render()")
             expect(popup.locator('#soundthing-caption-overlay')).to_be_visible()
             expect(popup.locator('#soundthing-caption-overlay').locator('div')).to_be_hidden()
@@ -380,18 +482,19 @@ def main():
                 box = resting.bounding_box()
                 assert abs(left) < 1 and abs(top) < 1
                 assert abs(right-box["width"]) < 1 and abs(bottom-box["height"]) < 1
+                assert resting.locator("svg path").count() == 1
             print("PASS: one shared border/fill, direction before captions, empty VTT, and resting silent/unavailable outline", flush=True)
             popup.evaluate("makePolicyFixture('pause-until-ready')")
             assert popup.evaluate("pausedState && pauseCalls===1")
             popup.evaluate("finishPolicy()")
-            popup.wait_for_function("policyController.state.status==='done'")
+            popup.wait_for_function("() => policyController.state.status==='done'")
             assert popup.evaluate("!pausedState && playCalls===1")
             popup.evaluate("makePolicyFixture('pause-until-ready')")
             popup.locator("#movie_player").dispatch_event("pointerdown")
             # Synthetic events intentionally do not claim to be user interactions.
             popup.locator("#movie_player").click(force=True)
             popup.evaluate("finishPolicy()")
-            popup.wait_for_function("policyController.state.status==='done'")
+            popup.wait_for_function("() => policyController.state.status==='done'")
             assert popup.evaluate("pausedState && playCalls===0")
             popup.evaluate("makePolicyFixture('pause-until-ready');policyController.configure({enabled:false,server:'http://localhost:8766'})")
             assert popup.evaluate("!pausedState && playCalls===1")

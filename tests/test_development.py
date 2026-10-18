@@ -65,10 +65,13 @@ def test_sync_copies_runtime_and_preserves_unrelated_existing_files(tmp_path):
     assert (target / "popup.js").read_bytes() == (source / "popup.js").read_bytes()
     assert not (target / "tests").exists() and not (target / "__pycache__").exists()
     (target / "keep.txt").write_text("my file")
+    for name in ("index.html", "app.js", "styles.css", "tokens.css"):
+        (target / name).write_text("retired library")
     (source / "popup.js").write_text("updated")
     dev.sync_extension(target, source=source)
     assert (target / "popup.js").read_text() == "updated"
     assert (target / "keep.txt").read_text() == "my file"
+    assert not any((target / name).exists() for name in ("index.html", "app.js", "styles.css", "tokens.css"))
 
 
 def test_sync_rejects_recursive_or_unrelated_destinations(tmp_path):

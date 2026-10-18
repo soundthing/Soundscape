@@ -1,6 +1,20 @@
-import { PLAYBACK_POLICY, POLL_INTERVAL_MS, watchVideoId } from "./settings.mjs";
-import { activeCaption, parseVtt } from "./vtt.mjs";
+import { CAPTION_TAIL_SEC, PLAYBACK_POLICY, POLL_INTERVAL_MS, watchVideoId } from "./settings.mjs";
+import { parseVtt } from "./vtt.mjs";
 import { DirectionWaves } from "./direction.mjs";
+
+// Keep display timing in the already-exposed player module so an older loaded
+// extension manifest can still initialize updated captions after a page refresh.
+export function displayedCaptions(cues, time) {
+  const visible = [];
+  for (const cue of cues) {
+    if (cue.start > time) break;
+    if (time < cue.end + CAPTION_TAIL_SEC) {
+      const opacity = time <= cue.end ? 1 : (cue.end + CAPTION_TAIL_SEC - time) / CAPTION_TAIL_SEC;
+      visible.push({ cue, opacity });
+    }
+  }
+  return visible;
+}
 
 // FontFace registers the bundled font with the document, including shadow trees.
 const fontLoads = new WeakMap();
@@ -68,6 +82,7 @@ export class CaptionController {
         font-variant-ligatures:none;text-align:left;white-space:pre-line;overflow-wrap:anywhere;
         text-shadow:2px 2px 0 #383838}
       .caption[hidden]{display:none}
+      .caption-line{display:block}
       @media(prefers-reduced-motion:reduce){section{transition:none}}
     `;
     const panel = this.document.createElement("section");
@@ -79,7 +94,7 @@ export class CaptionController {
     panel.append(content);
     shadow.append(style, panel);
     player.append(overlay);
-    const session = { id, video, player, overlay, panel, content, text, server: this.preferences.server, cues: [], status: "queued", demo: false, error: "", ownedPause: false, submitted: false, inFlight: false, retryAttempts: 0 };
+    const session = { id, video, player, overlay, panel, content, text, server: this.preferences.server, cues: [], lines: new Map(), status: "queued", demo: false, error: "", ownedPause: false, submitted: false, inFlight: false, retryAttempts: 0 };
     session.resizePanel = () => {
       if (overlay.hidden || !content.isConnected) return;
       const playerWidth = player.clientWidth || this.document.defaultView?.innerWidth || 640;
@@ -132,12 +147,33 @@ export class CaptionController {
       session.ownedPause = true;
       session.video.pause();
     }
-    let text = "";
-    if (current && !ad && session.status === "done") text = activeCaption(session.cues, session.video.currentTime);
+    let captionTime = session.video.currentTime;
+    // The media clock stops at the end; let the final caption finish its tail.
+    if (session.video.ended) {
+      session.endedAt ??= performance.now();
+      captionTime += (performance.now() - session.endedAt) / 1000;
+    } else session.endedAt = undefined;
+    const captions = current && !ad && session.status === "done" ? displayedCaptions(session.cues, captionTime) : [];
+    const visible = new Set(captions.map(({ cue }) => cue));
     let resized = false;
-    if (session.text.textContent !== text) { session.text.textContent = text; resized = true; }
-    session.text.hidden = !text;
-    session.panel.toggleAttribute("data-idle", !text);
+    for (const [cue, line] of session.lines) {
+      if (!visible.has(cue)) { line.remove(); session.lines.delete(cue); resized = true; }
+    }
+    for (const { cue, opacity } of captions) {
+      let line = session.lines.get(cue);
+      if (!line) {
+        line = this.document.createElement("span");
+        line.className = "caption-line";
+        line.textContent = cue.text;
+        session.lines.set(cue, line);
+        resized = true;
+      }
+      line.style.opacity = String(opacity);
+    }
+    // Reorder only when cues enter/leave; keep each line's opacity independent.
+    if (resized) session.text.replaceChildren(...captions.map(({ cue }) => session.lines.get(cue)));
+    session.text.hidden = !captions.length;
+    session.panel.toggleAttribute("data-idle", !captions.length);
     session.text.toggleAttribute("data-status", session.status !== "done");
     session.overlay.hidden = !current || ad;
     if (resized || !session.sized) { session.resizePanel(); session.sized = true; }

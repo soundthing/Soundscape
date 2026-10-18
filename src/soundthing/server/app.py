@@ -1,4 +1,4 @@
-"""FastAPI demo backend — OWNER: Person 3.
+"""Local extension API — OWNER: Person 3.
 
 POST /api/videos                    upload a video; processing starts in background -> {video_id}
 POST /api/youtube                   download/process a public or unlisted video -> {video_id}
@@ -7,7 +7,7 @@ GET  /api/videos/{id}               {status, demo, error?}; includes downloading
 GET  /api/videos/{id}/video         the uploaded video
 GET  /api/videos/{id}/captions/{mode}.vtt   mode = baseline | conditioned
 GET  /api/videos/{id}/env_segments  env_segments.json payload (for an env timeline overlay)
-GET  /                              demo player
+GET  /                              API health
 """
 
 from __future__ import annotations
@@ -32,7 +32,6 @@ from .youtube import CacheBusyError, YouTubeJobs, complete_run, youtube_id_from_
 
 RUNS = Path(os.environ.get("SOUNDTHING_RUNS", "runs"))
 UPLOADS = Path(os.environ.get("SOUNDTHING_UPLOADS", "uploads"))
-STATIC = Path(__file__).parent / "static"
 ALLOWED = {".mp4", ".mov", ".webm"}
 
 cfg = load_config(os.environ.get("SOUNDTHING_CONFIG"))
@@ -46,7 +45,7 @@ async def lifespan(app):
     youtube_jobs.close()
 
 
-app = FastAPI(title="soundthing demo", lifespan=lifespan)
+app = FastAPI(title="soundthing", lifespan=lifespan)
 
 
 class YouTubeRequest(BaseModel):
@@ -145,5 +144,5 @@ def get_env_segments(video_id: str):
 
 
 @app.get("/")
-def index():
-    return FileResponse(STATIC / "index.html")
+def health():
+    return {"name": "soundthing", "status": "ok"}
