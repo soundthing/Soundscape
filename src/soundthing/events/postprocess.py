@@ -10,6 +10,8 @@ from ..config import Config
 from ..contracts import CaptionEvent, MODIFIERS
 from .types import FrameScores
 
+SAFETY_HYSTERESIS_RATIO: float = 0.33
+
 
 def _safe_coarse_of(class_id: str, cfg: Config) -> str | None:
     try:
@@ -30,12 +32,22 @@ def threshold_to_events(scores: FrameScores, cfg: Config) -> list[CaptionEvent]:
     if scores.scores.shape[0] == 0:
         return events
 
+    safety = cfg.safety_ids()
     for c, class_id in enumerate(scores.class_ids):
         col = scores.scores[:, c]
         thr = cfg.threshold(class_id)
         active = col >= thr
         if not np.any(active):
             continue
+        if class_id in safety:
+            # Hysteresis: a safety run is the whole region above a lower threshold
+            # around frames that reach thr, so onsets aren't clipped by the ramp-up.
+            low = col >= SAFETY_HYSTERESIS_RATIO * thr
+            lp = np.pad(low, (1, 1), mode="constant", constant_values=False)
+            ld = np.diff(lp.astype(np.int8))
+            for i, j in zip(np.where(ld == 1)[0], np.where(ld == -1)[0]):
+                if np.any(active[i:j]):
+                    active[i:j] = True
 
         padded = np.pad(active, (1, 1), mode="constant", constant_values=False)
         diff = np.diff(padded.astype(np.int8))
