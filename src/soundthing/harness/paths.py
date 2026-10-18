@@ -65,8 +65,14 @@ def ledger_path() -> Path:
     return harness_home() / "ledger.jsonl"
 
 
-def best_path() -> Path:
-    return harness_home() / "best.json"
+def best_path(component: str = "events") -> Path:
+    if component == "events":
+        return harness_home() / "best.json"
+    return harness_home() / f"best-{component}.json"
+
+
+def harness_role() -> str:
+    return os.environ.get("SOUNDTHING_ROLE", "person1")
 
 
 def proposals_dir() -> Path:

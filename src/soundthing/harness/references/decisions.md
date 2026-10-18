@@ -38,3 +38,13 @@ All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) und
 
 ## Kaggle kernel ships the working tree instead of cloning — harness
 The kernel used to clone the (private) repo at a pushed sha, which needed a GitHub token as a Kaggle secret and a commit+push before every recache. Cache building needs only `src/soundthing`, `config/` and `pyproject.toml` (~160 KB base64), so the pusher embeds them in the script and records their sha256 in the cache meta. Trade-off: provenance is a bundle hash rather than a commit.
+
+## Component protocol and dynamic registry — harness
+The harness core is decoupled from event-specific logic via a runtime_checkable `Component` protocol (`base.py`) and dynamic string-based registry (`REGISTRY`). Components (`events`, `environment`, `captions`, `pipeline`) implement their own search spaces, stat objectives, limits, and scoring routines. Unimplemented components are reported as unavailable by `list-components` without failing imports.
+
+## Component ledger separation and backward compatibility — harness
+Best runs for the legacy `events` component remain stored at `data/harness/best.json`, while other components write to `best-<component>.json`. Entries in `ledger.jsonl` record their `component`, and reading/filtering defaults to `events` to preserve behavior for existing tools and tests.
+
+## Promotion ownership routing and proposals — harness
+Promotion enforces role boundaries from `AGENTS.md` using `SOUNDTHING_ROLE` (`harness_role()`). When a candidate run touches configuration sections owned by another role (such as Person 2's `environment:` or Person 3's `captions:` when run by Person 1), promotion refuses direct config modification and instead generates a structured proposal in `data/harness/proposals/`.
+

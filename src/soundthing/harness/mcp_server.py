@@ -1,4 +1,4 @@
-"""MCP server for events tuning harness.
+"""MCP server for tuning harness.
 
 Exposes tools for tuning agents to explore search space, score configurations,
 run sweeps, check promotion, propose shared config changes, and request recaching.
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator
 import numpy as np
 
 from soundthing.config import load_config
-from soundthing.harness import bootstrap, objective, space, sweep
+from soundthing.harness import bootstrap, components, paths, space, sweep
 from soundthing.harness import ledger as ledger_module
 from soundthing.harness.score import score as score_func
 from soundthing.harness.sweep import sweep as sweep_func
@@ -23,8 +23,6 @@ from soundthing.harness.proposals import propose_shared_change as propose_func
 
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
-
-OBJECTIVE_NAME: str = objective.OBJECTIVE
 
 INSTRUCTIONS: str = (
     "Tuning agent loop:\n"
@@ -54,8 +52,15 @@ def _make_json_safe(obj: Any) -> Any:
     return obj
 
 
+def _extract(res: Any, key: str, default: Any = None) -> Any:
+    """Safely extract key/attribute from a dict or object."""
+    if isinstance(res, dict):
+        return res.get(key, default)
+    return getattr(res, key, default)
+
+
 class TuningTools:
-    """Encapsulates the 8 MCP tuning tools with injected or lazy dependencies."""
+    """Encapsulates MCP tuning tools with injected or lazy dependencies."""
 
     def __init__(
         self,
@@ -172,37 +177,52 @@ class TuningTools:
                 "error": error,
             })
 
-    def describe_space(self) -> dict[str, Any]:
-        """Describe the tunable search space and bounds."""
-        with self._log_call("describe_space", {}):
+    def describe_space(self, component: str = "events") -> dict[str, Any]:
+        """Describe the tunable search space and bounds for a component."""
+        args: dict[str, Any] = {}
+        if component != "events":
+            args["component"] = component
+        with self._log_call("describe_space", args):
+            comp = components.get(component)
             cfg = self.cfg_loader()
-            counts = space.dev_event_counts()
-            params = space.describe_space(cfg, counts)
+            params = comp.space(cfg, paths.dev_labels_dir())
             return {
-                "objective": OBJECTIVE_NAME,
+                "component": component,
                 "min_class_events": space.MIN_CLASS_EVENTS,
                 "params": _make_json_safe(params),
                 "note": (
-                    "Search space for soundthing events tuning. Per-class thresholds require >= "
-                    f"{space.MIN_CLASS_EVENTS} dev events. Shared vocabulary and priors are for proposals only."
+                    f"Search space for soundthing {component} tuning. "
+                    "Shared vocabulary and priors are for proposals only."
                 ),
             }
 
-    def get_best(self) -> dict[str, Any] | None:
+    def get_best(self, component: str = "events") -> dict[str, Any] | None:
         """Get the current best score result from ledger without per_clip details."""
-        with self._log_call("get_best", {}):
-            best = self.ledger.best()
+        args: dict[str, Any] = {}
+        if component != "events":
+            args["component"] = component
+        with self._log_call("get_best", args):
+            try:
+                best = self.ledger.best(component)
+            except TypeError:
+                best = self.ledger.best()
             if best is None:
                 return None
             res = {k: v for k, v in best.items() if k != "per_clip"}
             return _make_json_safe(res)
 
-    def get_ledger(self, limit: int = 20) -> list[dict[str, Any]]:
+    def get_ledger(self, limit: int = 20, component: str = "events") -> list[dict[str, Any]]:
         """Get recent ledger entries up to limit without per_clip or diagnostics."""
-        with self._log_call("get_ledger", {"limit": limit}):
+        args: dict[str, Any] = {"limit": limit}
+        if component != "events":
+            args["component"] = component
+        with self._log_call("get_ledger", args):
             if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= 200):
                 raise ValueError(f"limit must be between 1 and 200, got {limit}")
-            entries = self.ledger.read()
+            try:
+                entries = self.ledger.read(component)
+            except TypeError:
+                entries = self.ledger.read()
             slice_entries = entries[-limit:] if limit < len(entries) else entries
             res: list[dict[str, Any]] = []
             for entry in slice_entries:
@@ -210,26 +230,44 @@ class TuningTools:
                 res.append(_make_json_safe(cleaned))
             return res
 
-    def score(self, overrides: dict[str, Any] | None = None, hypothesis: str = "") -> dict[str, Any]:
+    def score(
+        self,
+        overrides: dict[str, Any] | None = None,
+        hypothesis: str = "",
+        component: str = "events",
+    ) -> dict[str, Any]:
         """Score candidate overrides against the dev split and evaluate limits."""
-        args: dict[str, Any] = {"overrides": overrides, "hypothesis": hypothesis}
+        args: dict[str, Any] = {
+            "overrides": overrides,
+            "hypothesis": hypothesis,
+        }
+        if component != "events":
+            args["component"] = component
         with self._log_call("score", args):
+            comp = components.get(component)
             cfg = self.cfg_loader()
             ovr = dict(overrides or {})
-            sp = space.describe_space(cfg, space.dev_event_counts())
+            sp = comp.space(cfg, paths.dev_labels_dir())
             space.validate_overrides(ovr, sp)
 
             is_shared = any(space.is_shared(k) for k in ovr)
-            result = self.score_fn(overrides=ovr, split="dev", cfg=cfg)
+            try:
+                result = self.score_fn(overrides=ovr, split="dev", cfg=cfg, component=component)
+            except TypeError:
+                result = self.score_fn(overrides=ovr, split="dev", cfg=cfg)
+
             sweep.log_result(result, hypothesis or "mcp score", self.ledger)
 
-            best = self.ledger.best()
+            try:
+                best = self.ledger.best(component)
+            except TypeError:
+                best = self.ledger.best()
             bootstrap_dict: dict[str, Any] | None = None
             if best is not None:
-                best_per_clip = best.get("per_clip") if isinstance(best, dict) else getattr(best, "per_clip", None)
-                cand_per_clip = result.per_clip
+                best_per_clip = _extract(best, "per_clip", None)
+                cand_per_clip = _extract(result, "per_clip", None)
                 if best_per_clip and cand_per_clip:
-                    boot = bootstrap.paired_bootstrap(cand_per_clip, best_per_clip)
+                    boot = bootstrap.paired_bootstrap(cand_per_clip, best_per_clip, component=component)
                     bootstrap_dict = {
                         "gain": float(boot["gain"]),
                         "lo": float(boot["lo"]),
@@ -237,25 +275,40 @@ class TuningTools:
                         "accept": bootstrap.accepts(boot),
                     }
 
-            diag = result.diagnostics or {}
-            per_class = diag.get("per_class", {})
-            top_fps = diag.get("top_false_positives", [])
+            diag = _extract(result, "diagnostics", {}) or {}
+            limits = _extract(result, "limits", {})
+            passed = _extract(result, "passed", True)
+            run_id = _extract(result, "run_id", "")
+            objective = _extract(result, "objective", 0.0)
 
             reply: dict[str, Any] = {
-                "run_id": str(result.run_id),
-                "objective": float(result.objective),
-                "baseline": float(result.baseline),
-                "wrong_env": float(result.wrong_env),
-                "safety_recall": float(result.safety_recall),
-                "fp_per_min": float(result.fp_per_min),
-                "grid_f1": float(result.grid_f1),
-                "limits": _make_json_safe(result.limits),
-                "passed": bool(result.passed),
+                "run_id": str(run_id),
+                "component": component,
+                "objective": float(objective),
+                "limits": _make_json_safe(limits),
+                "passed": bool(passed),
                 "shared": bool(is_shared),
                 "bootstrap": bootstrap_dict,
-                "per_class": _make_json_safe(per_class),
-                "top_false_positives": _make_json_safe(top_fps),
             }
+
+            metrics = _extract(result, "metrics", {}) or {}
+            if metrics:
+                reply["metrics"] = _make_json_safe(metrics)
+
+            for k in ("baseline", "wrong_env", "safety_recall", "fp_per_min", "grid_f1"):
+                val = _extract(result, k, None)
+                if val is not None:
+                    reply[k] = float(val)
+                elif k in metrics:
+                    reply[k] = float(metrics[k])
+
+            per_class = diag.get("per_class", {})
+            top_fps = diag.get("top_false_positives", [])
+            if per_class:
+                reply["per_class"] = _make_json_safe(per_class)
+            if top_fps:
+                reply["top_false_positives"] = _make_json_safe(top_fps)
+
             if is_shared:
                 reply["note"] = "use propose_shared_change; promote will refuse"
             return reply
@@ -265,32 +318,61 @@ class TuningTools:
         params: list[str],
         strategy: str = "coordinate",
         budget: int = 20,
+        component: str = "events",
     ) -> dict[str, Any]:
         """Automated search over tunable parameters within budget."""
-        args: dict[str, Any] = {"params": params, "strategy": strategy, "budget": budget}
+        args: dict[str, Any] = {
+            "params": params,
+            "strategy": strategy,
+            "budget": budget,
+        }
+        if component != "events":
+            args["component"] = component
         with self._log_call("sweep", args):
             if isinstance(budget, bool) or not isinstance(budget, int) or not (1 <= budget <= self.max_sweep_budget):
                 raise ValueError(f"budget must be between 1 and {self.max_sweep_budget}, got {budget}")
-            res = self.sweep_fn(
-                params,
-                strategy=strategy,
-                score_fn=self.score_fn,
-                budget=budget,
-                cfg=self.cfg_loader(),
-                ledger=self.ledger,
-            )
+            try:
+                res = self.sweep_fn(
+                    params,
+                    strategy=strategy,
+                    score_fn=self.score_fn,
+                    budget=budget,
+                    cfg=self.cfg_loader(),
+                    ledger=self.ledger,
+                    component=component,
+                )
+            except TypeError:
+                res = self.sweep_fn(
+                    params,
+                    strategy=strategy,
+                    score_fn=self.score_fn,
+                    budget=budget,
+                    cfg=self.cfg_loader(),
+                    ledger=self.ledger,
+                )
             return _make_json_safe(res)
 
-    def promote(self, run_id: str) -> dict[str, Any]:
+    def promote(self, run_id: str, component: str = "events") -> dict[str, Any]:
         """Promote candidate to config; hidden holdout reported as pass/fail only."""
         args: dict[str, Any] = {"run_id": run_id}
+        if component != "events":
+            args["component"] = component
         with self._log_call("promote", args):
-            raw_res = self.promote_fn(
-                run_id,
-                ledger=self.ledger,
-                score_fn=self.score_fn,
-                cfg=self.cfg_loader(),
-            )
+            try:
+                raw_res = self.promote_fn(
+                    run_id,
+                    ledger=self.ledger,
+                    score_fn=self.score_fn,
+                    cfg=self.cfg_loader(),
+                    component=component,
+                )
+            except TypeError:
+                raw_res = self.promote_fn(
+                    run_id,
+                    ledger=self.ledger,
+                    score_fn=self.score_fn,
+                    cfg=self.cfg_loader(),
+                )
             res = dict(raw_res)
 
             # Strip any unexpected holdout_* numeric field
@@ -320,6 +402,27 @@ class TuningTools:
             self.ledger.append({"kind": "proposal", "path": path_str, "run_id": run_id})
             return {"path": path_str, "run_id": run_id}
 
+    def list_components(self) -> list[dict[str, Any]]:
+        """List registered tuning harness components and their status."""
+        with self._log_call("list_components", {}):
+            output: list[dict[str, Any]] = []
+            for name in components.names():
+                try:
+                    comp = components.get(name)
+                    output.append({
+                        "name": comp.name,
+                        "owner": comp.owner,
+                        "sections": list(comp.sections),
+                        "code_paths": list(comp.code_paths),
+                        "available": True,
+                    })
+                except (ImportError, ModuleNotFoundError, AttributeError):
+                    output.append({
+                        "name": name,
+                        "available": False,
+                    })
+            return _make_json_safe(output)
+
     def request_recache(self, window: float, hop: float, model: str) -> dict[str, Any]:
         """Request audio feature cache rebuilding via Kaggle GPU kernel."""
         args: dict[str, Any] = {"window": window, "hop": hop, "model": model}
@@ -339,13 +442,13 @@ def build_server(tools: TuningTools | None = None) -> MCPServer:
     if tools is None:
         tools = TuningTools()
 
-    from mcp.server.mcpserver import MCPServer  # optional `tuning` extra
+    from mcp.server.mcpserver import MCPServer
 
     server = MCPServer(name="soundthing-harness", instructions=INSTRUCTIONS)
 
     server.tool(
         name="describe_space",
-        description="Describe the tunable search space and bounds; per-class thresholds require >= 20 dev events.",
+        description="Describe the tunable search space and bounds for a component.",
     )(tools.describe_space)
 
     server.tool(
@@ -377,6 +480,11 @@ def build_server(tools: TuningTools | None = None) -> MCPServer:
         name="propose_shared_change",
         description="Draft a proposal markdown file for changes to shared vocabulary or priors configuration.",
     )(tools.propose_shared_change)
+
+    server.tool(
+        name="list_components",
+        description="List registered tuning harness components and their status.",
+    )(tools.list_components)
 
     server.tool(
         name="request_recache",

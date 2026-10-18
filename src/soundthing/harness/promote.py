@@ -1,8 +1,8 @@
-"""Config writer for events tuning promotion.
+"""Config writer and promotion coordinator for harness components.
 
-Applies tuned overrides to `config/pipeline.yaml` (`events:` section only)
-and `config/thresholds.yaml` with minimal line edits that preserve comments,
-blank lines, key order, and every untouched line byte-for-byte.
+Applies tuned overrides to `config/pipeline.yaml` and `config/thresholds.yaml`
+with minimal line edits that preserve comments, blank lines, key order, and
+every untouched line byte-for-byte. If keys belong to another role, drafts a proposal.
 """
 
 from __future__ import annotations
@@ -16,12 +16,19 @@ from typing import Any
 import yaml
 
 from soundthing.config import load_config
-from soundthing.harness import bootstrap, holdout, space
+from soundthing.harness import bootstrap, components, holdout, paths, proposals, space
 from soundthing.harness import ledger as ledger_module
+from soundthing.harness.components.base import key_owner
 from soundthing.harness.score import score as score_func
 
 
-WRITABLE_PREFIXES = ("events.", "thresholds.")
+WRITABLE_PREFIXES = (
+    "events.",
+    "thresholds.",
+    "environment.",
+    "captions.",
+    "extract.",
+)
 
 
 class PromoteError(ValueError):
@@ -35,8 +42,11 @@ def split_target(key: str) -> tuple[str, list[str]]:
     'thresholds.default' -> ('thresholds.yaml', ['default'])
     'thresholds.safety_default' -> ('thresholds.yaml', ['safety_default'])
     'thresholds.classes.<id>' -> ('thresholds.yaml', ['classes', '<id>'])
+    'environment.a.b' -> ('pipeline.yaml', ['environment', 'a', 'b'])
+    'captions.a.b' -> ('pipeline.yaml', ['captions', 'a', 'b'])
+    'extract.a.b' -> ('pipeline.yaml', ['extract', 'a', 'b'])
 
-    Anything else raises PromoteError. 'events.backend' is refused.
+    Anything else raises PromoteError. '*.backend' is refused.
     """
     if not isinstance(key, str) or not key:
         raise PromoteError(f"Invalid key: {key!r}")
@@ -50,6 +60,13 @@ def split_target(key: str) -> tuple[str, list[str]]:
             raise PromoteError(f"Key too short: {key!r}")
         if parts[1] == "backend":
             raise PromoteError(f"Refusing to override events.backend: {key!r}")
+        return ("pipeline.yaml", parts)
+
+    if parts[0] in ("environment", "captions", "extract"):
+        if len(parts) < 2:
+            raise PromoteError(f"Key too short: {key!r}")
+        if parts[1] == "backend":
+            raise PromoteError(f"Refusing to override {parts[0]}.backend: {key!r}")
         return ("pipeline.yaml", parts)
 
     if parts[0] == "thresholds":
@@ -118,12 +135,7 @@ def _has_trailing_newline(text: str) -> bool:
 
 
 def _parse_rest(rest: str) -> tuple[str | None, str | None, str, int | None]:
-    """Parse the remainder of a mapping key line after the colon.
-
-    Returns:
-        (scalar, comment, leading_space, comment_col_offset)
-        where comment_col_offset is the 0-indexed character offset in rest where '#' starts.
-    """
+    """Parse the remainder of a mapping key line after the colon."""
     pos = 0
     while pos < len(rest) and rest[pos].isspace():
         pos += 1
@@ -200,12 +212,6 @@ def _replace_scalar_on_line(line: str, new_val_str: str, path: list[str]) -> str
 
 
 def _get_block_range(lines: list[str], parent_idx: int) -> tuple[int, int]:
-    """Find the start and end line indices of a parent key's block.
-
-    The block starts at parent_idx + 1 and ends at the next non-blank,
-    non-comment line whose indent <= parent_indent (or EOF).
-    Returns (start, end) where end is exclusive.
-    """
     parent_indent = _get_indent(lines[parent_idx])
     start = parent_idx + 1
     end = len(lines)
@@ -219,11 +225,6 @@ def _get_block_range(lines: list[str], parent_idx: int) -> tuple[int, int]:
 
 
 def _get_child_indent(lines: list[str], block_start: int, block_end: int, parent_indent: int) -> int:
-    """Determine the child indentation for a block.
-
-    Child indent is the indent of the first non-blank, non-comment line inside
-    the block, or parent_indent + 2 when the parent has no children.
-    """
     for i in range(block_start, block_end):
         if not _is_blank(lines[i]) and not _is_full_comment(lines[i]):
             return _get_indent(lines[i])
@@ -231,7 +232,6 @@ def _get_child_indent(lines: list[str], block_start: int, block_end: int, parent
 
 
 def _find_direct_child(lines: list[str], block_start: int, block_end: int, child_indent: int, key: str) -> int | None:
-    """Find a direct child with the given key at child_indent."""
     for i in range(block_start, block_end):
         if _is_blank(lines[i]) or _is_full_comment(lines[i]):
             continue
@@ -243,12 +243,7 @@ def _find_direct_child(lines: list[str], block_start: int, block_end: int, child
 
 
 def set_yaml_value(text: str, path: list[str], value: Any) -> str:
-    """Set a scalar value at path in YAML text, preserving structure and comments.
-
-    Lines are parsed by indentation (spaces only). A mapping key line matches
-    `^(\\s*)([A-Za-z0-9_.-]+):(.*)$`. Blank lines and full-line comments are ignored
-    when determining structure.
-    """
+    """Set a scalar value at path in YAML text, preserving structure and comments."""
     if not path:
         raise PromoteError("Empty path")
 
@@ -348,11 +343,7 @@ def set_yaml_value(text: str, path: list[str], value: Any) -> str:
 
 
 def write_overrides(overrides: dict, config_dir: Path) -> list[Path]:
-    """Apply tuned overrides to YAML files in config_dir.
-
-    Only config/pipeline.yaml (events: section) and config/thresholds.yaml
-    may be written.
-    """
+    """Apply tuned overrides to YAML files in config_dir."""
     if not isinstance(overrides, dict):
         raise PromoteError(f"overrides must be a dict, got {type(overrides).__name__}")
     if not overrides:
@@ -468,15 +459,7 @@ def holdout_check(
     score_fn: Any = None,
     cfg: Any = None,
 ) -> bool:
-    """Check a candidate configuration against the hidden holdout set.
-
-    Uses score_fn (soundthing.harness.score.score) and holdout labels
-    directory (soundthing.harness.holdout.holdout_labels_dir()).
-    Pass iff candidate objective, safety_recall, and fp_per_min are at least as
-    good as the current config on holdout.
-
-    Returns ONLY a bool. Never prints, logs, returns, or stores holdout numbers.
-    """
+    """Check a candidate configuration against the hidden holdout set."""
     if score_fn is None:
         score_fn = score_func
 
@@ -514,6 +497,7 @@ def _format_tuning_log_entry(
     ci: dict[str, float],
     before: float | None,
     git_sha: str,
+    holdout_str: str = "pass",
 ) -> list[str]:
     run_id = entry.get("run_id", "norun")
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -530,22 +514,25 @@ def _format_tuning_log_entry(
 
     before_str = f"{float(before):.4f}" if before is not None else "n/a"
     after_str = f"{float(entry['objective']):.4f}"
-    base_str = f"{float(entry.get('baseline', 0.0)):.4f}"
-    wrong_str = f"{float(entry.get('wrong_env', 0.0)):.4f}"
+    base_val = entry.get("baseline")
+    wrong_val = entry.get("wrong_env")
+    base_str = f"{float(base_val):.4f}" if base_val is not None else "n/a"
+    wrong_str = f"{float(wrong_val):.4f}" if wrong_val is not None else "n/a"
 
     gain_str = f"{float(ci['gain']):.4f}"
     lo_str = f"{float(ci['lo']):.4f}"
     hi_str = f"{float(ci['hi']):.4f}"
 
-    return [
+    lines = [
         f"## {date_str} — promote {run_id}",
         f"Git: {sha_str}    Split: dev ({n_clips} clips)",
         f"Params: {params_str}",
         f"Dev F0.5: {before_str} -> {after_str}   (baseline {base_str}, wrong-env {wrong_str})",
         f"Bootstrap gain: {gain_str} [{lo_str}, {hi_str}]",
-        "Holdout: pass",
+        f"Holdout: {holdout_str}",
         "Outcome: promoted",
     ]
+    return lines
 
 
 def append_tuning_log(
@@ -555,12 +542,9 @@ def append_tuning_log(
     ci: dict[str, float],
     before: float | None,
     git_sha: str,
+    holdout_str: str = "pass",
 ) -> None:
-    """Insert a promote entry into tuning-log.md newest first.
-
-    Inserts directly before the first '## ' entry line after the header,
-    or replacing '_No runs yet._', or at EOF. Preserves newline style.
-    """
+    """Insert a promote entry into tuning-log.md newest first."""
     path = Path(path)
     if not path.exists():
         content = ""
@@ -574,7 +558,7 @@ def append_tuning_log(
         ends_with_newline = content.endswith("\r\n") or content.endswith("\n")
         lines = content.splitlines()
 
-    entry_lines = _format_tuning_log_entry(entry, old, ci, before, git_sha)
+    entry_lines = _format_tuning_log_entry(entry, old, ci, before, git_sha, holdout_str=holdout_str)
 
     in_code_block = False
     first_entry_idx: int | None = None
@@ -616,10 +600,12 @@ def _refuse(
     git_info: dict[str, Any],
     holdout_pass: bool | None = None,
     ci: dict[str, float] | None = None,
+    component: str = "events",
 ) -> dict[str, Any]:
     ledger.append({
         "kind": "promote",
         "run_id": run_id,
+        "component": component,
         "promoted": False,
         "reason": reason,
         "holdout_pass": holdout_pass,
@@ -628,6 +614,7 @@ def _refuse(
     })
     return {
         "run_id": run_id,
+        "component": component,
         "promoted": False,
         "reason": reason,
     }
@@ -643,34 +630,17 @@ def promote(
     root: Path | None = None,
     n_boot: int = 1000,
     seed: int = 0,
+    component: str | None = None,
 ) -> dict[str, Any]:
-    """Take a ledger candidate, verify limits, bootstrap and holdout, then promote.
-
-    Args:
-        run_id: Candidate identifier in ledger.
-        ledger: Ledger module or fake (lazy loaded if None).
-        score_fn: Score function or fake (lazy loaded if None).
-        holdout_fn: Holdout check callable (defaults to holdout_check).
-        cfg: Config instance (defaults to load_config(root / "config")).
-        root: Repo root Path (defaults to Path.cwd()).
-        n_boot: Bootstrap iterations for paired bootstrap test.
-        seed: Random seed for bootstrap.
-
-    Returns:
-        Dict with "promoted": True/False and associated metadata.
-    """
+    """Take a ledger candidate, verify limits, bootstrap and holdout, then promote."""
     root_path = Path(root) if root is not None else Path.cwd()
     config_dir = root_path / "config"
-    tuning_log_path = root_path / "src" / "soundthing" / "events" / "references" / "tuning-log.md"
 
     if cfg is None:
         cfg = load_config(config_dir)
 
     if ledger is None:
         ledger = ledger_module
-
-    if holdout_fn is None:
-        holdout_fn = lambda ov: holdout_check(ov, score_fn=score_fn, cfg=cfg)
 
     entries = ledger.read()
     candidate: dict[str, Any] | None = None
@@ -681,6 +651,11 @@ def promote(
     if candidate is None:
         raise PromoteError(f"Candidate run_id {run_id!r} not found in ledger")
 
+    cand_comp = candidate.get("component") or component or "events"
+    comp = components.get(cand_comp)
+
+    tuning_log_path = root_path / comp.tuning_log
+
     overrides = candidate.get("overrides", {})
     if overrides is None:
         overrides = {}
@@ -689,36 +664,45 @@ def promote(
 
     # 1. overrides empty -> reason "no overrides"
     if not overrides:
-        return _refuse(ledger, run_id, "no overrides", git_info)
+        return _refuse(ledger, run_id, "no overrides", git_info, component=cand_comp)
 
-    # 2. Any shared key -> reason mentions propose_shared_change.
-    # Any key failing split_target -> reason with PromoteError message.
+    # 2. Refuse shared keys
     reason = None
     for k in sorted(overrides.keys()):
         if space.is_shared(k):
             reason = f"key {k!r} is shared; use propose_shared_change to propose changes to shared files"
             break
 
+    # Refuse backend overrides
     if reason is None:
         for k in sorted(overrides.keys()):
-            try:
-                split_target(k)
-            except PromoteError as e:
-                reason = str(e)
+            parts = k.split(".")
+            if len(parts) >= 2 and parts[1] == "backend":
+                reason = f"Refusing to override {k}: {k!r}"
                 break
 
+    # Check key prefixes against known owners / non-writable prefixes
+    if reason is None:
+        for k in sorted(overrides.keys()):
+            if key_owner(k) is None:
+                try:
+                    split_target(k)
+                except PromoteError as e:
+                    reason = str(e)
+                    break
+
     if reason is not None:
-        return _refuse(ledger, run_id, reason, git_info)
+        return _refuse(ledger, run_id, reason, git_info, component=cand_comp)
 
     # 3. entry["passed"] not True -> "limits not passed"
     if not candidate.get("passed", False):
-        return _refuse(ledger, run_id, "limits not passed", git_info)
+        return _refuse(ledger, run_id, "limits not passed", git_info, component=cand_comp)
 
-    # 4. Bootstrap: comparator per_clip = ledger.best()["per_clip"] if a best exists,
-    # else score_fn(overrides={}, split="dev", cfg=cfg).per_clip (current config).
-    # ci = bootstrap.paired_bootstrap(entry["per_clip"], comparator, n=n_boot, seed=seed);
-    # not bootstrap.accepts(ci) -> "bootstrap lower bound <= 0".
-    best_entry = ledger.best()
+    # 4. Bootstrap check
+    try:
+        best_entry = ledger.best(cand_comp)
+    except TypeError:
+        best_entry = ledger.best()
     if best_entry is not None and "per_clip" in best_entry:
         comparator = best_entry["per_clip"]
         before = best_entry.get("objective")
@@ -726,7 +710,11 @@ def promote(
         if score_fn is None:
             score_fn = score_func
 
-        cur_res = score_fn(overrides={}, split="dev", cfg=cfg)
+        try:
+            cur_res = score_fn(overrides={}, split="dev", cfg=cfg, component=cand_comp)
+        except TypeError:
+            cur_res = score_fn(overrides={}, split="dev", cfg=cfg)
+
         if isinstance(cur_res, dict):
             comparator = cur_res.get("per_clip")
             before = cur_res.get("objective")
@@ -735,53 +723,92 @@ def promote(
             before = getattr(cur_res, "objective")
 
     try:
-        ci = bootstrap.paired_bootstrap(candidate["per_clip"], comparator, n=n_boot, seed=seed)
+        ci = bootstrap.paired_bootstrap(
+            candidate["per_clip"], comparator, n_boot=n_boot, seed=seed, component=cand_comp
+        )
     except ValueError:
-        return _refuse(ledger, run_id, "bootstrap: no common clips with comparator", git_info)
+        return _refuse(ledger, run_id, "bootstrap: no common clips with comparator", git_info, component=cand_comp)
 
     if not bootstrap.accepts(ci):
-        return _refuse(ledger, run_id, "bootstrap lower bound <= 0", git_info, ci=ci)
+        return _refuse(ledger, run_id, "bootstrap lower bound <= 0", git_info, ci=ci, component=cand_comp)
 
-    # 5. holdout_fn(overrides) False -> "holdout failed".
-    # If it raises PromoteError -> reason with its message.
-    try:
-        passed_holdout = holdout_fn(overrides)
-    except PromoteError as e:
-        return _refuse(ledger, run_id, str(e), git_info, ci=ci)
+    # 5. Holdout check: runs ONLY for components that have a holdout (events)
+    if cand_comp == "events":
+        if holdout_fn is None:
+            holdout_fn = lambda ov: holdout_check(ov, score_fn=score_fn, cfg=cfg)
 
-    if not passed_holdout:
-        return _refuse(ledger, run_id, "holdout failed", git_info, holdout_pass=False, ci=ci)
+        try:
+            passed_holdout = holdout_fn(overrides)
+        except PromoteError as e:
+            return _refuse(ledger, run_id, str(e), git_info, ci=ci, component=cand_comp)
 
-    # On success:
-    space_idx = space.space_index(space.describe_space(cfg, None))
+        if not passed_holdout:
+            return _refuse(ledger, run_id, "holdout failed", git_info, holdout_pass=False, ci=ci, component=cand_comp)
+
+        holdout_status = "pass"
+        holdout_pass_val = True
+    else:
+        holdout_status = "n/a"
+        holdout_pass_val = None
+
+    # 6. Promotion ownership routing
+    role = paths.harness_role()
+    owned_overrides = {k: v for k, v in overrides.items() if key_owner(k) == role}
+    other_overrides = {k: v for k, v in overrides.items() if key_owner(k) != role}
+
+    prop_path: Path | None = None
+    if other_overrides:
+        other_owners = sorted(set(key_owner(k) or "unknown" for k in other_overrides))
+        prop_note = f"Promoted run {run_id} contains overrides owned by {', '.join(other_owners)}"
+        prop_path = proposals.propose_shared_change(
+            other_overrides,
+            candidate,
+            prop_note,
+            cfg=cfg,
+            out_dir=paths.proposals_dir(),
+            allow_role_keys=True,
+        )
+
+    changed: list[Path] = []
+    if owned_overrides:
+        try:
+            changed = write_overrides(owned_overrides, config_dir)
+        except PromoteError as e:
+            return _refuse(ledger, run_id, f"write failed: {e}", git_info, holdout_pass=holdout_pass_val, ci=ci, component=cand_comp)
+
+    space_idx = space.space_index(comp.space(cfg, None))
     old: dict[str, Any] = {}
     for k in overrides:
         old[k] = _get_old_value(k, space_idx, config_dir)
 
-    try:
-        changed = write_overrides(overrides, config_dir)
-    except PromoteError as e:
-        return _refuse(ledger, run_id, f"write failed: {e}", git_info, holdout_pass=True, ci=ci)
-
     git_sha = str(git_info.get("sha", ""))
-    ledger.set_best({**candidate, "git_sha": git_sha})
-    append_tuning_log(tuning_log_path, candidate, old, ci, before, git_sha)
+    try:
+        ledger.set_best({**candidate, "git_sha": git_sha}, component=cand_comp)
+    except TypeError:
+        ledger.set_best({**candidate, "git_sha": git_sha})
+    append_tuning_log(tuning_log_path, candidate, old, ci, before, git_sha, holdout_str=holdout_status)
 
     ledger.append({
         "kind": "promote",
         "run_id": run_id,
+        "component": cand_comp,
         "promoted": True,
         "reason": None,
-        "holdout_pass": True,
+        "holdout_pass": holdout_pass_val,
         "bootstrap": ci,
         "git": git_info,
     })
 
-    return {
+    reply: dict[str, Any] = {
         "run_id": run_id,
+        "component": cand_comp,
         "promoted": True,
-        "holdout": "pass",
+        "holdout": holdout_status,
         "files": [p.relative_to(root_path).as_posix() for p in changed],
         "bootstrap": ci,
         "objective": candidate["objective"],
     }
+    if prop_path is not None:
+        reply["proposal"] = str(prop_path)
+
+    return reply

@@ -244,7 +244,7 @@ def tuning_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Any):
 
 
 def test_1_list_tools_names(tuning_env: dict[str, Any]):
-    """1. asyncio.run(build_server(tools).list_tools()) names == the 8 tool names exactly."""
+    """1. asyncio.run(build_server(tools).list_tools()) names == the 9 tool names exactly."""
     tools = tuning_env["tools"]
     server = build_server(tools)
     tool_list = asyncio.run(server.list_tools())
@@ -253,6 +253,7 @@ def test_1_list_tools_names(tuning_env: dict[str, Any]):
         "describe_space",
         "get_best",
         "get_ledger",
+        "list_components",
         "score",
         "sweep",
         "promote",
@@ -260,7 +261,7 @@ def test_1_list_tools_names(tuning_env: dict[str, Any]):
         "request_recache",
     ]
     assert sorted(names) == sorted(expected)
-    assert len(names) == 8
+    assert len(names) == 9
 
 
 def test_2_every_tool_call_logs_mcp_call(tuning_env: dict[str, Any]):
