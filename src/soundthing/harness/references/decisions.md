@@ -53,3 +53,12 @@ Promotion enforces role boundaries from `AGENTS.md` using `SOUNDTHING_ROLE` (`ha
 
 ## Environment objective balances time accuracy with macro accuracy — environment
 The fixed environment objective is `0.5 * time_acc + 0.5 * macro_acc`. Time accuracy pools total matching seconds across all clips against total labeled seconds, prioritizing dominant scenes. Macro accuracy averages per-environment accuracy across only those environments present in the ground truth labels, preventing frequent background environments from completely overshadowing rarer scenes. Per-clip stats store `[correct_sec, total_sec]` for each environment in config order, enabling exact objective recomputation in paired bootstrap resampling.
+## End-to-end pipeline objective is caption-cue F0.5 with predicted environment — pipeline
+The pipeline component evaluates end-to-end performance using the same caption-cue micro F0.5 (with coarse half-credit) as the captions component, but conditioning events replay on the predicted environment (`predict_segments`) rather than ground truth labels. Baseline metric evaluates unconditioned events, and environment time accuracy (`env_time_acc`) is tracked as a diagnostic.
+
+## Cue matching evaluates onset tolerance and duration-scaled offset tolerance — captions
+Captions and pipeline evaluation match predicted caption cues against labeled events using greedy nearest-onset matching order (identical to events evaluation), requiring matching class (fine or coarse group for half-credit), onset error <= `eval.onset_tolerance_sec`, and offset error <= `max(eval.onset_tolerance_sec, 0.5 * event.duration)`. Diagnostics include a 5-bin signed offset error histogram.
+
+## Pipeline search space is the de-duplicated union of constituent components — pipeline
+The pipeline component search space aggregates parameters from the events, environment, and captions stages by querying `space()` on each component and dropping duplicate parameter entries.
+

@@ -18,3 +18,5 @@ cause is gone.
 - **MCP 2.x server import path.** MCP 2.x renamed `FastMCP` to `mcp.server.mcpserver.MCPServer`; importing from `mcp.server.fastmcp` fails. Use `from mcp.server.mcpserver import MCPServer`.
 - **YAML line endings may be CRLF.** Config YAML files checked out on Windows may have CRLF line endings, so line edits must preserve the existing newline style to avoid corrupting git diffs.
 - **Default environment temperature sharpens logits to near 1.0.** In `pipeline.yaml`, `fusion.temperature` defaults to 0.01. Small logit differences (e.g. 0.2) scale to 20x inside softmax, pushing the winner's probability to ~0.999999998, which float32 rounds to 1.0. Replay tests varying confidence thresholds must account for this sharpness when selecting synthetic test logits.
+- **Cue matching must pair with event class IDs, not parse caption text.** Rendered cues do not contain raw class IDs, and different classes may map to identical or modifier-altered caption text. The harness pairs cues with sorted events to retain ground-truth class IDs without text parsing.
+
