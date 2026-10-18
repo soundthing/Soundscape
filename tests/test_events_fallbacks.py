@@ -111,6 +111,7 @@ def test_real_detector_uses_activity_gate_and_can_retune_cached_scores(cfg, tmp_
     copy.coarse_groups['broad_one'] = CoarseGroup('broad_one', 'general sound')
     copy.sound_class('typing').parents.append('broad_one')
     copy.thresholds.class_tiers['broad_one'] = 'generic'
+    copy.thresholds.tiers['specific'] = .65  # controlled fixture, independent of live policy
     copy.pipeline['events']['generic_fallbacks'] = {
         'enabled': True, 'groups': ['broad_one'], 'min_rms_dbfs': -60,
     }

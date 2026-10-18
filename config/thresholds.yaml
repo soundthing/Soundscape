@@ -9,9 +9,9 @@ safety_default: 0.6
 # Tune these four values to adjust whole groups. Thresholds stay in (0, 1).
 tiers:
   generic: 0.35
-  broad: 0.50
-  specific: 0.65
-  fine: 0.80
+  broad: 0.45
+  specific: 0.55
+  fine: 0.65
 
 # Explicit overrides remain minimums; safety overrides remain exact.
 classes:

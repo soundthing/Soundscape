@@ -64,7 +64,8 @@ minimum. Default effective weights remain unchanged; old bounded configs retain
 their validation and behavior. No JSON schema change is required.
 
 **Specificity policy:** all 527 classes have explicit, editable broad/specific/fine
-assignments, with initial thresholds 0.50/0.65/0.80. Existing safety requirements
+assignments, with current thresholds 0.45/0.55/0.65 (lowered from the initial
+0.50/0.65/0.80 at user request). Existing safety requirements
 are preserved and per-class overrides remain minimums. Legacy configs without
 tiers keep their lookup. Scores are unchanged; precision/recall effects have not
 been measured on labeled clips. Generic fallback groups are a separate proposal.

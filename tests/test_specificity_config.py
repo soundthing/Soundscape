@@ -19,9 +19,9 @@ def test_every_scored_label_has_an_explicit_specificity_assignment(cfg):
     assert set(cfg.class_ids) <= cfg.thresholds.class_tiers.keys()
     assert set(cfg.thresholds.class_tiers) == set(cfg.class_ids) | set(cfg.coarse_groups)
     assert cfg.priors.floor == .25
-    assert cfg.threshold('microwave_beep') == .8
-    assert cfg.threshold('typing') == .65
-    assert cfg.threshold('audioset_m_04rlf') == .5  # Music
+    assert cfg.threshold('microwave_beep') == .65
+    assert cfg.threshold('typing') == .55
+    assert cfg.threshold('audioset_m_04rlf') == .45  # Music
 
 
 def test_one_tier_setting_changes_all_its_labels_but_preserves_scores(cfg):
@@ -50,7 +50,9 @@ def test_safety_thresholds_are_exact_and_independent_of_tiers(cfg):
 def test_overrides_are_minimums_for_non_safety_labels(cfg):
     copy = deepcopy(cfg)
     assert copy.threshold('thud') == .6
-    assert copy.threshold('door_slam') == .65  # old 0.55 minimum, new tier 0.65
+    assert copy.threshold('door_slam') == .55
+    copy.thresholds.tiers['specific'] = .75
+    assert copy.threshold('door_slam') == .75  # a higher tier raises the requirement
     copy.thresholds.tiers['specific'] = .4
     assert copy.threshold('door_slam') == .55
     copy.thresholds.classes['typing'] = .9
@@ -72,11 +74,13 @@ def test_unassigned_labels_and_legacy_thresholds_keep_the_old_lookup(cfg):
 def test_parent_survives_when_a_precise_child_misses_its_own_tier(cfg):
     # PANNs' independently scored Animal/Dog/Bark outputs stay independent.
     animal, dog, bark = 'audioset_m_0jbk', 'audioset_m_0bt9lr', 'dog_bark'
+    parent_score = (cfg.threshold(animal) + 1) / 2
+    row = [parent_score, cfg.threshold(dog) - .05, cfg.threshold(bark) - .05]
     scores = FrameScores(np.array([.5, .75]), [animal, dog, bark],
-                         np.array([[.7, .6, .7], [.7, .6, .7]]), .25)
+                         np.tile(row, (2, 1)), .25)
     events = suppress_ancestors(postprocess.threshold_to_events(scores, cfg), cfg.hierarchy())
     assert [e.class_id for e in events] == [animal]
-    assert events[0].confidence == .7
+    assert events[0].confidence == round(parent_score, 3)
     stronger = scores.copy_with(np.full((2, 3), .9))
     events = suppress_ancestors(postprocess.threshold_to_events(stronger, cfg), cfg.hierarchy())
     assert [e.class_id for e in events] == [bark]
@@ -88,8 +92,8 @@ def test_specificity_example_loads_without_new_vocabulary_or_schema(cfg, tmp_pat
     example = Path(__file__).parents[1] / 'docs/examples/specificity.yaml'
     shutil.copy2(example, tmp_path / 'thresholds.yaml')
     loaded = load_config(tmp_path)
-    assert loaded.threshold('typing') == .65
-    assert loaded.threshold('microwave_beep') == .8
+    assert loaded.threshold('typing') == .55
+    assert loaded.threshold('microwave_beep') == .65
     assert loaded.threshold('gunshot') == .75
     assert loaded.threshold('footsteps') == .5  # unassigned, no override
     raw = yaml.safe_load(example.read_text())

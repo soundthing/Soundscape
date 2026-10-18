@@ -151,9 +151,9 @@ override if that override is higher. Untiered labels retain the legacy lookup:
 `classes[id]` if present, otherwise `default`. Thus legacy configs need no edits.
 
 The live policy explicitly assigns all 527 PANNs labels: general categories and
-acoustic descriptions use `broad: 0.50`; named sources/actions use
-`specific: 0.65`; subtypes, exact calls, techniques, music styles and source/context
-attribution use `fine: 0.80`. `generic: 0.35` is reserved for broad fallback captions.
+acoustic descriptions use `broad: 0.45`; named sources/actions use
+`specific: 0.55`; subtypes, exact calls, techniques, music styles and source/context
+attribution use `fine: 0.65`. `generic: 0.35` is reserved for broad fallback captions.
 Edit one tier value to tune a category, or edit a label's `class_tiers` assignment.
 A per-class override remains a minimum, so lowering a tier below an override
 also requires adjusting that override if the lower requirement is intended.

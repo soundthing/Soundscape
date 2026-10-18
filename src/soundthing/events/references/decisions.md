@@ -109,6 +109,10 @@ thresholds remain exact, and non-safety overrides remain minimums. These initial
 settings are a policy proposal, not measured precision; labeled evaluation is
 still needed before calling any tier reliable.
 
+The user subsequently lowered fine to 0.65, with specific at 0.55 and broad at
+0.45, to allow more captions through. Safety requirements and per-class minimums
+stay unchanged. This tuning request does not establish improved accuracy.
+
 ## Generic inference uses maximum support and an activity gate — events
 
 Without new model outputs, a broad fallback can only summarize existing evidence.

@@ -4,9 +4,9 @@ default: 0.5
 safety_default: 0.6
 tiers:
   generic: 0.35
-  broad: 0.50
-  specific: 0.65
-  fine: 0.80
+  broad: 0.45
+  specific: 0.55
+  fine: 0.65
 classes:
   gunshot: 0.75
   thud: 0.6
