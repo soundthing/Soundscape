@@ -20,10 +20,10 @@ silently delete); a surprise → `pitfalls.md`. Record the why, not the code. Ke
 ## The tuning loop
 1. Read `get_ledger` / `get_best` first so you don't repeat past experiments.
 2. State ONE clear hypothesis before making any change.
-3. Change parameters via overrides, or edit code in the component being tuned.
-4. `score` with that hypothesis. Every attempt is logged to the shared ledger either way.
-5. Keep a candidate only if limit checks `passed` AND bootstrap `accept` is true.
-6. `promote` only an accepted run.
+3. Change parameters via overrides, or write a patch against the component being tuned (`code_paths` only).
+4. For parameter changes, `score` with that hypothesis. For code experiments, call `run_experiment` with one hypothesis and the patch; never edit the harness, objective, or eval settings in an experiment. Every attempt is logged to the shared ledger either way.
+5. Keep a candidate only if limit checks `passed` AND bootstrap `accept` is true. Unaccepted experiment worktrees and branches are automatically removed.
+6. `promote` only an accepted parameter run. Only `promote_code` accepted code experiment runs; review branches (`harness/review/<run_id>`) are created for human review and must be merged by a human (never auto-merge or push).
 
 ## Tunable vs protected
 - **Tunable:** parameters in `describe_space` (`events:` in `pipeline.yaml`, `thresholds.yaml`; per-class thresholds only for classes with >= 20 dev events), and code in `events/`.

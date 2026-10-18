@@ -71,3 +71,16 @@ def best_path() -> Path:
 
 def proposals_dir() -> Path:
     return harness_home() / "proposals"
+
+
+def patches_dir() -> Path:
+    d = harness_home() / "patches"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def experiments_root() -> Path:
+    env = os.environ.get("SOUNDTHING_EXPERIMENTS_ROOT")
+    root = Path(env) if env else main_checkout().parent / ".wt"
+    root.mkdir(parents=True, exist_ok=True)
+    return root

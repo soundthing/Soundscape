@@ -38,3 +38,12 @@ All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) und
 
 ## Kaggle kernel ships the working tree instead of cloning — harness
 The kernel used to clone the (private) repo at a pushed sha, which needed a GitHub token as a Kaggle secret and a commit+push before every recache. Cache building needs only `src/soundthing`, `config/` and `pyproject.toml` (~160 KB base64), so the pusher embeds them in the script and records their sha256 in the cache meta. Trade-off: provenance is a bundle hash rather than a commit.
+
+## Trusted scorer overlay isolates candidate code — harness
+Scoring candidate code changes uses an overlay directory created by archiving the pinned commit (default HEAD of main checkout) for `src`, `config`, and `pyproject.toml`. Only the component's declared `code_paths` and non-shared `config/` files are copied from the candidate worktree, with the `eval:` section in `pipeline.yaml` strictly restored from the pinned commit and shared yaml files (`environments.yaml`, `vocabulary.yaml`, `priors.yaml`) preserved from pinned. This guarantees that candidate code cannot alter the objective, harness, or evaluation parameters.
+
+## Code experiments run in short worktrees and prune unaccepted branches — harness
+Code experiments run in dedicated git worktrees located under `<main_checkout parent>/.wt/soundthing-exp-<id>` to mitigate Windows MAX_PATH limitations. If the candidate fails limit checks or paired bootstrap acceptance against current best, its worktree and branch are automatically removed to prevent repo clutter. Accepted runs keep their branch for promotion.
+
+## Code promotion targets review branches with tamper verification — harness
+`promote_code` verifies that the experiment was accepted, validates the patch SHA against the recorded ledger entry to detect any tampering, enforces holdout gating on events, and creates a local `harness/review/<run_id>` branch. It never automatically merges into user branches or pushes to remotes, keeping human review as the final gate for code promotion.
