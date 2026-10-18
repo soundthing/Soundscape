@@ -21,6 +21,8 @@ def append(entry: dict) -> None:
     data = dict(entry)
     if "ts" not in data:
         data["ts"] = datetime.now(timezone.utc).isoformat()
+    if "component" not in data and data.get("kind") in ("score", "promote"):
+        data["component"] = "events"
 
     line = json.dumps(data, sort_keys=True, default=str) + "\n"
     line_bytes = line.encode("utf-8")
@@ -36,8 +38,8 @@ def append(entry: dict) -> None:
         os.close(fd)
 
 
-def read() -> list[dict]:
-    """Read all entries from ledger_path(), skipping blank lines."""
+def read(component: str | None = None) -> list[dict]:
+    """Read all entries from ledger_path(), skipping blank lines and filtering by component if given."""
     target = paths.ledger_path()
     if not target.exists():
         return []
@@ -54,13 +56,16 @@ def read() -> list[dict]:
                 raise ValueError(
                     f"Corrupt line {line_no} in ledger {target}: {e}"
                 ) from e
+            if component is not None:
+                if item.get("component", "events") != component:
+                    continue
             entries.append(item)
     return entries
 
 
-def best() -> dict | None:
-    """Return JSON contents of best_path() or None if absent."""
-    target = paths.best_path()
+def best(component: str = "events") -> dict | None:
+    """Return JSON contents of best_path(component) or None if absent."""
+    target = paths.best_path(component)
     if not target.exists():
         return None
     try:
@@ -70,14 +75,18 @@ def best() -> dict | None:
         return None
 
 
-def set_best(entry: dict) -> None:
-    """Write entry to best_path() atomically via a temp file in the same directory."""
-    target = paths.best_path()
+def set_best(entry: dict, component: str = "events") -> None:
+    """Write entry to best_path(component) atomically via a temp file in the same directory."""
+    target = paths.best_path(component)
     target.parent.mkdir(parents=True, exist_ok=True)
+
+    data = dict(entry)
+    if component != "events" and "component" not in data:
+        data["component"] = component
 
     tmp_file = tempfile.NamedTemporaryFile(
         dir=target.parent,
-        prefix="best_",
+        prefix=f"best_{component}_",
         suffix=".tmp",
         delete=False,
         mode="w",
@@ -85,7 +94,7 @@ def set_best(entry: dict) -> None:
     )
     tmp_path = Path(tmp_file.name)
     try:
-        json.dump(entry, tmp_file, indent=2, sort_keys=True, default=str)
+        json.dump(data, tmp_file, indent=2, sort_keys=True, default=str)
         tmp_file.flush()
         tmp_file.close()
         os.replace(tmp_path, target)

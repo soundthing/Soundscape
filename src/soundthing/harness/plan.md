@@ -42,18 +42,36 @@ Each component declares: `name`, owning role, the config keys it owns, `cache_ke
   an agent can't improve its number by editing the objective.
 - **Holdout:** unchanged: pass/fail only at promotion, stored outside the repo.
 
+## Status
+
+Done (2026-10-18): component protocol + registry (`components/`), events/environment/
+captions/pipeline components, generic score/sweep/bootstrap/promote/ledger with
+`--component`, per-component best, cross-role promotion as proposals (`SOUNDTHING_ROLE`),
+trusted scorer (`trusted.py`), experiment runner and code promotion to review branches
+(`runner.py`), MCP tools `list_components`, `run_experiment`, `promote_code`.
+
+## First runs (2026-10-18, current config, 42 ESC-50 dev mixes, audio only)
+
+| Component | Objective | Notes |
+|---|---|---|
+| events | F0.5 0.085 | baseline 0.099, **wrong env 0.220**, safety recall 0.20, 23 FP/min |
+| environment | 0.119 | audio-only CLAP; 14 envs, so barely above chance (0.07) |
+| captions | cue F0.5 0.042 | safety recall 0.11, mean cue 2.0 s |
+| pipeline | cue F0.5 0.071 | baseline 0.051, 12.8 FP/min, env time acc 0.119 |
+
+Conditioning on the labeled environment scores *below* a deliberately wrong one, so the
+priors or their application likely hurt; investigate before tuning anything else.
+Reproduce: `build-dev --esc50 data/esc50 --n-per-env 3 --out data/harness/dev-esc`, then
+`build-cache --component environment ...` and `score --component C --labels data/harness/dev-esc/labels --no-log`.
+
 ## Work left
 
-- Move to the layout above (after the in-flight AudioSet work is committed).
-- Component protocol; core score/sweep/promote take `--component`; events becomes the first component.
-- Trusted scorer; ledger stores each candidate's patch.
-- Experiment runner (worktree per experiment, score, keep/discard) and code promotion to a review branch.
-- Environment, captions and end-to-end components.
-- MCP tools `list_components` and `run_experiment`; agent loop rules in `harness/AGENTS.md`.
-- First real runs on ESC-50 mixes, AudioSet strong labels and env-labeled clips.
+- Build dev caches at scale (Kaggle) for AudioSet dev; only the ESC-50 mixes are cached locally.
+- Environment component on clips with video (dev mixes are audio-only, so visual fusion is untested on real data).
+- Captions merge rules: `captions.py` has only min/max cue duration to tune.
 
 ## Open decisions
 
-1. Who owns `harness/` (Person 1, or a new shared row everyone may edit)?
-2. May the harness ever write another role's config directly, or proposals only (default)?
-3. End-to-end objective: caption F0.5 only, or also weigh environment accuracy and modifiers?
+1. ~~Who owns `harness/`~~ Person 1 (root AGENTS.md row).
+2. ~~Cross-role writes~~ Proposals only.
+3. ~~End-to-end objective~~ Caption-cue F0.5 with predicted environment; env accuracy is a diagnostic.

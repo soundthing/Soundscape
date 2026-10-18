@@ -26,6 +26,7 @@ from soundthing.events.cache import (
 )
 from soundthing.harness import paths
 from soundthing.events.replay import replay
+from soundthing.harness.overrides import apply_overrides
 from soundthing.harness.score import labeled_env_segments, score
 from soundthing.events import vad
 
@@ -278,7 +279,8 @@ def test_score_matching_clip_modes_and_counts(
     vid = lbl.video_id
     assert vid in res.per_clip
     modes = res.per_clip[vid]
-    assert set(modes.keys()) == {"conditioned", "baseline", "wrong_env"}
+    assert set(modes.keys()) == {"conditioned", "baseline", "wrong_env", "stats"}
+    assert len(modes["stats"]) == 4
 
     count_keys = {
         "tp_fine",
@@ -408,8 +410,9 @@ def test_score_limits_behavior(
         f"priors.{env_id}.default": 0.0,
         f"priors.{env_id}.classes.{sc_id}": 0.0,
     }
+    unfavorable_cfg = apply_overrides(cfg, unfavorable_overrides)
     res_below_base = score(
-        cfg=cfg, labels_dir=labels_dir, overrides=unfavorable_overrides
+        cfg=unfavorable_cfg, labels_dir=labels_dir
     )
     # With best=None, only above_baseline should fail
     assert res_below_base.objective < res_below_base.baseline

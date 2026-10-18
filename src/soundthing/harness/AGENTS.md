@@ -20,10 +20,10 @@ silently delete); a surprise → `pitfalls.md`. Record the why, not the code. Ke
 ## The tuning loop
 1. Read `get_ledger` / `get_best` first so you don't repeat past experiments.
 2. State ONE clear hypothesis before making any change.
-3. Change parameters via overrides, or edit code in the component being tuned.
-4. `score` with that hypothesis. Every attempt is logged to the shared ledger either way.
-5. Keep a candidate only if limit checks `passed` AND bootstrap `accept` is true.
-6. `promote` only an accepted run.
+3. Change parameters via overrides, or write a patch against the component being tuned (`code_paths` only).
+4. For parameter changes, `score` with that hypothesis. For code experiments, call `run_experiment` with one hypothesis and the patch; never edit the harness, objective, or eval settings in an experiment. Every attempt is logged to the shared ledger either way.
+5. Keep a candidate only if limit checks `passed` AND bootstrap `accept` is true. Unaccepted experiment worktrees and branches are automatically removed.
+6. `promote` only an accepted parameter run. Only `promote_code` accepted code experiment runs; review branches (`harness/review/<run_id>`) are created for human review and must be merged by a human (never auto-merge or push).
 
 ## Tunable vs protected
 - **Tunable:** parameters in `describe_space` (`events:` in `pipeline.yaml`, `thresholds.yaml`; per-class thresholds only for classes with >= 20 dev events), and code in `events/`.
@@ -37,6 +37,6 @@ silently delete); a surprise → `pitfalls.md`. Record the why, not the code. Ke
 - Tests must isolate state with `monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))`.
 
 ## How to run
-- **CLI:** `python -m soundthing.harness score --set events.postprocess.smoothing_sec=0.75 --hypothesis "..."` (also `sweep`, `promote`, `propose`, `space`, `best`, `ledger`, `recache`, `build-dev`, `import-audioset`).
+- **CLI:** `python -m soundthing.harness score --component events --set events.postprocess.smoothing_sec=0.75 --hypothesis "..."` (also `sweep`, `promote`, `propose`, `space`, `best`, `ledger`, `list-components`, `recache`, `build-dev`, `build-cache`, `import-audioset`, `run-experiment`, `promote-code`; `--component NAME` selects the stage component, `score --labels DIR` scores another labels dir).
 - **MCP server:** `python -m soundthing.harness serve-mcp` (stdio). Registering it in `.mcp.json` or `.claude/` is a protected shared-file change requiring explicit user confirmation (root AGENTS.md §2). Snippet for user reference:
   `{"mcpServers": {"soundthing-harness": {"command": ".venv/Scripts/py.exe", "args": ["-m", "soundthing.harness", "serve-mcp"]}}}` (venv interpreter name may differ per machine).
