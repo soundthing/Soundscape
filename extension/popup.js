@@ -64,8 +64,8 @@ matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", event 
 
 function showState(state) {
   const descriptions = {
-    disabled: "Turn on for YouTube.",
-    unsupported: "Open a YouTube video.",
+    disabled: "Enable sound captions",
+    unsupported: "Enable sound captions",
     queued: "Waiting to start…",
     downloading: "Getting your video…",
     processing: "Making captions…",
