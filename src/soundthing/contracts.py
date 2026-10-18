@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable, TypeVar
 
 # Version 2 retires the five unmapped event classes and requires PANNs-only runs.
-# Optional prior coefficient formats affect configuration, not these JSON payloads.
+# Optional prior formats and specificity tiers affect configuration, not JSON shape.
 SCHEMA_VERSION = 2
 
 # Fallback environment used when the classifier is not confident. It must also
@@ -152,7 +152,7 @@ class CaptionEvent:
     end: float
     label: str  # caption text without brackets, e.g. "door slams"
     class_id: str  # vocabulary id (or coarse group id) e.g. "door_slam" / "impact"; used by eval
-    confidence: float
+    confidence: float  # peak final score; specificity tiers only change the required threshold
     modifiers: list[str] = field(default_factory=list)  # subset of MODIFIERS
 
     def validate(self) -> None:

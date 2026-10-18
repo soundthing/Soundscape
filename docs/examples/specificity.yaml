@@ -1,0 +1,18 @@
+# A complete alternative thresholds.yaml; no changes to vocabulary are required.
+# Unlisted labels retain the legacy per-class/default lookup.
+default: 0.5
+safety_default: 0.6
+tiers:
+  generic: 0.35
+  broad: 0.50
+  specific: 0.65
+  fine: 0.80
+classes:
+  gunshot: 0.75
+  thud: 0.6
+class_tiers:
+  audioset_m_04rlf: broad  # Music
+  typing: specific
+  microwave_beep: fine
+  thud: broad  # The 0.60 per-class minimum still applies.
+  gunshot: fine  # Safety exception: remains exactly 0.75, independent of tiers.

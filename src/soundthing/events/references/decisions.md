@@ -98,3 +98,13 @@ environment before mixing so default uncertain-scene behavior stays unchanged.
 Legacy bounded configs keep their original validation. Lowering the minimum does
 not establish better accuracy, and zero positive scene annotations remain unknown
 evidence rather than verified absence. The maximum cap and safety bypass remain.
+
+## Specificity changes requirements, not confidence — events, user-approved
+
+A precise source or subtype makes a stronger claim than a general acoustic
+description. Explicit, editable tiers raise the evidence required for stronger
+claims without rewriting model scores or treating taxonomy depth as accuracy.
+Independently scored parents still need their own evidence. Existing safety
+thresholds remain exact, and non-safety overrides remain minimums. These initial
+settings are a policy proposal, not measured precision; labeled evaluation is
+still needed before calling any tier reliable.

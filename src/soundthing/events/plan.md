@@ -45,7 +45,7 @@ CLAP-only classes; those five have since been retired. Hierarchy suppression and
 protection have synthetic integration tests. Real environment + PANNs + CLAP inference was run on a 63.616-second cached
 YouTube video: 34 baseline and 43 conditioned events. The 532 × 527 mapping,
 VTT output, ancestor suppression, and new AudioSet-class outputs were verified. There are still no labeled-clip F1 / FP-per-minute measurements.
-That run predates removal of event CLAP and does not validate PANNs-only caption quality. Default thresholds remain untuned placeholders. CLAP is now used only by environment detection.
+That run predates removal of event CLAP and does not validate PANNs-only caption quality. Thresholds now have an initial specificity policy, with no labeled calibration yet. CLAP is now used only by environment detection.
 
 **PANNs-only verification:** 213 tests pass. A short local real-model run generated
 both schema-version-2 VTT tracks, with zero baseline events and one conditioned
@@ -62,6 +62,12 @@ real-world occurrence probabilities or detector-accuracy improvements.
 previously clamped to 0.25, with the shared `floor` as the sole adjustable runtime
 minimum. Default effective weights remain unchanged; old bounded configs retain
 their validation and behavior. No JSON schema change is required.
+
+**Specificity policy:** all 527 classes have explicit, editable broad/specific/fine
+assignments, with initial thresholds 0.50/0.65/0.80. Existing safety requirements
+are preserved and per-class overrides remain minimums. Legacy configs without
+tiers keep their lookup. Scores are unchanged; precision/recall effects have not
+been measured on labeled clips. Generic fallback groups are a separate proposal.
 
 **Next:** label clips and measure precision/recall and false positives before
 tuning thresholds. The expanded conditioned path has completed a real-video run.

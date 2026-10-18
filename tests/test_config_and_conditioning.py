@@ -11,7 +11,7 @@ def test_config_valid(cfg):
     assert cfg.safety_ids()
     assert cfg.threshold("gunshot") == 0.75
     assert cfg.threshold("siren") == cfg.thresholds.safety_default
-    assert cfg.threshold("typing") == cfg.thresholds.default
+    assert cfg.threshold("typing") == cfg.thresholds.tiers[cfg.thresholds.class_tiers["typing"]]
 
 
 def test_general_means_no_conditioning(cfg):

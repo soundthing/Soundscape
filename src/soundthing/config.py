@@ -72,6 +72,8 @@ class Thresholds:
     default: float
     safety_default: float
     classes: dict[str, float]
+    tiers: dict[str, float] = field(default_factory=dict)
+    class_tiers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -104,11 +106,15 @@ class Config:
         return {c.id for c in self.classes if c.safety}
 
     def threshold(self, class_id: str) -> float:
-        if class_id in self.thresholds.classes:
-            return self.thresholds.classes[class_id]
+        """Required score, with safety policy independent of specificity tiers."""
+        override = self.thresholds.classes.get(class_id)
         if class_id in self.safety_ids():
-            return self.thresholds.safety_default
-        return self.thresholds.default
+            return override if override is not None else self.thresholds.safety_default
+        tier = self.thresholds.class_tiers.get(class_id)
+        if tier is not None:
+            required = self.thresholds.tiers[tier]
+            return max(required, override) if override is not None else required
+        return override if override is not None else self.thresholds.default
 
     def caption_for(self, class_id: str) -> str:
         """Caption text for a fine class id or a coarse group id."""
@@ -234,11 +240,28 @@ class Config:
         if not 0 <= self.priors.floor <= 1:
             errors.append("priors.yaml: floor not in [0, 1]")
 
+        def valid_threshold(value):
+            return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(value) and 0 < value < 1)
+
+        for name in ("default", "safety_default"):
+            if not valid_threshold(getattr(self.thresholds, name)):
+                errors.append(f"thresholds.yaml: {name} must be finite and in (0, 1)")
         for cid, t in self.thresholds.classes.items():
             if cid not in class_ids and cid not in self.coarse_groups:
                 errors.append(f"thresholds.yaml: unknown class {cid!r}")
-            if not 0 < t < 1:
-                errors.append(f"thresholds.yaml: {cid}={t} not in (0, 1)")
+            if not valid_threshold(t):
+                errors.append(f"thresholds.yaml: {cid}={t} must be finite and in (0, 1)")
+        for name, threshold in self.thresholds.tiers.items():
+            if not isinstance(name, str) or not name.strip():
+                errors.append("thresholds.yaml: tier names must be nonempty strings")
+            if not valid_threshold(threshold):
+                errors.append(f"thresholds.yaml: tier {name!r} must be finite and in (0, 1)")
+        for cid, tier in self.thresholds.class_tiers.items():
+            if cid not in class_ids and cid not in self.coarse_groups:
+                errors.append(f"thresholds.yaml: class_tiers has unknown class {cid!r}")
+            if not isinstance(tier, str) or tier not in self.thresholds.tiers:
+                errors.append(f"thresholds.yaml: {cid}: unknown tier {tier!r}")
 
         covered = {cid for ep in self.priors.environments.values() for cid in ep.classes}
         for c in self.classes:
@@ -253,6 +276,14 @@ class Config:
 def _load_yaml(path: Path) -> Any:
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def _threshold_mapping(raw: Any, name: str) -> dict:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"thresholds.yaml: {name} must be a mapping")
+    return dict(raw)
 
 
 def load_config(config_dir: str | Path | None = None, validate: bool = True) -> Config:
@@ -282,7 +313,9 @@ def load_config(config_dir: str | Path | None = None, validate: bool = True) -> 
         thresholds=Thresholds(
             default=float(thr_raw.get("default", 0.5)),
             safety_default=float(thr_raw.get("safety_default", thr_raw.get("default", 0.5))),
-            classes=dict(thr_raw.get("classes") or {}),
+            classes=_threshold_mapping(thr_raw.get("classes"), "classes"),
+            tiers=_threshold_mapping(thr_raw.get("tiers"), "tiers"),
+            class_tiers=_threshold_mapping(thr_raw.get("class_tiers"), "class_tiers"),
         ),
         pipeline=pipeline,
         config_dir=d,

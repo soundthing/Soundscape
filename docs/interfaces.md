@@ -118,7 +118,7 @@ streaming wrapper can reuse it.
 | `environments.yaml` | P2 | environment ids + CLIP/CLAP prompts; must include `general` |
 | `vocabulary.yaml` | P1 | caption classes, required AudioSet mapping, coarse groups, `safety`, `sustained` |
 | `priors.yaml` | **P2 (single owner)** | `P(event \| env)` weights; semantics below |
-| `thresholds.yaml` | P1 | per-class thresholds |
+| `thresholds.yaml` | P1 | per-class thresholds and optional specificity tiers |
 | `pipeline.yaml` | per section | window/hop, models, fusion weights, post-processing, eval tolerance |
 
 Run `soundthing check-config` after any edit (add `--audioset class_labels_indices.csv`
@@ -135,6 +135,35 @@ conditioned(c,t) = raw(c,t) · (floor + (1 − floor) · weight(c,t))
 This is the backward-compatible `multiplicative` mode. The current fitted table
 selects `odds`; see “Prior application modes” below. In either mode, per-class
 thresholds from `thresholds.yaml` apply to the conditioned score.
+
+### Optional specificity thresholds
+
+`Thresholds.tiers: dict[str, float]` and `Thresholds.class_tiers: dict[str, str]`
+both default to `{}`. In `thresholds.yaml`, `tiers` maps editable tier names to
+required scores in `(0, 1)`; `class_tiers` assigns vocabulary or coarse-group ids
+to those names. Unknown ids/tiers and non-finite, boolean or out-of-range values
+are errors. See [the example](examples/specificity.yaml).
+
+For safety classes, the exact existing policy remains `classes[id]` if present,
+otherwise `safety_default`. Tiers never change safety requirements. For another
+assigned label, the required score is its tier value, raised to the per-class
+override if that override is higher. Untiered labels retain the legacy lookup:
+`classes[id]` if present, otherwise `default`. Thus legacy configs need no edits.
+
+The live policy explicitly assigns all 527 PANNs labels: general categories and
+acoustic descriptions use `broad: 0.50`; named sources/actions use
+`specific: 0.65`; subtypes, exact calls, techniques, music styles and source/context
+attribution use `fine: 0.80`. `generic: 0.35` is reserved for broad fallback captions.
+Edit one tier value to tune a category, or edit a label's `class_tiers` assignment.
+A per-class override remains a minimum, so lowering a tier below an override
+also requires adjusting that override if the lower requirement is intended.
+
+These are initial display-policy settings, not accuracy measurements or calibrated
+probabilities. Specificity is assigned by caption meaning, not graph depth.
+Person 1 applies the same lookup in real and stub detection. Model scores,
+`CaptionEvent.confidence`, Person 2's prior coefficients (including the `0.25`
+floor), and Person 3's JSON/VTT format are unchanged. This additive configuration
+requires no schema-version bump; existing version-2 JSON remains valid.
 
 ## Evaluation ([`evaluate.py`](../src/soundthing/evaluate.py))
 

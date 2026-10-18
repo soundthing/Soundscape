@@ -1,10 +1,19 @@
-# Per-class detection thresholds on the (conditioned) score. OWNER: Person 1.
-# Precision over recall: when in doubt, raise a threshold.
-# Lookup: classes[id] -> safety_default (if class is safety) -> default.
+# Required scores on the conditioned output. OWNER: Person 1.
+# Specificity is a tunable display policy, not measured model calibration.
+# Safety: explicit override -> safety_default; tiers never change it.
+# Other labels: max(tier, explicit override), or the legacy lookup if untiered.
 
 default: 0.5
-safety_default: 0.6   # safety classes bypass priors, so they need a higher bar against false alarms
+safety_default: 0.6
 
+# Tune these four values to adjust whole groups. Thresholds stay in (0, 1).
+tiers:
+  generic: 0.35
+  broad: 0.50
+  specific: 0.65
+  fine: 0.80
+
+# Explicit overrides remain minimums; safety overrides remain exact.
 classes:
   gunshot: 0.75
   explosion: 0.75
@@ -14,3 +23,543 @@ classes:
   thud: 0.6
   crash: 0.6
   footsteps: 0.55
+
+# All 527 PANNs labels are assigned explicitly, independent of graph depth.
+# Broad: general categories/acoustics. Specific: named sources/actions.
+# Fine: subtypes, exact calls, techniques, styles, context and attribution.
+# Safety labels are listed for completeness but bypass their tier.
+class_tiers:
+  siren: specific  # Siren
+  smoke_alarm: fine  # Smoke detector, smoke alarm
+  alarm_ringing: broad  # Alarm
+  car_alarm: fine  # Car alarm
+  car_horn: fine  # Vehicle horn, car horn, honking
+  glass_break: specific  # Shatter
+  scream: specific  # Screaming
+  gunshot: specific  # Gunshot, gunfire
+  explosion: specific  # Explosion
+  baby_cry: fine  # Baby cry, infant cry
+  door_slam: specific  # Slam
+  door_knock: specific  # Knock
+  doorbell: specific  # Doorbell
+  door_open_close: broad  # Door
+  footsteps: specific  # Walk, footsteps
+  phone_ring: specific  # Telephone bell ringing
+  keys_jingle: fine  # Keys jangling
+  clock_ticking: fine  # Tick-tock
+  thud: broad  # Thump, thud
+  crash: broad  # Smash, crash
+  microwave_beep: fine  # Microwave oven
+  sizzling: specific  # Frying (food)
+  faucet: specific  # Water tap, faucet
+  dishes: specific  # Dishes, pots, and pans
+  blender: specific  # Blender
+  chopping: specific  # Chopping (food)
+  boiling: specific  # Boiling
+  typing: specific  # Typing
+  printer: specific  # Printer
+  car_passing: fine  # Car passing by
+  traffic: specific  # Traffic noise, roadway noise
+  motorcycle: specific  # Motorcycle
+  tire_screech: fine  # Skidding
+  engine_start: fine  # Engine starting
+  engine_rev: fine  # Accelerating, revving, vroom
+  reversing_beep: fine  # Reversing beeps
+  train: specific  # Train
+  train_horn: fine  # Train horn
+  helicopter: specific  # Helicopter
+  aircraft: broad  # Aircraft
+  dog_bark: fine  # Bark
+  cat_meow: fine  # Meow
+  birdsong: broad  # Bird vocalization, bird call, bird song
+  insects: broad  # Insect
+  rain: specific  # Rain
+  thunder: specific  # Thunder
+  wind: specific  # Wind
+  stream: specific  # Stream
+  waves: specific  # Waves, surf
+  applause: specific  # Applause
+  cheering: specific  # Cheering
+  crowd_murmur: broad  # Crowd
+  laughter: broad  # Laughter
+  whistle: broad  # Whistle
+  cough: specific  # Cough
+  fireworks: specific  # Fireworks
+  audioset_m_09x0r: broad  # Speech
+  audioset_m_05zppz: fine  # Male speech, man speaking
+  audioset_m_02zsn: fine  # Female speech, woman speaking
+  audioset_m_0ytgt: fine  # Child speech, kid speaking
+  audioset_m_01h8n0: specific  # Conversation
+  audioset_m_02qldy: fine  # Narration, monologue
+  audioset_m_0261r1: fine  # Babbling
+  audioset_m_0brhx: fine  # Speech synthesizer
+  audioset_m_07p6fty: broad  # Shout
+  audioset_m_07q4ntr: fine  # Bellow
+  audioset_m_07rwj3x: fine  # Whoop
+  audioset_m_07sr1lc: specific  # Yell
+  audioset_m_04gy_2: fine  # Battle cry
+  audioset_t_dd00135: fine  # Children shouting
+  audioset_m_02rtxlg: specific  # Whispering
+  audioset_t_dd00001: fine  # Baby laughter
+  audioset_m_07r660_: fine  # Giggle
+  audioset_m_07s04w4: fine  # Snicker
+  audioset_m_07sq110: fine  # Belly laugh
+  audioset_m_07rgt08: fine  # Chuckle, chortle
+  audioset_m_0463cq4: broad  # Crying, sobbing
+  audioset_m_07qz6j3: fine  # Whimper
+  audioset_m_07qw_06: fine  # Wail, moan
+  audioset_m_07plz5l: specific  # Sigh
+  audioset_m_015lz1: broad  # Singing
+  audioset_m_0l14jd: specific  # Choir
+  audioset_m_01swy6: specific  # Yodeling
+  audioset_m_02bk07: specific  # Chant
+  audioset_m_01c194: fine  # Mantra
+  audioset_t_dd00003: fine  # Male singing
+  audioset_t_dd00004: fine  # Female singing
+  audioset_t_dd00005: fine  # Child singing
+  audioset_t_dd00006: fine  # Synthetic singing
+  audioset_m_06bxc: specific  # Rapping
+  audioset_m_02fxyj: specific  # Humming
+  audioset_m_07s2xch: specific  # Groan
+  audioset_m_07r4k75: specific  # Grunt
+  audioset_m_01w250: specific  # Whistling
+  audioset_m_0lyf6: broad  # Breathing
+  audioset_m_07mzm6: fine  # Wheeze
+  audioset_m_01d3sd: specific  # Snoring
+  audioset_m_07s0dtb: fine  # Gasp
+  audioset_m_07pyy8b: fine  # Pant
+  audioset_m_07q0yl5: fine  # Snort
+  audioset_m_0dl9sf8: specific  # Throat clearing
+  audioset_m_01hsr_: specific  # Sneeze
+  audioset_m_07ppn3j: fine  # Sniff
+  audioset_m_06h7j: specific  # Run
+  audioset_m_07qv_x_: fine  # Shuffle
+  audioset_m_03cczk: specific  # Chewing, mastication
+  audioset_m_07pdhp0: fine  # Biting
+  audioset_m_0939n_: specific  # Gargling
+  audioset_m_01g90h: fine  # Stomach rumble
+  audioset_m_03q5_w: specific  # Burping, eructation
+  audioset_m_02p3nc: specific  # Hiccup
+  audioset_m_02_nn: specific  # Fart
+  audioset_m_0k65p: broad  # Hands
+  audioset_m_025_jnm: specific  # Finger snapping
+  audioset_m_0l15bq: specific  # Clapping
+  audioset_m_01jg02: fine  # Heart sounds, heartbeat
+  audioset_m_01jg1z: fine  # Heart murmur
+  audioset_m_07rkbfh: broad  # Chatter
+  audioset_m_07qfr4h: broad  # Hubbub, speech noise, speech babble
+  audioset_t_dd00013: fine  # Children playing
+  audioset_m_0jbk: broad  # Animal
+  audioset_m_068hy: broad  # Domestic animals, pets
+  audioset_m_0bt9lr: specific  # Dog
+  audioset_m_07r_k2n: fine  # Yip
+  audioset_m_07qf0zm: fine  # Howl
+  audioset_m_07rc7d9: fine  # Bow-wow
+  audioset_m_0ghcn6: fine  # Growling
+  audioset_t_dd00136: fine  # Whimper (dog)
+  audioset_m_01yrx: specific  # Cat
+  audioset_m_02yds9: fine  # Purr
+  audioset_m_07rjwbb: broad  # Hiss
+  audioset_m_07r81j2: fine  # Caterwaul
+  audioset_m_0ch8v: broad  # Livestock, farm animals, working animals
+  audioset_m_03k3r: specific  # Horse
+  audioset_m_07rv9rh: fine  # Clip-clop
+  audioset_m_07q5rw0: fine  # Neigh, whinny
+  audioset_m_01xq0k1: specific  # Cattle, bovinae
+  audioset_m_07rpkh9: fine  # Moo
+  audioset_m_0239kh: fine  # Cowbell
+  audioset_m_068zj: specific  # Pig
+  audioset_t_dd00018: fine  # Oink
+  audioset_m_03fwl: specific  # Goat
+  audioset_m_07q0h5t: fine  # Bleat
+  audioset_m_07bgp: specific  # Sheep
+  audioset_m_025rv6n: broad  # Fowl
+  audioset_m_09b5t: specific  # Chicken, rooster
+  audioset_m_07st89h: fine  # Cluck
+  audioset_m_07qn5dc: fine  # Crowing, cock-a-doodle-doo
+  audioset_m_01rd7k: specific  # Turkey
+  audioset_m_07svc2k: fine  # Gobble
+  audioset_m_09ddx: specific  # Duck
+  audioset_m_07qdb04: fine  # Quack
+  audioset_m_0dbvp: specific  # Goose
+  audioset_m_07qwf61: fine  # Honk
+  audioset_m_01280g: broad  # Wild animals
+  audioset_m_0cdnk: fine  # Roaring cats (lions, tigers)
+  audioset_m_04cvmfc: fine  # Roar
+  audioset_m_015p6: broad  # Bird
+  audioset_m_07pggtn: fine  # Chirp, tweet
+  audioset_m_07sx8x_: fine  # Squawk
+  audioset_m_0h0rv: fine  # Pigeon, dove
+  audioset_m_07r_25d: fine  # Coo
+  audioset_m_04s8yn: fine  # Crow
+  audioset_m_07r5c2p: fine  # Caw
+  audioset_m_09d5_: fine  # Owl
+  audioset_m_07r_80w: fine  # Hoot
+  audioset_m_05_wcq: fine  # Bird flight, flapping wings
+  audioset_m_01z5f: broad  # Canidae, dogs, wolves
+  audioset_m_06hps: broad  # Rodents, rats, mice
+  audioset_m_04rmv: fine  # Mouse
+  audioset_m_07r4gkf: broad  # Patter
+  audioset_m_09xqv: fine  # Cricket
+  audioset_m_09f96: fine  # Mosquito
+  audioset_m_0h2mp: fine  # Fly, housefly
+  audioset_m_07pjwq1: broad  # Buzz
+  audioset_m_01h3n: fine  # Bee, wasp, etc.
+  audioset_m_09ld4: specific  # Frog
+  audioset_m_07st88b: fine  # Croak
+  audioset_m_078jl: specific  # Snake
+  audioset_m_07qn4z3: broad  # Rattle
+  audioset_m_032n05: fine  # Whale vocalization
+  audioset_m_04rlf: broad  # Music
+  audioset_m_04szw: broad  # Musical instrument
+  audioset_m_0fx80y: broad  # Plucked string instrument
+  audioset_m_0342h: specific  # Guitar
+  audioset_m_02sgy: fine  # Electric guitar
+  audioset_m_018vs: fine  # Bass guitar
+  audioset_m_042v_gx: fine  # Acoustic guitar
+  audioset_m_06w87: fine  # Steel guitar, slide guitar
+  audioset_m_01glhc: fine  # Tapping (guitar technique)
+  audioset_m_07s0s5r: fine  # Strum
+  audioset_m_018j2: fine  # Banjo
+  audioset_m_0jtg0: fine  # Sitar
+  audioset_m_04rzd: fine  # Mandolin
+  audioset_m_01bns_: fine  # Zither
+  audioset_m_07xzm: fine  # Ukulele
+  audioset_m_05148p4: broad  # Keyboard (musical)
+  audioset_m_05r5c: specific  # Piano
+  audioset_m_01s0ps: fine  # Electric piano
+  audioset_m_013y1f: specific  # Organ
+  audioset_m_03xq_f: fine  # Electronic organ
+  audioset_m_03gvt: fine  # Hammond organ
+  audioset_m_0l14qv: specific  # Synthesizer
+  audioset_m_01v1d8: fine  # Sampler
+  audioset_m_03q5t: fine  # Harpsichord
+  audioset_m_0l14md: broad  # Percussion
+  audioset_m_02hnl: specific  # Drum kit
+  audioset_m_0cfdd: fine  # Drum machine
+  audioset_m_026t6: specific  # Drum
+  audioset_m_06rvn: fine  # Snare drum
+  audioset_m_03t3fj: fine  # Rimshot
+  audioset_m_02k_mr: fine  # Drum roll
+  audioset_m_0bm02: fine  # Bass drum
+  audioset_m_011k_j: fine  # Timpani
+  audioset_m_01p970: fine  # Tabla
+  audioset_m_01qbl: specific  # Cymbal
+  audioset_m_03qtq: fine  # Hi-hat
+  audioset_m_01sm1g: fine  # Wood block
+  audioset_m_07brj: fine  # Tambourine
+  audioset_m_05r5wn: fine  # Rattle (instrument)
+  audioset_m_0xzly: fine  # Maraca
+  audioset_m_0mbct: fine  # Gong
+  audioset_m_016622: fine  # Tubular bells
+  audioset_m_0j45pbj: specific  # Mallet percussion
+  audioset_m_0dwsp: fine  # Marimba, xylophone
+  audioset_m_0dwtp: fine  # Glockenspiel
+  audioset_m_0dwt5: fine  # Vibraphone
+  audioset_m_0l156b: fine  # Steelpan
+  audioset_m_05pd6: specific  # Orchestra
+  audioset_m_01kcd: broad  # Brass instrument
+  audioset_m_0319l: fine  # French horn
+  audioset_m_07gql: fine  # Trumpet
+  audioset_m_07c6l: fine  # Trombone
+  audioset_m_0l14_3: broad  # Bowed string instrument
+  audioset_m_02qmj0d: specific  # String section
+  audioset_m_07y_7: specific  # Violin, fiddle
+  audioset_m_0d8_n: fine  # Pizzicato
+  audioset_m_01xqw: specific  # Cello
+  audioset_m_02fsn: fine  # Double bass
+  audioset_m_085jw: broad  # Wind instrument, woodwind instrument
+  audioset_m_0l14j_: specific  # Flute
+  audioset_m_06ncr: specific  # Saxophone
+  audioset_m_01wy6: specific  # Clarinet
+  audioset_m_03m5k: specific  # Harp
+  audioset_m_0395lw: specific  # Bell
+  audioset_m_03w41f: fine  # Church bell
+  audioset_m_027m70_: fine  # Jingle bell
+  audioset_m_0gy1t2s: fine  # Bicycle bell
+  audioset_m_07n_g: fine  # Tuning fork
+  audioset_m_0f8s22: specific  # Chime
+  audioset_m_026fgl: fine  # Wind chime
+  audioset_m_0150b9: fine  # Change ringing (campanology)
+  audioset_m_03qjg: specific  # Harmonica
+  audioset_m_0mkg: specific  # Accordion
+  audioset_m_0192l: specific  # Bagpipes
+  audioset_m_02bxd: fine  # Didgeridoo
+  audioset_m_0l14l2: fine  # Shofar
+  audioset_m_07kc_: fine  # Theremin
+  audioset_m_0l14t7: fine  # Singing bowl
+  audioset_m_01hgjl: fine  # Scratching (performance technique)
+  audioset_m_064t9: fine  # Pop music
+  audioset_m_0glt670: fine  # Hip hop music
+  audioset_m_02cz_7: fine  # Beatboxing
+  audioset_m_06by7: fine  # Rock music
+  audioset_m_03lty: fine  # Heavy metal
+  audioset_m_05r6t: fine  # Punk rock
+  audioset_m_0dls3: fine  # Grunge
+  audioset_m_0dl5d: fine  # Progressive rock
+  audioset_m_07sbbz2: fine  # Rock and roll
+  audioset_m_05w3f: fine  # Psychedelic rock
+  audioset_m_06j6l: fine  # Rhythm and blues
+  audioset_m_0gywn: fine  # Soul music
+  audioset_m_06cqb: fine  # Reggae
+  audioset_m_01lyv: fine  # Country
+  audioset_m_015y_n: fine  # Swing music
+  audioset_m_0gg8l: fine  # Bluegrass
+  audioset_m_02x8m: fine  # Funk
+  audioset_m_02w4v: fine  # Folk music
+  audioset_m_06j64v: fine  # Middle Eastern music
+  audioset_m_03_d0: fine  # Jazz
+  audioset_m_026z9: fine  # Disco
+  audioset_m_0ggq0m: fine  # Classical music
+  audioset_m_05lls: fine  # Opera
+  audioset_m_02lkt: fine  # Electronic music
+  audioset_m_03mb9: fine  # House music
+  audioset_m_07gxw: fine  # Techno
+  audioset_m_07s72n: fine  # Dubstep
+  audioset_m_0283d: fine  # Drum and bass
+  audioset_m_0m0jc: fine  # Electronica
+  audioset_m_08cyft: fine  # Electronic dance music
+  audioset_m_0fd3y: fine  # Ambient music
+  audioset_m_07lnk: fine  # Trance music
+  audioset_m_0g293: fine  # Music of Latin America
+  audioset_m_0ln16: fine  # Salsa music
+  audioset_m_0326g: fine  # Flamenco
+  audioset_m_0155w: fine  # Blues
+  audioset_m_05fw6t: fine  # Music for children
+  audioset_m_02v2lh: fine  # New-age music
+  audioset_m_0y4f8: specific  # Vocal music
+  audioset_m_0z9c: fine  # A capella
+  audioset_m_0164x2: fine  # Music of Africa
+  audioset_m_0145m: fine  # Afrobeat
+  audioset_m_02mscn: fine  # Christian music
+  audioset_m_016cjb: fine  # Gospel music
+  audioset_m_028sqc: fine  # Music of Asia
+  audioset_m_015vgc: fine  # Carnatic music
+  audioset_m_0dq0md: fine  # Music of Bollywood
+  audioset_m_06rqw: fine  # Ska
+  audioset_m_02p0sh1: fine  # Traditional music
+  audioset_m_05rwpb: fine  # Independent music
+  audioset_m_074ft: specific  # Song
+  audioset_m_025td0t: fine  # Background music
+  audioset_m_02cjck: fine  # Theme music
+  audioset_m_03r5q_: fine  # Jingle (music)
+  audioset_m_0l14gg: fine  # Soundtrack music
+  audioset_m_07pkxdp: fine  # Lullaby
+  audioset_m_01z7dr: fine  # Video game music
+  audioset_m_0140xf: fine  # Christmas music
+  audioset_m_0ggx5q: fine  # Dance music
+  audioset_m_04wptg: fine  # Wedding music
+  audioset_t_dd00031: fine  # Happy music
+  audioset_t_dd00032: fine  # Funny music
+  audioset_t_dd00033: fine  # Sad music
+  audioset_t_dd00034: fine  # Tender music
+  audioset_t_dd00035: fine  # Exciting music
+  audioset_t_dd00036: fine  # Angry music
+  audioset_t_dd00037: fine  # Scary music
+  audioset_m_09t49: specific  # Rustling leaves
+  audioset_t_dd00092: fine  # Wind noise (microphone)
+  audioset_m_0jb2l: fine  # Thunderstorm
+  audioset_m_0838f: broad  # Water
+  audioset_m_07r10fb: fine  # Raindrop
+  audioset_t_dd00038: fine  # Rain on surface
+  audioset_m_0j2kx: specific  # Waterfall
+  audioset_m_05kq4: specific  # Ocean
+  audioset_m_06wzb: specific  # Steam
+  audioset_m_07swgks: broad  # Gurgling
+  audioset_m_02_41: specific  # Fire
+  audioset_m_07pzfmf: broad  # Crackle
+  audioset_m_07yv9: broad  # Vehicle
+  audioset_m_019jd: specific  # Boat, Water vehicle
+  audioset_m_0hsrw: fine  # Sailboat, sailing ship
+  audioset_m_056ks2: fine  # Rowboat, canoe, kayak
+  audioset_m_02rlv9: fine  # Motorboat, speedboat
+  audioset_m_06q74: specific  # Ship
+  audioset_m_012f08: broad  # Motor vehicle (road)
+  audioset_m_0k4j: specific  # Car
+  audioset_m_07qv_d5: fine  # Toot
+  audioset_m_04gxbd: fine  # Power windows, electric windows
+  audioset_m_0h9mv: fine  # Tire squeal
+  audioset_m_0ltv: fine  # Race car, auto racing
+  audioset_m_07r04: specific  # Truck
+  audioset_m_0gvgw0: fine  # Air brake
+  audioset_m_05x_td: fine  # Air horn, truck horn
+  audioset_m_03cl9h: fine  # Ice cream truck, ice cream van
+  audioset_m_01bjv: specific  # Bus
+  audioset_m_03j1ly: specific  # Emergency vehicle
+  audioset_m_04qvtq: fine  # Police car (siren)
+  audioset_m_012n7d: fine  # Ambulance (siren)
+  audioset_m_012ndj: fine  # Fire engine, fire truck (siren)
+  audioset_m_06d_3: broad  # Rail transport
+  audioset_m_04zmvq: fine  # Train whistle
+  audioset_m_01g50p: fine  # Railroad car, train wagon
+  audioset_t_dd00048: fine  # Train wheels squealing
+  audioset_m_0195fx: fine  # Subway, metro, underground
+  audioset_m_014yck: fine  # Aircraft engine
+  audioset_m_04229: fine  # Jet engine
+  audioset_m_02l6bg: fine  # Propeller, airscrew
+  audioset_m_0cmf2: fine  # Fixed-wing aircraft, airplane
+  audioset_m_0199g: specific  # Bicycle
+  audioset_m_06_fw: specific  # Skateboard
+  audioset_m_02mk9: broad  # Engine
+  audioset_t_dd00065: fine  # Light engine (high frequency)
+  audioset_m_08j51y: fine  # Dental drill, dentist's drill
+  audioset_m_01yg9g: specific  # Lawn mower
+  audioset_m_01j4z9: specific  # Chainsaw
+  audioset_t_dd00066: fine  # Medium engine (mid frequency)
+  audioset_t_dd00067: fine  # Heavy engine (low frequency)
+  audioset_m_01h82_: fine  # Engine knocking
+  audioset_m_07pb8fc: fine  # Idling
+  audioset_m_07r67yg: fine  # Ding-dong
+  audioset_m_02y_763: fine  # Sliding door
+  audioset_m_07qcpgn: broad  # Tap
+  audioset_m_07q6cd_: broad  # Squeak
+  audioset_m_0642b4: fine  # Cupboard open or close
+  audioset_m_0fqfqc: fine  # Drawer open or close
+  audioset_m_023pjk: fine  # Cutlery, silverware
+  audioset_m_0130jx: fine  # Sink (filling or washing)
+  audioset_m_03dnzn: fine  # Bathtub (filling or washing)
+  audioset_m_03wvsk: specific  # Hair dryer
+  audioset_m_01jt3m: specific  # Toilet flush
+  audioset_m_012xff: specific  # Toothbrush
+  audioset_m_04fgwm: fine  # Electric toothbrush
+  audioset_m_0d31p: specific  # Vacuum cleaner
+  audioset_m_01s0vc: fine  # Zipper (clothing)
+  audioset_m_0242l: fine  # Coin (dropping)
+  audioset_m_01lsmm: specific  # Scissors
+  audioset_m_02g901: specific  # Electric shaver, electric razor
+  audioset_m_05rj2: fine  # Shuffling cards
+  audioset_m_0c2wf: fine  # Typewriter
+  audioset_m_01m2v: fine  # Computer keyboard
+  audioset_m_081rb: fine  # Writing
+  audioset_m_07cx4: specific  # Telephone
+  audioset_m_01hnzm: specific  # Ringtone
+  audioset_m_02c8p: fine  # Telephone dialing, DTMF
+  audioset_m_015jpf: fine  # Dial tone
+  audioset_m_01z47d: fine  # Busy signal
+  audioset_m_046dlr: fine  # Alarm clock
+  audioset_m_0dgbq: fine  # Civil defense siren
+  audioset_m_030rvx: specific  # Buzzer
+  audioset_m_0c3f7m: fine  # Fire alarm
+  audioset_m_04fq5q: fine  # Foghorn
+  audioset_m_06hck5: fine  # Steam whistle
+  audioset_t_dd00077: broad  # Mechanisms
+  audioset_m_02bm9n: fine  # Ratchet, pawl
+  audioset_m_01x3z: specific  # Clock
+  audioset_m_07qjznt: fine  # Tick
+  audioset_m_0l7xg: fine  # Gears
+  audioset_m_05zc1: fine  # Pulleys
+  audioset_m_0llzx: fine  # Sewing machine
+  audioset_m_02x984l: specific  # Mechanical fan
+  audioset_m_025wky1: fine  # Air conditioning
+  audioset_m_024dl: fine  # Cash register
+  audioset_m_0dv5r: fine  # Camera
+  audioset_m_07bjf: fine  # Single-lens reflex camera
+  audioset_m_07k1x: broad  # Tools
+  audioset_m_03l9g: specific  # Hammer
+  audioset_m_03p19w: specific  # Jackhammer
+  audioset_m_01b82r: specific  # Sawing
+  audioset_m_02p01q: fine  # Filing (rasp)
+  audioset_m_023vsd: fine  # Sanding
+  audioset_m_0_ksk: broad  # Power tool
+  audioset_m_01d380: specific  # Drill
+  audioset_m_04zjc: fine  # Machine gun
+  audioset_m_02z32qm: fine  # Fusillade
+  audioset_m_0_1c: fine  # Artillery fire
+  audioset_m_073cg4: fine  # Cap gun
+  audioset_g_122z_qxw: fine  # Firecracker
+  audioset_m_07qsvvw: broad  # Burst, pop
+  audioset_m_07pxg6y: fine  # Eruption
+  audioset_m_07qqyl4: broad  # Boom
+  audioset_m_083vt: specific  # Wood
+  audioset_m_07pczhz: broad  # Chop
+  audioset_m_07pl1bw: broad  # Splinter
+  audioset_m_07qs1cx: broad  # Crack
+  audioset_m_039jq: specific  # Glass
+  audioset_m_07q7njn: broad  # Chink, clink
+  audioset_m_04k94: broad  # Liquid
+  audioset_m_07rrlb6: broad  # Splash, splatter
+  audioset_m_07p6mqd: broad  # Slosh
+  audioset_m_07qlwh6: broad  # Squish
+  audioset_m_07r5v4s: broad  # Drip
+  audioset_m_07prgkl: broad  # Pour
+  audioset_m_07pqc89: broad  # Trickle, dribble
+  audioset_t_dd00088: broad  # Gush
+  audioset_m_07p7b8y: broad  # Fill (with liquid)
+  audioset_m_07qlf79: broad  # Spray
+  audioset_m_07ptzwd: broad  # Pump (liquid)
+  audioset_m_07ptfmf: broad  # Stir
+  audioset_m_0790c: fine  # Sonar
+  audioset_m_0dl83: fine  # Arrow
+  audioset_m_07rqsjt: broad  # Whoosh, swoosh, swish
+  audioset_m_07rrh0c: broad  # Thunk
+  audioset_m_0b_fwt: fine  # Electronic tuner
+  audioset_m_02rr_: fine  # Effects unit
+  audioset_m_07m2kt: fine  # Chorus effect
+  audioset_m_018w8: fine  # Basketball bounce
+  audioset_m_07pws3f: broad  # Bang
+  audioset_m_07ryjzk: broad  # Slap, smack
+  audioset_m_07rdhzs: broad  # Whack, thwack
+  audioset_m_07pc8lb: broad  # Breaking
+  audioset_m_07pqn27: broad  # Bouncing
+  audioset_m_07rbp7_: fine  # Whip
+  audioset_m_07pyf11: broad  # Flap
+  audioset_m_07qb_dv: broad  # Scratch
+  audioset_m_07qv4k0: broad  # Scrape
+  audioset_m_07pdjhy: broad  # Rub
+  audioset_m_07s8j8t: broad  # Roll
+  audioset_m_07plct2: broad  # Crushing
+  audioset_t_dd00112: broad  # Crumpling, crinkling
+  audioset_m_07qcx4z: broad  # Tearing
+  audioset_m_02fs_r: broad  # Beep, bleep
+  audioset_m_07qwdck: broad  # Ping
+  audioset_m_07phxs1: broad  # Ding
+  audioset_m_07rv4dm: broad  # Clang
+  audioset_m_07s02z0: broad  # Squeal
+  audioset_m_07qh7jl: broad  # Creak
+  audioset_m_07qwyj0: broad  # Rustle
+  audioset_m_07s34ls: broad  # Whir
+  audioset_m_07qmpdm: broad  # Clatter
+  audioset_m_07p9k1k: broad  # Sizzle
+  audioset_m_07qc9xj: broad  # Clicking
+  audioset_m_07rwm0c: broad  # Clickety-clack
+  audioset_m_07phhsh: broad  # Rumble
+  audioset_m_07qyrcz: broad  # Plop
+  audioset_m_07qfgpx: broad  # Jingle, tinkle
+  audioset_m_07rcgpl: broad  # Hum
+  audioset_m_07p78v5: broad  # Zing
+  audioset_t_dd00121: broad  # Boing
+  audioset_m_07s12q4: broad  # Crunch
+  audioset_m_028v0c: fine  # Silence
+  audioset_m_01v_m0: fine  # Sine wave
+  audioset_m_0b9m1: fine  # Harmonic
+  audioset_m_0hdsk: fine  # Chirp tone
+  audioset_m_0c1dj: broad  # Sound effect
+  audioset_m_07pt_g0: broad  # Pulse
+  audioset_t_dd00125: fine  # Inside, small room
+  audioset_t_dd00126: fine  # Inside, large room or hall
+  audioset_t_dd00127: fine  # Inside, public space
+  audioset_t_dd00128: fine  # Outside, urban or manmade
+  audioset_t_dd00129: fine  # Outside, rural or natural
+  audioset_m_01b9nn: fine  # Reverberation
+  audioset_m_01jnbd: fine  # Echo
+  audioset_m_096m7z: broad  # Noise
+  audioset_m_06_y0by: broad  # Environmental noise
+  audioset_m_07rgkc5: broad  # Static
+  audioset_m_06xkwv: fine  # Mains hum
+  audioset_m_0g12c5: fine  # Distortion
+  audioset_m_08p9q4: fine  # Sidetone
+  audioset_m_07szfh9: fine  # Cacophony
+  audioset_m_0chx_: fine  # White noise
+  audioset_m_0cj0r: fine  # Pink noise
+  audioset_m_07p_0gm: broad  # Throbbing
+  audioset_m_01jwx6: broad  # Vibration
+  audioset_m_07c52: fine  # Television
+  audioset_m_06bz3: fine  # Radio
+  audioset_m_07hvw1: fine  # Field recording
+  impact: broad  # Existing coarse fallback
+  alarm: broad  # Existing coarse fallback
+  vehicle: broad  # Existing coarse fallback
+  animal: broad  # Existing coarse fallback
+  crowd_noise: broad  # Existing coarse fallback
+  water: broad  # Existing coarse fallback
+  beeping: broad  # Existing coarse fallback
