@@ -6,15 +6,20 @@
 #   audioset AudioSet ontology display names whose tagger scores map to this class
 #            (class score = max over listed labels). Must match the tagger's label
 #            CSV exactly; `soundthing check-config --audioset <csv>` verifies this.
-#   clap     zero-shot CLAP prompts, used for classes AudioSet covers poorly or
-#            as a second opinion. A class needs at least one of audioset/clap.
+#            Every class must have at least one AudioSet mapping.
 #   coarse   optional coarse group id; used when the detector is unsure between
 #            confusable fine classes (e.g. door_slam vs gunshot -> impact).
 #   safety   true = safety-critical: bypasses environment conditioning.
 #   sustained true = background/continuous sound; captioned once, not repeatedly.
 #
-# NOTE: starter list — the AudioSet names still need checking against the
-# checkpoint's class_labels_indices.csv.
+# parents  optional direct ancestors; unknown ids and cycles are rejected.
+#
+# Full 527-class PANNs vocabulary; sound-event scoring uses only PANNs.
+# Existing class ids keep their primary AudioSet label; former aliases have their
+# own output class so a parent score cannot falsely trigger its specific child.
+# Hierarchy derived from Google's AudioSet ontology, CC BY-SA 4.0:
+# https://github.com/audioset/ontology (downloaded 2026-10-17).
+# Reproduce with soundthing.events.vocabulary; see docs/sound-hierarchy.md.
 
 coarse_groups:
   impact: { caption: loud impact }
@@ -27,76 +32,544 @@ coarse_groups:
 
 classes:
   # --- safety set (always active) ---------------------------------------------
-  - { id: siren, caption: siren wailing, audioset: [Siren, "Police car (siren)", "Ambulance (siren)", "Fire engine, fire truck (siren)", Civil defense siren], coarse: alarm, safety: true }
-  - { id: smoke_alarm, caption: smoke alarm beeping, audioset: ["Smoke detector, smoke alarm", Fire alarm], coarse: alarm, safety: true }
-  - { id: alarm_ringing, caption: alarm ringing, audioset: [Alarm, Alarm clock, Buzzer], coarse: alarm, safety: true }
-  - { id: car_alarm, caption: car alarm, audioset: [Car alarm], coarse: alarm, safety: true }
-  - { id: car_horn, caption: car horn honks, audioset: ["Vehicle horn, car horn, honking"], coarse: vehicle, safety: true }
-  - { id: glass_break, caption: glass shatters, audioset: [Shatter, Glass], clap: [glass shattering], coarse: impact, safety: true }
-  - { id: scream, caption: someone screams, audioset: [Screaming], safety: true }
-  - { id: gunshot, caption: gunshot, audioset: ["Gunshot, gunfire"], coarse: impact, safety: true }
-  - { id: explosion, caption: explosion, audioset: [Explosion], coarse: impact, safety: true }
-  - { id: baby_cry, caption: baby crying, audioset: ["Baby cry, infant cry"], safety: true }
+  - {id: siren, caption: siren wailing, audioset: [Siren], coarse: alarm, safety: true, parents: [alarm_ringing]}
+  - {id: smoke_alarm, caption: smoke alarm beeping, audioset: ['Smoke detector, smoke alarm'], coarse: alarm, safety: true, parents: [alarm_ringing]}
+  - {id: alarm_ringing, caption: alarm ringing, audioset: [Alarm], coarse: alarm, safety: true, parents: []}
+  - {id: car_alarm, caption: car alarm, audioset: [Car alarm], coarse: alarm, safety: true, parents: [alarm_ringing, audioset_m_0k4j]}
+  - {id: car_horn, caption: car horn honks, audioset: ['Vehicle horn, car horn, honking'], coarse: vehicle, safety: true, parents: [alarm_ringing, audioset_m_0k4j]}
+  - {id: glass_break, caption: glass shatters, audioset: [Shatter], coarse: impact, safety: true, parents: [audioset_m_039jq]}
+  - {id: scream, caption: someone screams, audioset: [Screaming], safety: true, parents: []}
+  - {id: gunshot, caption: gunshot, audioset: ['Gunshot, gunfire'], coarse: impact, safety: true, parents: [explosion]}
+  - {id: explosion, caption: explosion, audioset: [Explosion], coarse: impact, safety: true, parents: []}
+  - {id: baby_cry, caption: baby crying, audioset: ['Baby cry, infant cry'], safety: true, parents: [audioset_m_0463cq4]}
 
   # --- household / indoor ------------------------------------------------------
-  - { id: door_slam, caption: door slams, audioset: [Slam], clap: [a door slamming shut], coarse: impact }
-  - { id: door_knock, caption: knocking on door, audioset: [Knock], coarse: impact }
-  - { id: doorbell, caption: doorbell rings, audioset: [Doorbell, Ding-dong] }
-  - { id: door_open_close, caption: door opens, audioset: [Door], clap: [a door creaking open] }
-  - { id: footsteps, caption: footsteps, audioset: ["Walk, footsteps"] }
-  - { id: phone_ring, caption: phone ringing, audioset: [Telephone bell ringing, Ringtone], coarse: beeping }
-  - { id: keys_jingle, caption: keys jingling, audioset: [Keys jangling] }
-  - { id: clock_ticking, caption: clock ticking, audioset: [Tick-tock, Clock], sustained: true }
-  - { id: thud, caption: thud, audioset: ["Thump, thud"], coarse: impact }
-  - { id: crash, caption: crash, audioset: ["Smash, crash", Breaking], coarse: impact }
+  - {id: door_slam, caption: door slams, audioset: [Slam], coarse: impact, parents: [door_open_close]}
+  - {id: door_knock, caption: knocking on door, audioset: [Knock], coarse: impact, parents: [door_open_close]}
+  - {id: doorbell, caption: doorbell rings, audioset: [Doorbell], parents: [alarm_ringing, door_open_close]}
+  - {id: door_open_close, caption: door opens, audioset: [Door], parents: []}
+  - {id: footsteps, caption: footsteps, audioset: ['Walk, footsteps'], parents: []}
+  - {id: phone_ring, caption: phone ringing, audioset: [Telephone bell ringing], coarse: beeping, parents: [audioset_m_07cx4]}
+  - {id: keys_jingle, caption: keys jingling, audioset: [Keys jangling], parents: []}
+  - {id: clock_ticking, caption: clock ticking, audioset: [Tick-tock], sustained: true, parents: [audioset_m_01x3z]}
+  - {id: thud, caption: thud, audioset: ['Thump, thud'], coarse: impact, parents: [audioset_m_0dl83]}
+  - {id: crash, caption: crash, audioset: ['Smash, crash'], coarse: impact, parents: []}
 
   # --- kitchen -----------------------------------------------------------------
-  - { id: microwave_beep, caption: microwave beeps, audioset: [Microwave oven], clap: [a microwave oven beeping], coarse: beeping }
-  - { id: sizzling, caption: food sizzling, audioset: ["Frying (food)"], sustained: true }
-  - { id: faucet, caption: water running, audioset: ["Water tap, faucet", "Sink (filling or washing)"], coarse: water, sustained: true }
-  - { id: dishes, caption: dishes clattering, audioset: ["Dishes, pots, and pans", "Cutlery, silverware"] }
-  - { id: blender, caption: blender whirring, audioset: [Blender] }
-  - { id: chopping, caption: chopping, audioset: ["Chopping (food)"] }
-  - { id: kettle_whistle, caption: kettle whistling, clap: [a tea kettle whistling] }
-  - { id: boiling, caption: water boiling, audioset: [Boiling], coarse: water, sustained: true }
+  - {id: microwave_beep, caption: microwave beeps, audioset: [Microwave oven], coarse: beeping, parents: []}
+  - {id: sizzling, caption: food sizzling, audioset: [Frying (food)], sustained: true, parents: []}
+  - {id: faucet, caption: water running, audioset: ['Water tap, faucet'], coarse: water, sustained: true, parents: []}
+  - {id: dishes, caption: dishes clattering, audioset: ['Dishes, pots, and pans'], parents: []}
+  - {id: blender, caption: blender whirring, audioset: [Blender], parents: []}
+  - {id: chopping, caption: chopping, audioset: [Chopping (food)], parents: []}
+  - {id: boiling, caption: water boiling, audioset: [Boiling], coarse: water, sustained: true, parents: [audioset_m_04k94]}
 
   # --- office ------------------------------------------------------------------
-  - { id: typing, caption: typing, audioset: [Typing, Computer keyboard], sustained: true }
-  - { id: printer, caption: printer running, audioset: [Printer] }
-  - { id: mouse_click, caption: mouse clicking, clap: [a computer mouse clicking] }
+  - {id: typing, caption: typing, audioset: [Typing], sustained: true, parents: []}
+  - {id: printer, caption: printer running, audioset: [Printer], parents: [audioset_t_dd00077]}
 
   # --- street / vehicles -------------------------------------------------------
-  - { id: car_passing, caption: car passes by, audioset: [Car passing by], coarse: vehicle }
-  - { id: traffic, caption: traffic, audioset: ["Traffic noise, roadway noise"], coarse: vehicle, sustained: true }
-  - { id: motorcycle, caption: motorcycle revving, audioset: [Motorcycle], coarse: vehicle }
-  - { id: tire_screech, caption: tires screech, audioset: [Skidding, Tire squeal], coarse: vehicle }
-  - { id: engine_start, caption: engine starts, audioset: [Engine starting], coarse: vehicle }
-  - { id: engine_rev, caption: engine revving, audioset: ["Accelerating, revving, vroom"], coarse: vehicle }
-  - { id: reversing_beep, caption: reversing beeps, audioset: [Reversing beeps], coarse: beeping }
-  - { id: turn_signal, caption: turn signal ticking, clap: [a car turn signal clicking] }
-  - { id: seatbelt, caption: seatbelt clicks, clap: [a car seatbelt buckling] }
-  - { id: train, caption: train passing, audioset: [Train], coarse: vehicle }
-  - { id: train_horn, caption: train horn, audioset: [Train horn], coarse: vehicle }
-  - { id: helicopter, caption: helicopter overhead, audioset: [Helicopter], coarse: vehicle }
-  - { id: aircraft, caption: plane overhead, audioset: [Aircraft], coarse: vehicle }
+  - {id: car_passing, caption: car passes by, audioset: [Car passing by], coarse: vehicle, parents: [audioset_m_0k4j]}
+  - {id: traffic, caption: traffic, audioset: ['Traffic noise, roadway noise'], coarse: vehicle, sustained: true, parents: [audioset_m_012f08]}
+  - {id: motorcycle, caption: motorcycle revving, audioset: [Motorcycle], coarse: vehicle, parents: [audioset_m_012f08]}
+  - {id: tire_screech, caption: tires screech, audioset: [Skidding], coarse: vehicle, parents: [audioset_m_0k4j]}
+  - {id: engine_start, caption: engine starts, audioset: [Engine starting], coarse: vehicle, parents: [audioset_m_02mk9]}
+  - {id: engine_rev, caption: engine revving, audioset: ['Accelerating, revving, vroom'], coarse: vehicle, parents: [audioset_m_02mk9]}
+  - {id: reversing_beep, caption: reversing beeps, audioset: [Reversing beeps], coarse: beeping, parents: [audioset_m_07r04]}
+  - {id: train, caption: train passing, audioset: [Train], coarse: vehicle, parents: [audioset_m_06d_3]}
+  - {id: train_horn, caption: train horn, audioset: [Train horn], coarse: vehicle, parents: [train]}
+  - {id: helicopter, caption: helicopter overhead, audioset: [Helicopter], coarse: vehicle, parents: [aircraft]}
+  - {id: aircraft, caption: plane overhead, audioset: [Aircraft], coarse: vehicle, parents: [audioset_m_07yv9]}
 
   # --- nature / weather / animals ---------------------------------------------
-  - { id: dog_bark, caption: dog barking, audioset: [Bark, Dog], coarse: animal }
-  - { id: cat_meow, caption: cat meows, audioset: [Meow, Cat], coarse: animal }
-  - { id: birdsong, caption: birds chirping, audioset: ["Bird vocalization, bird call, bird song", Bird], coarse: animal, sustained: true }
-  - { id: insects, caption: insects buzzing, audioset: [Insect, Cricket], coarse: animal, sustained: true }
-  - { id: rain, caption: rain, audioset: [Rain, Raindrop, Rain on surface], coarse: water, sustained: true }
-  - { id: thunder, caption: thunder rumbles, audioset: [Thunder, Thunderstorm], coarse: impact }
-  - { id: wind, caption: wind blowing, audioset: [Wind], sustained: true }
-  - { id: stream, caption: stream flowing, audioset: [Stream, Waterfall], coarse: water, sustained: true }
-  - { id: waves, caption: waves crashing, audioset: ["Waves, surf", Ocean], coarse: water, sustained: true }
+  - {id: dog_bark, caption: dog barking, audioset: [Bark], coarse: animal, parents: [audioset_m_0bt9lr]}
+  - {id: cat_meow, caption: cat meows, audioset: [Meow], coarse: animal, parents: [audioset_m_01yrx]}
+  - {id: birdsong, caption: birds chirping, audioset: ['Bird vocalization, bird call, bird song'], coarse: animal, sustained: true, parents: [audioset_m_015p6]}
+  - {id: insects, caption: insects buzzing, audioset: [Insect], coarse: animal, sustained: true, parents: [audioset_m_01280g]}
+  - {id: rain, caption: rain, audioset: [Rain], coarse: water, sustained: true, parents: [audioset_m_0838f]}
+  - {id: thunder, caption: thunder rumbles, audioset: [Thunder], coarse: impact, parents: [audioset_m_0jb2l]}
+  - {id: wind, caption: wind blowing, audioset: [Wind], sustained: true, parents: []}
+  - {id: stream, caption: stream flowing, audioset: [Stream], coarse: water, sustained: true, parents: [audioset_m_0838f]}
+  - {id: waves, caption: waves crashing, audioset: ['Waves, surf'], coarse: water, sustained: true, parents: [audioset_m_05kq4]}
 
   # --- people / crowd / sports -------------------------------------------------
-  - { id: applause, caption: applause, audioset: [Applause, Clapping], coarse: crowd_noise }
-  - { id: cheering, caption: crowd cheering, audioset: [Cheering], coarse: crowd_noise }
-  - { id: crowd_murmur, caption: crowd murmuring, audioset: [Crowd], coarse: crowd_noise, sustained: true }
-  - { id: laughter, caption: laughter, audioset: [Laughter] }
-  - { id: whistle, caption: whistle blows, audioset: [Whistle] }
-  - { id: ball_bounce, caption: ball bouncing, clap: [a basketball bouncing on a court] }
-  - { id: cough, caption: coughing, audioset: [Cough] }
-  - { id: fireworks, caption: fireworks, audioset: [Fireworks], coarse: impact }
+  - {id: applause, caption: applause, audioset: [Applause], coarse: crowd_noise, parents: []}
+  - {id: cheering, caption: crowd cheering, audioset: [Cheering], coarse: crowd_noise, parents: []}
+  - {id: crowd_murmur, caption: crowd murmuring, audioset: [Crowd], coarse: crowd_noise, sustained: true, parents: []}
+  - {id: laughter, caption: laughter, audioset: [Laughter], parents: []}
+  - {id: whistle, caption: whistle blows, audioset: [Whistle], parents: [alarm_ringing]}
+  - {id: cough, caption: coughing, audioset: [Cough], parents: []}
+  - {id: fireworks, caption: fireworks, audioset: [Fireworks], coarse: impact, parents: [explosion]}
+
+  # All remaining PANNs outputs, with stable AudioSet machine-id-based ids.
+  - {id: audioset_m_09x0r, caption: speech, audioset: [Speech], parents: []}
+  - {id: audioset_m_05zppz, caption: 'male speech, man speaking', audioset: ['Male speech, man speaking'], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_02zsn, caption: 'female speech, woman speaking', audioset: ['Female speech, woman speaking'], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_0ytgt, caption: 'child speech, kid speaking', audioset: ['Child speech, kid speaking'], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_01h8n0, caption: conversation, audioset: [Conversation], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_02qldy, caption: 'narration, monologue', audioset: ['Narration, monologue'], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_0261r1, caption: babbling, audioset: [Babbling], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_0brhx, caption: speech synthesizer, audioset: [Speech synthesizer], parents: [audioset_m_09x0r]}
+  - {id: audioset_m_07p6fty, caption: shout, audioset: [Shout], parents: []}
+  - {id: audioset_m_07q4ntr, caption: bellow, audioset: [Bellow], parents: [audioset_m_07p6fty]}
+  - {id: audioset_m_07rwj3x, caption: whoop, audioset: [Whoop], parents: [audioset_m_07p6fty]}
+  - {id: audioset_m_07sr1lc, caption: yell, audioset: [Yell], parents: [audioset_m_07p6fty]}
+  - {id: audioset_m_04gy_2, caption: battle cry, audioset: [Battle cry], parents: [audioset_m_07p6fty]}
+  - {id: audioset_t_dd00135, caption: children shouting, audioset: [Children shouting], parents: [audioset_m_07p6fty]}
+  - {id: audioset_m_02rtxlg, caption: whispering, audioset: [Whispering], parents: []}
+  - {id: audioset_t_dd00001, caption: baby laughter, audioset: [Baby laughter], parents: [laughter]}
+  - {id: audioset_m_07r660_, caption: giggle, audioset: [Giggle], parents: [laughter]}
+  - {id: audioset_m_07s04w4, caption: snicker, audioset: [Snicker], parents: [laughter]}
+  - {id: audioset_m_07sq110, caption: belly laugh, audioset: [Belly laugh], parents: [laughter]}
+  - {id: audioset_m_07rgt08, caption: 'chuckle, chortle', audioset: ['Chuckle, chortle'], parents: [laughter]}
+  - {id: audioset_m_0463cq4, caption: 'crying, sobbing', audioset: ['Crying, sobbing'], parents: []}
+  - {id: audioset_m_07qz6j3, caption: whimper, audioset: [Whimper], parents: [audioset_m_0463cq4]}
+  - {id: audioset_m_07qw_06, caption: 'wail, moan', audioset: ['Wail, moan'], parents: []}
+  - {id: audioset_m_07plz5l, caption: sigh, audioset: [Sigh], parents: []}
+  - {id: audioset_m_015lz1, caption: singing, audioset: [Singing], parents: []}
+  - {id: audioset_m_0l14jd, caption: choir, audioset: [Choir], parents: [audioset_m_015lz1, audioset_m_04szw]}
+  - {id: audioset_m_01swy6, caption: yodeling, audioset: [Yodeling], parents: [audioset_m_015lz1]}
+  - {id: audioset_m_02bk07, caption: chant, audioset: [Chant], parents: [audioset_m_015lz1, audioset_m_0y4f8]}
+  - {id: audioset_m_01c194, caption: mantra, audioset: [Mantra], parents: [audioset_m_02bk07]}
+  - {id: audioset_t_dd00003, caption: male singing, audioset: [Male singing], parents: [audioset_m_015lz1]}
+  - {id: audioset_t_dd00004, caption: female singing, audioset: [Female singing], parents: [audioset_m_015lz1]}
+  - {id: audioset_t_dd00005, caption: child singing, audioset: [Child singing], parents: [audioset_m_015lz1]}
+  - {id: audioset_t_dd00006, caption: synthetic singing, audioset: [Synthetic singing], parents: [audioset_m_015lz1]}
+  - {id: audioset_m_06bxc, caption: rapping, audioset: [Rapping], parents: [audioset_m_015lz1]}
+  - {id: audioset_m_02fxyj, caption: humming, audioset: [Humming], parents: []}
+  - {id: audioset_m_07s2xch, caption: groan, audioset: [Groan], parents: []}
+  - {id: audioset_m_07r4k75, caption: grunt, audioset: [Grunt], parents: []}
+  - {id: audioset_m_01w250, caption: whistling, audioset: [Whistling], parents: []}
+  - {id: audioset_m_0lyf6, caption: breathing, audioset: [Breathing], parents: []}
+  - {id: audioset_m_07mzm6, caption: wheeze, audioset: [Wheeze], parents: [audioset_m_0lyf6]}
+  - {id: audioset_m_01d3sd, caption: snoring, audioset: [Snoring], parents: [audioset_m_0lyf6]}
+  - {id: audioset_m_07s0dtb, caption: gasp, audioset: [Gasp], parents: [audioset_m_0lyf6]}
+  - {id: audioset_m_07pyy8b, caption: pant, audioset: [Pant], parents: [audioset_m_0lyf6]}
+  - {id: audioset_m_07q0yl5, caption: snort, audioset: [Snort], parents: [audioset_m_0lyf6]}
+  - {id: audioset_m_0dl9sf8, caption: throat clearing, audioset: [Throat clearing], parents: [cough]}
+  - {id: audioset_m_01hsr_, caption: sneeze, audioset: [Sneeze], parents: []}
+  - {id: audioset_m_07ppn3j, caption: sniff, audioset: [Sniff], parents: []}
+  - {id: audioset_m_06h7j, caption: run, audioset: [Run], parents: []}
+  - {id: audioset_m_07qv_x_, caption: shuffle, audioset: [Shuffle], parents: []}
+  - {id: audioset_m_03cczk, caption: 'chewing, mastication', audioset: ['Chewing, mastication'], parents: []}
+  - {id: audioset_m_07pdhp0, caption: biting, audioset: [Biting], parents: []}
+  - {id: audioset_m_0939n_, caption: gargling, audioset: [Gargling], parents: []}
+  - {id: audioset_m_01g90h, caption: stomach rumble, audioset: [Stomach rumble], parents: []}
+  - {id: audioset_m_03q5_w, caption: 'burping, eructation', audioset: ['Burping, eructation'], parents: []}
+  - {id: audioset_m_02p3nc, caption: hiccup, audioset: [Hiccup], parents: []}
+  - {id: audioset_m_02_nn, caption: fart, audioset: [Fart], parents: []}
+  - {id: audioset_m_0k65p, caption: hands, audioset: [Hands], parents: []}
+  - {id: audioset_m_025_jnm, caption: finger snapping, audioset: [Finger snapping], parents: [audioset_m_0k65p]}
+  - {id: audioset_m_0l15bq, caption: clapping, audioset: [Clapping], parents: [audioset_m_0k65p]}
+  - {id: audioset_m_01jg02, caption: 'heart sounds, heartbeat', audioset: ['Heart sounds, heartbeat'], parents: []}
+  - {id: audioset_m_01jg1z, caption: heart murmur, audioset: [Heart murmur], parents: [audioset_m_01jg02]}
+  - {id: audioset_m_07rkbfh, caption: chatter, audioset: [Chatter], parents: []}
+  - {id: audioset_m_07qfr4h, caption: 'hubbub, speech noise, speech babble', audioset: ['Hubbub, speech noise, speech babble'], parents: [audioset_m_096m7z]}
+  - {id: audioset_t_dd00013, caption: children playing, audioset: [Children playing], parents: []}
+  - {id: audioset_m_0jbk, caption: animal, audioset: [Animal], parents: []}
+  - {id: audioset_m_068hy, caption: 'domestic animals, pets', audioset: ['Domestic animals, pets'], parents: [audioset_m_0jbk]}
+  - {id: audioset_m_0bt9lr, caption: dog, audioset: [Dog], parents: [audioset_m_068hy]}
+  - {id: audioset_m_07r_k2n, caption: yip, audioset: [Yip], parents: [audioset_m_0bt9lr]}
+  - {id: audioset_m_07qf0zm, caption: howl, audioset: [Howl], parents: [audioset_m_01z5f, audioset_m_0bt9lr]}
+  - {id: audioset_m_07rc7d9, caption: bow-wow, audioset: [Bow-wow], parents: [audioset_m_0bt9lr]}
+  - {id: audioset_m_0ghcn6, caption: growling, audioset: [Growling], parents: [audioset_m_01yrx, audioset_m_01z5f, audioset_m_0bt9lr, audioset_m_0cdnk]}
+  - {id: audioset_t_dd00136, caption: whimper (dog), audioset: [Whimper (dog)], parents: [audioset_m_0bt9lr]}
+  - {id: audioset_m_01yrx, caption: cat, audioset: [Cat], parents: [audioset_m_068hy]}
+  - {id: audioset_m_02yds9, caption: purr, audioset: [Purr], parents: [audioset_m_01yrx]}
+  - {id: audioset_m_07rjwbb, caption: hiss, audioset: [Hiss], parents: [audioset_m_01yrx, audioset_m_06wzb, audioset_m_078jl]}
+  - {id: audioset_m_07r81j2, caption: caterwaul, audioset: [Caterwaul], parents: [audioset_m_01yrx]}
+  - {id: audioset_m_0ch8v, caption: 'livestock, farm animals, working animals', audioset: ['Livestock, farm animals, working animals'], parents: [audioset_m_0jbk]}
+  - {id: audioset_m_03k3r, caption: horse, audioset: [Horse], parents: [audioset_m_0ch8v]}
+  - {id: audioset_m_07rv9rh, caption: clip-clop, audioset: [Clip-clop], parents: [audioset_m_03k3r, audioset_m_07qc9xj]}
+  - {id: audioset_m_07q5rw0, caption: 'neigh, whinny', audioset: ['Neigh, whinny'], parents: [audioset_m_03k3r]}
+  - {id: audioset_m_01xq0k1, caption: 'cattle, bovinae', audioset: ['Cattle, bovinae'], parents: [audioset_m_0ch8v]}
+  - {id: audioset_m_07rpkh9, caption: moo, audioset: [Moo], parents: [audioset_m_01xq0k1]}
+  - {id: audioset_m_0239kh, caption: cowbell, audioset: [Cowbell], parents: [audioset_m_01xq0k1, audioset_m_0395lw, audioset_m_0l14md]}
+  - {id: audioset_m_068zj, caption: pig, audioset: [Pig], parents: [audioset_m_0ch8v]}
+  - {id: audioset_t_dd00018, caption: oink, audioset: [Oink], parents: [audioset_m_068zj]}
+  - {id: audioset_m_03fwl, caption: goat, audioset: [Goat], parents: [audioset_m_0ch8v]}
+  - {id: audioset_m_07q0h5t, caption: bleat, audioset: [Bleat], parents: [audioset_m_03fwl, audioset_m_07bgp]}
+  - {id: audioset_m_07bgp, caption: sheep, audioset: [Sheep], parents: [audioset_m_0ch8v]}
+  - {id: audioset_m_025rv6n, caption: fowl, audioset: [Fowl], parents: [audioset_m_0ch8v]}
+  - {id: audioset_m_09b5t, caption: 'chicken, rooster', audioset: ['Chicken, rooster'], parents: [audioset_m_025rv6n]}
+  - {id: audioset_m_07st89h, caption: cluck, audioset: [Cluck], parents: [audioset_m_09b5t]}
+  - {id: audioset_m_07qn5dc, caption: 'crowing, cock-a-doodle-doo', audioset: ['Crowing, cock-a-doodle-doo'], parents: [audioset_m_09b5t]}
+  - {id: audioset_m_01rd7k, caption: turkey, audioset: [Turkey], parents: [audioset_m_025rv6n]}
+  - {id: audioset_m_07svc2k, caption: gobble, audioset: [Gobble], parents: [audioset_m_01rd7k]}
+  - {id: audioset_m_09ddx, caption: duck, audioset: [Duck], parents: [audioset_m_025rv6n]}
+  - {id: audioset_m_07qdb04, caption: quack, audioset: [Quack], parents: [audioset_m_09ddx]}
+  - {id: audioset_m_0dbvp, caption: goose, audioset: [Goose], parents: [audioset_m_025rv6n]}
+  - {id: audioset_m_07qwf61, caption: honk, audioset: [Honk], parents: [audioset_m_0dbvp]}
+  - {id: audioset_m_01280g, caption: wild animals, audioset: [Wild animals], parents: [audioset_m_0jbk]}
+  - {id: audioset_m_0cdnk, caption: 'roaring cats (lions, tigers)', audioset: ['Roaring cats (lions, tigers)'], parents: [audioset_m_01280g]}
+  - {id: audioset_m_04cvmfc, caption: roar, audioset: [Roar], parents: [audioset_m_0cdnk]}
+  - {id: audioset_m_015p6, caption: bird, audioset: [Bird], parents: [audioset_m_01280g]}
+  - {id: audioset_m_07pggtn, caption: 'chirp, tweet', audioset: ['Chirp, tweet'], parents: [birdsong]}
+  - {id: audioset_m_07sx8x_, caption: squawk, audioset: [Squawk], parents: [birdsong]}
+  - {id: audioset_m_0h0rv, caption: 'pigeon, dove', audioset: ['Pigeon, dove'], parents: [audioset_m_015p6]}
+  - {id: audioset_m_07r_25d, caption: coo, audioset: [Coo], parents: [audioset_m_0h0rv]}
+  - {id: audioset_m_04s8yn, caption: crow, audioset: [Crow], parents: [audioset_m_015p6]}
+  - {id: audioset_m_07r5c2p, caption: caw, audioset: [Caw], parents: [audioset_m_04s8yn]}
+  - {id: audioset_m_09d5_, caption: owl, audioset: [Owl], parents: [audioset_m_015p6]}
+  - {id: audioset_m_07r_80w, caption: hoot, audioset: [Hoot], parents: [audioset_m_09d5_]}
+  - {id: audioset_m_05_wcq, caption: 'bird flight, flapping wings', audioset: ['Bird flight, flapping wings'], parents: [audioset_m_015p6]}
+  - {id: audioset_m_01z5f, caption: 'canidae, dogs, wolves', audioset: ['Canidae, dogs, wolves'], parents: [audioset_m_01280g]}
+  - {id: audioset_m_06hps, caption: 'rodents, rats, mice', audioset: ['Rodents, rats, mice'], parents: [audioset_m_01280g]}
+  - {id: audioset_m_04rmv, caption: mouse, audioset: [Mouse], parents: [audioset_m_06hps]}
+  - {id: audioset_m_07r4gkf, caption: patter, audioset: [Patter], parents: [audioset_m_06hps]}
+  - {id: audioset_m_09xqv, caption: cricket, audioset: [Cricket], parents: [insects]}
+  - {id: audioset_m_09f96, caption: mosquito, audioset: [Mosquito], parents: [insects]}
+  - {id: audioset_m_0h2mp, caption: 'fly, housefly', audioset: ['Fly, housefly'], parents: [insects]}
+  - {id: audioset_m_07pjwq1, caption: buzz, audioset: [Buzz], parents: [audioset_m_01h3n, audioset_m_0h2mp]}
+  - {id: audioset_m_01h3n, caption: 'bee, wasp, etc.', audioset: ['Bee, wasp, etc.'], parents: [insects]}
+  - {id: audioset_m_09ld4, caption: frog, audioset: [Frog], parents: [audioset_m_01280g]}
+  - {id: audioset_m_07st88b, caption: croak, audioset: [Croak], parents: [audioset_m_09ld4]}
+  - {id: audioset_m_078jl, caption: snake, audioset: [Snake], parents: [audioset_m_01280g]}
+  - {id: audioset_m_07qn4z3, caption: rattle, audioset: [Rattle], parents: [audioset_m_078jl]}
+  - {id: audioset_m_032n05, caption: whale vocalization, audioset: [Whale vocalization], parents: [audioset_m_01280g]}
+  - {id: audioset_m_04rlf, caption: music, audioset: [Music], parents: []}
+  - {id: audioset_m_04szw, caption: musical instrument, audioset: [Musical instrument], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0fx80y, caption: plucked string instrument, audioset: [Plucked string instrument], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0342h, caption: guitar, audioset: [Guitar], parents: [audioset_m_0fx80y]}
+  - {id: audioset_m_02sgy, caption: electric guitar, audioset: [Electric guitar], parents: [audioset_m_0342h]}
+  - {id: audioset_m_018vs, caption: bass guitar, audioset: [Bass guitar], parents: [audioset_m_0342h]}
+  - {id: audioset_m_042v_gx, caption: acoustic guitar, audioset: [Acoustic guitar], parents: [audioset_m_0342h]}
+  - {id: audioset_m_06w87, caption: 'steel guitar, slide guitar', audioset: ['Steel guitar, slide guitar'], parents: [audioset_m_0342h]}
+  - {id: audioset_m_01glhc, caption: tapping (guitar technique), audioset: [Tapping (guitar technique)], parents: [audioset_m_0342h]}
+  - {id: audioset_m_07s0s5r, caption: strum, audioset: [Strum], parents: [audioset_m_0342h]}
+  - {id: audioset_m_018j2, caption: banjo, audioset: [Banjo], parents: [audioset_m_0fx80y]}
+  - {id: audioset_m_0jtg0, caption: sitar, audioset: [Sitar], parents: [audioset_m_0fx80y]}
+  - {id: audioset_m_04rzd, caption: mandolin, audioset: [Mandolin], parents: [audioset_m_0fx80y]}
+  - {id: audioset_m_01bns_, caption: zither, audioset: [Zither], parents: [audioset_m_0fx80y]}
+  - {id: audioset_m_07xzm, caption: ukulele, audioset: [Ukulele], parents: [audioset_m_0fx80y]}
+  - {id: audioset_m_05148p4, caption: keyboard (musical), audioset: [Keyboard (musical)], parents: [audioset_m_04szw]}
+  - {id: audioset_m_05r5c, caption: piano, audioset: [Piano], parents: [audioset_m_05148p4]}
+  - {id: audioset_m_01s0ps, caption: electric piano, audioset: [Electric piano], parents: [audioset_m_05r5c]}
+  - {id: audioset_m_013y1f, caption: organ, audioset: [Organ], parents: [audioset_m_05148p4]}
+  - {id: audioset_m_03xq_f, caption: electronic organ, audioset: [Electronic organ], parents: [audioset_m_013y1f]}
+  - {id: audioset_m_03gvt, caption: hammond organ, audioset: [Hammond organ], parents: [audioset_m_013y1f]}
+  - {id: audioset_m_0l14qv, caption: synthesizer, audioset: [Synthesizer], parents: [audioset_m_05148p4]}
+  - {id: audioset_m_01v1d8, caption: sampler, audioset: [Sampler], parents: [audioset_m_0l14qv]}
+  - {id: audioset_m_03q5t, caption: harpsichord, audioset: [Harpsichord], parents: [audioset_m_05148p4]}
+  - {id: audioset_m_0l14md, caption: percussion, audioset: [Percussion], parents: [audioset_m_04szw]}
+  - {id: audioset_m_02hnl, caption: drum kit, audioset: [Drum kit], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_0cfdd, caption: drum machine, audioset: [Drum machine], parents: [audioset_m_02hnl]}
+  - {id: audioset_m_026t6, caption: drum, audioset: [Drum], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_06rvn, caption: snare drum, audioset: [Snare drum], parents: [audioset_m_026t6]}
+  - {id: audioset_m_03t3fj, caption: rimshot, audioset: [Rimshot], parents: [audioset_m_06rvn]}
+  - {id: audioset_m_02k_mr, caption: drum roll, audioset: [Drum roll], parents: [audioset_m_06rvn]}
+  - {id: audioset_m_0bm02, caption: bass drum, audioset: [Bass drum], parents: [audioset_m_026t6]}
+  - {id: audioset_m_011k_j, caption: timpani, audioset: [Timpani], parents: [audioset_m_026t6]}
+  - {id: audioset_m_01p970, caption: tabla, audioset: [Tabla], parents: [audioset_m_026t6]}
+  - {id: audioset_m_01qbl, caption: cymbal, audioset: [Cymbal], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_03qtq, caption: hi-hat, audioset: [Hi-hat], parents: [audioset_m_01qbl]}
+  - {id: audioset_m_01sm1g, caption: wood block, audioset: [Wood block], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_07brj, caption: tambourine, audioset: [Tambourine], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_05r5wn, caption: rattle (instrument), audioset: [Rattle (instrument)], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_0xzly, caption: maraca, audioset: [Maraca], parents: [audioset_m_05r5wn]}
+  - {id: audioset_m_0mbct, caption: gong, audioset: [Gong], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_016622, caption: tubular bells, audioset: [Tubular bells], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_0j45pbj, caption: mallet percussion, audioset: [Mallet percussion], parents: [audioset_m_0l14md]}
+  - {id: audioset_m_0dwsp, caption: 'marimba, xylophone', audioset: ['Marimba, xylophone'], parents: [audioset_m_0j45pbj]}
+  - {id: audioset_m_0dwtp, caption: glockenspiel, audioset: [Glockenspiel], parents: [audioset_m_0j45pbj]}
+  - {id: audioset_m_0dwt5, caption: vibraphone, audioset: [Vibraphone], parents: [audioset_m_0j45pbj]}
+  - {id: audioset_m_0l156b, caption: steelpan, audioset: [Steelpan], parents: [audioset_m_0j45pbj]}
+  - {id: audioset_m_05pd6, caption: orchestra, audioset: [Orchestra], parents: [audioset_m_04szw]}
+  - {id: audioset_m_01kcd, caption: brass instrument, audioset: [Brass instrument], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0319l, caption: french horn, audioset: [French horn], parents: [audioset_m_01kcd]}
+  - {id: audioset_m_07gql, caption: trumpet, audioset: [Trumpet], parents: [audioset_m_01kcd]}
+  - {id: audioset_m_07c6l, caption: trombone, audioset: [Trombone], parents: [audioset_m_01kcd]}
+  - {id: audioset_m_0l14_3, caption: bowed string instrument, audioset: [Bowed string instrument], parents: [audioset_m_04szw]}
+  - {id: audioset_m_02qmj0d, caption: string section, audioset: [String section], parents: [audioset_m_0l14_3]}
+  - {id: audioset_m_07y_7, caption: 'violin, fiddle', audioset: ['Violin, fiddle'], parents: [audioset_m_0l14_3]}
+  - {id: audioset_m_0d8_n, caption: pizzicato, audioset: [Pizzicato], parents: [audioset_m_07y_7]}
+  - {id: audioset_m_01xqw, caption: cello, audioset: [Cello], parents: [audioset_m_0l14_3]}
+  - {id: audioset_m_02fsn, caption: double bass, audioset: [Double bass], parents: [audioset_m_0l14_3]}
+  - {id: audioset_m_085jw, caption: 'wind instrument, woodwind instrument', audioset: ['Wind instrument, woodwind instrument'], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0l14j_, caption: flute, audioset: [Flute], parents: [audioset_m_085jw]}
+  - {id: audioset_m_06ncr, caption: saxophone, audioset: [Saxophone], parents: [audioset_m_085jw]}
+  - {id: audioset_m_01wy6, caption: clarinet, audioset: [Clarinet], parents: [audioset_m_085jw]}
+  - {id: audioset_m_03m5k, caption: harp, audioset: [Harp], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0395lw, caption: bell, audioset: [Bell], parents: [audioset_m_04szw]}
+  - {id: audioset_m_03w41f, caption: church bell, audioset: [Church bell], parents: [audioset_m_0395lw]}
+  - {id: audioset_m_027m70_, caption: jingle bell, audioset: [Jingle bell], parents: [audioset_m_0395lw]}
+  - {id: audioset_m_0gy1t2s, caption: bicycle bell, audioset: [Bicycle bell], parents: [alarm_ringing, audioset_m_0199g, audioset_m_0395lw]}
+  - {id: audioset_m_07n_g, caption: tuning fork, audioset: [Tuning fork], parents: [audioset_m_0395lw]}
+  - {id: audioset_m_0f8s22, caption: chime, audioset: [Chime], parents: [audioset_m_0395lw]}
+  - {id: audioset_m_026fgl, caption: wind chime, audioset: [Wind chime], parents: [audioset_m_0f8s22]}
+  - {id: audioset_m_0150b9, caption: change ringing (campanology), audioset: [Change ringing (campanology)], parents: [audioset_m_0395lw]}
+  - {id: audioset_m_03qjg, caption: harmonica, audioset: [Harmonica], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0mkg, caption: accordion, audioset: [Accordion], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0192l, caption: bagpipes, audioset: [Bagpipes], parents: [audioset_m_04szw]}
+  - {id: audioset_m_02bxd, caption: didgeridoo, audioset: [Didgeridoo], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0l14l2, caption: shofar, audioset: [Shofar], parents: [audioset_m_04szw]}
+  - {id: audioset_m_07kc_, caption: theremin, audioset: [Theremin], parents: [audioset_m_04szw]}
+  - {id: audioset_m_0l14t7, caption: singing bowl, audioset: [Singing bowl], parents: [audioset_m_04szw]}
+  - {id: audioset_m_01hgjl, caption: scratching (performance technique), audioset: [Scratching (performance technique)], parents: [audioset_m_04szw]}
+  - {id: audioset_m_064t9, caption: pop music, audioset: [Pop music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0glt670, caption: hip hop music, audioset: [Hip hop music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_02cz_7, caption: beatboxing, audioset: [Beatboxing], parents: [audioset_m_0glt670, audioset_m_0y4f8]}
+  - {id: audioset_m_06by7, caption: rock music, audioset: [Rock music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_03lty, caption: heavy metal, audioset: [Heavy metal], parents: [audioset_m_06by7]}
+  - {id: audioset_m_05r6t, caption: punk rock, audioset: [Punk rock], parents: [audioset_m_06by7]}
+  - {id: audioset_m_0dls3, caption: grunge, audioset: [Grunge], parents: [audioset_m_06by7]}
+  - {id: audioset_m_0dl5d, caption: progressive rock, audioset: [Progressive rock], parents: [audioset_m_06by7]}
+  - {id: audioset_m_07sbbz2, caption: rock and roll, audioset: [Rock and roll], parents: [audioset_m_06by7]}
+  - {id: audioset_m_05w3f, caption: psychedelic rock, audioset: [Psychedelic rock], parents: [audioset_m_06by7]}
+  - {id: audioset_m_06j6l, caption: rhythm and blues, audioset: [Rhythm and blues], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0gywn, caption: soul music, audioset: [Soul music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_06cqb, caption: reggae, audioset: [Reggae], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_01lyv, caption: country, audioset: [Country], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_015y_n, caption: swing music, audioset: [Swing music], parents: [audioset_m_01lyv]}
+  - {id: audioset_m_0gg8l, caption: bluegrass, audioset: [Bluegrass], parents: [audioset_m_01lyv]}
+  - {id: audioset_m_02x8m, caption: funk, audioset: [Funk], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_02w4v, caption: folk music, audioset: [Folk music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_06j64v, caption: middle eastern music, audioset: [Middle Eastern music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_03_d0, caption: jazz, audioset: [Jazz], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_026z9, caption: disco, audioset: [Disco], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0ggq0m, caption: classical music, audioset: [Classical music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_05lls, caption: opera, audioset: [Opera], parents: [audioset_m_0ggq0m]}
+  - {id: audioset_m_02lkt, caption: electronic music, audioset: [Electronic music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_03mb9, caption: house music, audioset: [House music], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_07gxw, caption: techno, audioset: [Techno], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_07s72n, caption: dubstep, audioset: [Dubstep], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_0283d, caption: drum and bass, audioset: [Drum and bass], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_0m0jc, caption: electronica, audioset: [Electronica], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_08cyft, caption: electronic dance music, audioset: [Electronic dance music], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_0fd3y, caption: ambient music, audioset: [Ambient music], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_07lnk, caption: trance music, audioset: [Trance music], parents: [audioset_m_02lkt]}
+  - {id: audioset_m_0g293, caption: music of latin america, audioset: [Music of Latin America], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0ln16, caption: salsa music, audioset: [Salsa music], parents: [audioset_m_0g293]}
+  - {id: audioset_m_0326g, caption: flamenco, audioset: [Flamenco], parents: [audioset_m_0g293]}
+  - {id: audioset_m_0155w, caption: blues, audioset: [Blues], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_05fw6t, caption: music for children, audioset: [Music for children], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_02v2lh, caption: new-age music, audioset: [New-age music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0y4f8, caption: vocal music, audioset: [Vocal music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0z9c, caption: a capella, audioset: [A capella], parents: [audioset_m_0y4f8]}
+  - {id: audioset_m_0164x2, caption: music of africa, audioset: [Music of Africa], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0145m, caption: afrobeat, audioset: [Afrobeat], parents: [audioset_m_0164x2]}
+  - {id: audioset_m_02mscn, caption: christian music, audioset: [Christian music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_016cjb, caption: gospel music, audioset: [Gospel music], parents: [audioset_m_02mscn]}
+  - {id: audioset_m_028sqc, caption: music of asia, audioset: [Music of Asia], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_015vgc, caption: carnatic music, audioset: [Carnatic music], parents: [audioset_m_028sqc]}
+  - {id: audioset_m_0dq0md, caption: music of bollywood, audioset: [Music of Bollywood], parents: [audioset_m_028sqc]}
+  - {id: audioset_m_06rqw, caption: ska, audioset: [Ska], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_02p0sh1, caption: traditional music, audioset: [Traditional music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_05rwpb, caption: independent music, audioset: [Independent music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_074ft, caption: song, audioset: [Song], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_025td0t, caption: background music, audioset: [Background music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_02cjck, caption: theme music, audioset: [Theme music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_03r5q_, caption: jingle (music), audioset: [Jingle (music)], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0l14gg, caption: soundtrack music, audioset: [Soundtrack music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_07pkxdp, caption: lullaby, audioset: [Lullaby], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_01z7dr, caption: video game music, audioset: [Video game music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0140xf, caption: christmas music, audioset: [Christmas music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_0ggx5q, caption: dance music, audioset: [Dance music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_04wptg, caption: wedding music, audioset: [Wedding music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00031, caption: happy music, audioset: [Happy music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00032, caption: funny music, audioset: [Funny music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00033, caption: sad music, audioset: [Sad music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00034, caption: tender music, audioset: [Tender music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00035, caption: exciting music, audioset: [Exciting music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00036, caption: angry music, audioset: [Angry music], parents: [audioset_m_04rlf]}
+  - {id: audioset_t_dd00037, caption: scary music, audioset: [Scary music], parents: [audioset_m_04rlf]}
+  - {id: audioset_m_09t49, caption: rustling leaves, audioset: [Rustling leaves], parents: [wind]}
+  - {id: audioset_t_dd00092, caption: wind noise (microphone), audioset: [Wind noise (microphone)], parents: [wind]}
+  - {id: audioset_m_0jb2l, caption: thunderstorm, audioset: [Thunderstorm], parents: []}
+  - {id: audioset_m_0838f, caption: water, audioset: [Water], parents: []}
+  - {id: audioset_m_07r10fb, caption: raindrop, audioset: [Raindrop], parents: [rain]}
+  - {id: audioset_t_dd00038, caption: rain on surface, audioset: [Rain on surface], parents: [rain]}
+  - {id: audioset_m_0j2kx, caption: waterfall, audioset: [Waterfall], parents: [audioset_m_0838f]}
+  - {id: audioset_m_05kq4, caption: ocean, audioset: [Ocean], parents: [audioset_m_0838f]}
+  - {id: audioset_m_06wzb, caption: steam, audioset: [Steam], parents: [audioset_m_0838f]}
+  - {id: audioset_m_07swgks, caption: gurgling, audioset: [Gurgling], parents: [audioset_m_0838f]}
+  - {id: audioset_m_02_41, caption: fire, audioset: [Fire], parents: []}
+  - {id: audioset_m_07pzfmf, caption: crackle, audioset: [Crackle], parents: [audioset_m_02_41]}
+  - {id: audioset_m_07yv9, caption: vehicle, audioset: [Vehicle], parents: []}
+  - {id: audioset_m_019jd, caption: 'boat, water vehicle', audioset: ['Boat, Water vehicle'], parents: [audioset_m_07yv9]}
+  - {id: audioset_m_0hsrw, caption: 'sailboat, sailing ship', audioset: ['Sailboat, sailing ship'], parents: [audioset_m_019jd]}
+  - {id: audioset_m_056ks2, caption: 'rowboat, canoe, kayak', audioset: ['Rowboat, canoe, kayak'], parents: [audioset_m_019jd]}
+  - {id: audioset_m_02rlv9, caption: 'motorboat, speedboat', audioset: ['Motorboat, speedboat'], parents: [audioset_m_019jd]}
+  - {id: audioset_m_06q74, caption: ship, audioset: [Ship], parents: [audioset_m_019jd]}
+  - {id: audioset_m_012f08, caption: motor vehicle (road), audioset: [Motor vehicle (road)], parents: [audioset_m_07yv9]}
+  - {id: audioset_m_0k4j, caption: car, audioset: [Car], parents: [audioset_m_012f08]}
+  - {id: audioset_m_07qv_d5, caption: toot, audioset: [Toot], parents: [car_horn]}
+  - {id: audioset_m_04gxbd, caption: 'power windows, electric windows', audioset: ['Power windows, electric windows'], parents: [audioset_m_0k4j]}
+  - {id: audioset_m_0h9mv, caption: tire squeal, audioset: [Tire squeal], parents: [audioset_m_0k4j]}
+  - {id: audioset_m_0ltv, caption: 'race car, auto racing', audioset: ['Race car, auto racing'], parents: [audioset_m_0k4j]}
+  - {id: audioset_m_07r04, caption: truck, audioset: [Truck], parents: [audioset_m_012f08]}
+  - {id: audioset_m_0gvgw0, caption: air brake, audioset: [Air brake], parents: [audioset_m_07r04]}
+  - {id: audioset_m_05x_td, caption: 'air horn, truck horn', audioset: ['Air horn, truck horn'], parents: [alarm_ringing, audioset_m_07r04]}
+  - {id: audioset_m_03cl9h, caption: 'ice cream truck, ice cream van', audioset: ['Ice cream truck, ice cream van'], parents: [audioset_m_07r04]}
+  - {id: audioset_m_01bjv, caption: bus, audioset: [Bus], parents: [audioset_m_012f08]}
+  - {id: audioset_m_03j1ly, caption: emergency vehicle, audioset: [Emergency vehicle], parents: [audioset_m_012f08]}
+  - {id: audioset_m_04qvtq, caption: police car (siren), audioset: [Police car (siren)], parents: [audioset_m_03j1ly, siren], safety: true}
+  - {id: audioset_m_012n7d, caption: ambulance (siren), audioset: [Ambulance (siren)], parents: [audioset_m_03j1ly, siren], safety: true}
+  - {id: audioset_m_012ndj, caption: 'fire engine, fire truck (siren)', audioset: ['Fire engine, fire truck (siren)'], parents: [audioset_m_03j1ly, siren], safety: true}
+  - {id: audioset_m_06d_3, caption: rail transport, audioset: [Rail transport], parents: [audioset_m_07yv9]}
+  - {id: audioset_m_04zmvq, caption: train whistle, audioset: [Train whistle], parents: [train]}
+  - {id: audioset_m_01g50p, caption: 'railroad car, train wagon', audioset: ['Railroad car, train wagon'], parents: [audioset_m_06d_3]}
+  - {id: audioset_t_dd00048, caption: train wheels squealing, audioset: [Train wheels squealing], parents: [audioset_m_06d_3]}
+  - {id: audioset_m_0195fx, caption: 'subway, metro, underground', audioset: ['Subway, metro, underground'], parents: [audioset_m_06d_3]}
+  - {id: audioset_m_014yck, caption: aircraft engine, audioset: [Aircraft engine], parents: [aircraft]}
+  - {id: audioset_m_04229, caption: jet engine, audioset: [Jet engine], parents: [audioset_m_014yck, audioset_m_02mk9]}
+  - {id: audioset_m_02l6bg, caption: 'propeller, airscrew', audioset: ['Propeller, airscrew'], parents: [audioset_m_014yck]}
+  - {id: audioset_m_0cmf2, caption: 'fixed-wing aircraft, airplane', audioset: ['Fixed-wing aircraft, airplane'], parents: [aircraft]}
+  - {id: audioset_m_0199g, caption: bicycle, audioset: [Bicycle], parents: [audioset_m_07yv9]}
+  - {id: audioset_m_06_fw, caption: skateboard, audioset: [Skateboard], parents: [audioset_m_07yv9]}
+  - {id: audioset_m_02mk9, caption: engine, audioset: [Engine], parents: []}
+  - {id: audioset_t_dd00065, caption: light engine (high frequency), audioset: [Light engine (high frequency)], parents: [audioset_m_02mk9]}
+  - {id: audioset_m_08j51y, caption: 'dental drill, dentist''s drill', audioset: ['Dental drill, dentist''s drill'], parents: [audioset_m_01d380, audioset_t_dd00065]}
+  - {id: audioset_m_01yg9g, caption: lawn mower, audioset: [Lawn mower], parents: [audioset_t_dd00065]}
+  - {id: audioset_m_01j4z9, caption: chainsaw, audioset: [Chainsaw], parents: [audioset_t_dd00065]}
+  - {id: audioset_t_dd00066, caption: medium engine (mid frequency), audioset: [Medium engine (mid frequency)], parents: [audioset_m_02mk9]}
+  - {id: audioset_t_dd00067, caption: heavy engine (low frequency), audioset: [Heavy engine (low frequency)], parents: [audioset_m_02mk9]}
+  - {id: audioset_m_01h82_, caption: engine knocking, audioset: [Engine knocking], parents: [audioset_m_02mk9]}
+  - {id: audioset_m_07pb8fc, caption: idling, audioset: [Idling], parents: [audioset_m_02mk9]}
+  - {id: audioset_m_07r67yg, caption: ding-dong, audioset: [Ding-dong], parents: [doorbell]}
+  - {id: audioset_m_02y_763, caption: sliding door, audioset: [Sliding door], parents: [door_open_close]}
+  - {id: audioset_m_07qcpgn, caption: tap, audioset: [Tap], parents: [door_open_close]}
+  - {id: audioset_m_07q6cd_, caption: squeak, audioset: [Squeak], parents: [door_open_close]}
+  - {id: audioset_m_0642b4, caption: cupboard open or close, audioset: [Cupboard open or close], parents: []}
+  - {id: audioset_m_0fqfqc, caption: drawer open or close, audioset: [Drawer open or close], parents: []}
+  - {id: audioset_m_023pjk, caption: 'cutlery, silverware', audioset: ['Cutlery, silverware'], parents: []}
+  - {id: audioset_m_0130jx, caption: sink (filling or washing), audioset: [Sink (filling or washing)], parents: []}
+  - {id: audioset_m_03dnzn, caption: bathtub (filling or washing), audioset: [Bathtub (filling or washing)], parents: []}
+  - {id: audioset_m_03wvsk, caption: hair dryer, audioset: [Hair dryer], parents: []}
+  - {id: audioset_m_01jt3m, caption: toilet flush, audioset: [Toilet flush], parents: []}
+  - {id: audioset_m_012xff, caption: toothbrush, audioset: [Toothbrush], parents: []}
+  - {id: audioset_m_04fgwm, caption: electric toothbrush, audioset: [Electric toothbrush], parents: [audioset_m_012xff]}
+  - {id: audioset_m_0d31p, caption: vacuum cleaner, audioset: [Vacuum cleaner], parents: []}
+  - {id: audioset_m_01s0vc, caption: zipper (clothing), audioset: [Zipper (clothing)], parents: []}
+  - {id: audioset_m_0242l, caption: coin (dropping), audioset: [Coin (dropping)], parents: []}
+  - {id: audioset_m_01lsmm, caption: scissors, audioset: [Scissors], parents: []}
+  - {id: audioset_m_02g901, caption: 'electric shaver, electric razor', audioset: ['Electric shaver, electric razor'], parents: []}
+  - {id: audioset_m_05rj2, caption: shuffling cards, audioset: [Shuffling cards], parents: []}
+  - {id: audioset_m_0c2wf, caption: typewriter, audioset: [Typewriter], parents: [typing]}
+  - {id: audioset_m_01m2v, caption: computer keyboard, audioset: [Computer keyboard], parents: [typing]}
+  - {id: audioset_m_081rb, caption: writing, audioset: [Writing], parents: []}
+  - {id: audioset_m_07cx4, caption: telephone, audioset: [Telephone], parents: [alarm_ringing]}
+  - {id: audioset_m_01hnzm, caption: ringtone, audioset: [Ringtone], parents: [audioset_m_07cx4]}
+  - {id: audioset_m_02c8p, caption: 'telephone dialing, dtmf', audioset: ['Telephone dialing, DTMF'], parents: [audioset_m_07cx4]}
+  - {id: audioset_m_015jpf, caption: dial tone, audioset: [Dial tone], parents: [audioset_m_07cx4]}
+  - {id: audioset_m_01z47d, caption: busy signal, audioset: [Busy signal], parents: [audioset_m_07cx4]}
+  - {id: audioset_m_046dlr, caption: alarm clock, audioset: [Alarm clock], parents: [alarm_ringing], safety: true}
+  - {id: audioset_m_0dgbq, caption: civil defense siren, audioset: [Civil defense siren], parents: [siren], safety: true}
+  - {id: audioset_m_030rvx, caption: buzzer, audioset: [Buzzer], parents: [alarm_ringing], safety: true}
+  - {id: audioset_m_0c3f7m, caption: fire alarm, audioset: [Fire alarm], parents: [alarm_ringing], safety: true}
+  - {id: audioset_m_04fq5q, caption: foghorn, audioset: [Foghorn], parents: [alarm_ringing]}
+  - {id: audioset_m_06hck5, caption: steam whistle, audioset: [Steam whistle], parents: [whistle]}
+  - {id: audioset_t_dd00077, caption: mechanisms, audioset: [Mechanisms], parents: []}
+  - {id: audioset_m_02bm9n, caption: 'ratchet, pawl', audioset: ['Ratchet, pawl'], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_01x3z, caption: clock, audioset: [Clock], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_07qjznt, caption: tick, audioset: [Tick], parents: [audioset_m_01x3z, audioset_m_07qc9xj]}
+  - {id: audioset_m_0l7xg, caption: gears, audioset: [Gears], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_05zc1, caption: pulleys, audioset: [Pulleys], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_0llzx, caption: sewing machine, audioset: [Sewing machine], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_02x984l, caption: mechanical fan, audioset: [Mechanical fan], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_025wky1, caption: air conditioning, audioset: [Air conditioning], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_024dl, caption: cash register, audioset: [Cash register], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_0dv5r, caption: camera, audioset: [Camera], parents: [audioset_t_dd00077]}
+  - {id: audioset_m_07bjf, caption: single-lens reflex camera, audioset: [Single-lens reflex camera], parents: [audioset_m_0dv5r]}
+  - {id: audioset_m_07k1x, caption: tools, audioset: [Tools], parents: []}
+  - {id: audioset_m_03l9g, caption: hammer, audioset: [Hammer], parents: [audioset_m_07k1x]}
+  - {id: audioset_m_03p19w, caption: jackhammer, audioset: [Jackhammer], parents: [audioset_m_07k1x]}
+  - {id: audioset_m_01b82r, caption: sawing, audioset: [Sawing], parents: [audioset_m_07k1x]}
+  - {id: audioset_m_02p01q, caption: filing (rasp), audioset: [Filing (rasp)], parents: [audioset_m_07k1x]}
+  - {id: audioset_m_023vsd, caption: sanding, audioset: [Sanding], parents: [audioset_m_07k1x]}
+  - {id: audioset_m_0_ksk, caption: power tool, audioset: [Power tool], parents: [audioset_m_07k1x]}
+  - {id: audioset_m_01d380, caption: drill, audioset: [Drill], parents: [audioset_m_0_ksk]}
+  - {id: audioset_m_04zjc, caption: machine gun, audioset: [Machine gun], parents: [gunshot]}
+  - {id: audioset_m_02z32qm, caption: fusillade, audioset: [Fusillade], parents: [gunshot]}
+  - {id: audioset_m_0_1c, caption: artillery fire, audioset: [Artillery fire], parents: [gunshot]}
+  - {id: audioset_m_073cg4, caption: cap gun, audioset: [Cap gun], parents: [gunshot]}
+  - {id: audioset_g_122z_qxw, caption: firecracker, audioset: [Firecracker], parents: [fireworks]}
+  - {id: audioset_m_07qsvvw, caption: 'burst, pop', audioset: ['Burst, pop'], parents: [explosion]}
+  - {id: audioset_m_07pxg6y, caption: eruption, audioset: [Eruption], parents: [explosion]}
+  - {id: audioset_m_07qqyl4, caption: boom, audioset: [Boom], parents: [explosion]}
+  - {id: audioset_m_083vt, caption: wood, audioset: [Wood], parents: []}
+  - {id: audioset_m_07pczhz, caption: chop, audioset: [Chop], parents: [audioset_m_083vt]}
+  - {id: audioset_m_07pl1bw, caption: splinter, audioset: [Splinter], parents: [audioset_m_083vt]}
+  - {id: audioset_m_07qs1cx, caption: crack, audioset: [Crack], parents: [audioset_m_083vt]}
+  - {id: audioset_m_039jq, caption: glass, audioset: [Glass], parents: [], safety: true}
+  - {id: audioset_m_07q7njn, caption: 'chink, clink', audioset: ['Chink, clink'], parents: [audioset_m_039jq]}
+  - {id: audioset_m_04k94, caption: liquid, audioset: [Liquid], parents: []}
+  - {id: audioset_m_07rrlb6, caption: 'splash, splatter', audioset: ['Splash, splatter'], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07p6mqd, caption: slosh, audioset: [Slosh], parents: [audioset_m_07rrlb6]}
+  - {id: audioset_m_07qlwh6, caption: squish, audioset: [Squish], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07r5v4s, caption: drip, audioset: [Drip], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07prgkl, caption: pour, audioset: [Pour], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07pqc89, caption: 'trickle, dribble', audioset: ['Trickle, dribble'], parents: [audioset_m_07prgkl]}
+  - {id: audioset_t_dd00088, caption: gush, audioset: [Gush], parents: [audioset_m_07prgkl]}
+  - {id: audioset_m_07p7b8y, caption: fill (with liquid), audioset: [Fill (with liquid)], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07qlf79, caption: spray, audioset: [Spray], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07ptzwd, caption: pump (liquid), audioset: [Pump (liquid)], parents: [audioset_m_04k94]}
+  - {id: audioset_m_07ptfmf, caption: stir, audioset: [Stir], parents: [audioset_m_04k94]}
+  - {id: audioset_m_0790c, caption: sonar, audioset: [Sonar], parents: []}
+  - {id: audioset_m_0dl83, caption: arrow, audioset: [Arrow], parents: []}
+  - {id: audioset_m_07rqsjt, caption: 'whoosh, swoosh, swish', audioset: ['Whoosh, swoosh, swish'], parents: [audioset_m_0dl83]}
+  - {id: audioset_m_07rrh0c, caption: thunk, audioset: [Thunk], parents: [thud]}
+  - {id: audioset_m_0b_fwt, caption: electronic tuner, audioset: [Electronic tuner], parents: []}
+  - {id: audioset_m_02rr_, caption: effects unit, audioset: [Effects unit], parents: []}
+  - {id: audioset_m_07m2kt, caption: chorus effect, audioset: [Chorus effect], parents: [audioset_m_02rr_]}
+  - {id: audioset_m_018w8, caption: basketball bounce, audioset: [Basketball bounce], parents: []}
+  - {id: audioset_m_07pws3f, caption: bang, audioset: [Bang], parents: []}
+  - {id: audioset_m_07ryjzk, caption: 'slap, smack', audioset: ['Slap, smack'], parents: []}
+  - {id: audioset_m_07rdhzs, caption: 'whack, thwack', audioset: ['Whack, thwack'], parents: []}
+  - {id: audioset_m_07pc8lb, caption: breaking, audioset: [Breaking], parents: []}
+  - {id: audioset_m_07pqn27, caption: bouncing, audioset: [Bouncing], parents: []}
+  - {id: audioset_m_07rbp7_, caption: whip, audioset: [Whip], parents: []}
+  - {id: audioset_m_07pyf11, caption: flap, audioset: [Flap], parents: []}
+  - {id: audioset_m_07qb_dv, caption: scratch, audioset: [Scratch], parents: []}
+  - {id: audioset_m_07qv4k0, caption: scrape, audioset: [Scrape], parents: []}
+  - {id: audioset_m_07pdjhy, caption: rub, audioset: [Rub], parents: []}
+  - {id: audioset_m_07s8j8t, caption: roll, audioset: [Roll], parents: []}
+  - {id: audioset_m_07plct2, caption: crushing, audioset: [Crushing], parents: []}
+  - {id: audioset_t_dd00112, caption: 'crumpling, crinkling', audioset: ['Crumpling, crinkling'], parents: []}
+  - {id: audioset_m_07qcx4z, caption: tearing, audioset: [Tearing], parents: []}
+  - {id: audioset_m_02fs_r, caption: 'beep, bleep', audioset: ['Beep, bleep'], parents: []}
+  - {id: audioset_m_07qwdck, caption: ping, audioset: [Ping], parents: []}
+  - {id: audioset_m_07phxs1, caption: ding, audioset: [Ding], parents: []}
+  - {id: audioset_m_07rv4dm, caption: clang, audioset: [Clang], parents: []}
+  - {id: audioset_m_07s02z0, caption: squeal, audioset: [Squeal], parents: []}
+  - {id: audioset_m_07qh7jl, caption: creak, audioset: [Creak], parents: []}
+  - {id: audioset_m_07qwyj0, caption: rustle, audioset: [Rustle], parents: []}
+  - {id: audioset_m_07s34ls, caption: whir, audioset: [Whir], parents: []}
+  - {id: audioset_m_07qmpdm, caption: clatter, audioset: [Clatter], parents: []}
+  - {id: audioset_m_07p9k1k, caption: sizzle, audioset: [Sizzle], parents: []}
+  - {id: audioset_m_07qc9xj, caption: clicking, audioset: [Clicking], parents: []}
+  - {id: audioset_m_07rwm0c, caption: clickety-clack, audioset: [Clickety-clack], parents: [audioset_m_07qc9xj]}
+  - {id: audioset_m_07phhsh, caption: rumble, audioset: [Rumble], parents: []}
+  - {id: audioset_m_07qyrcz, caption: plop, audioset: [Plop], parents: []}
+  - {id: audioset_m_07qfgpx, caption: 'jingle, tinkle', audioset: ['Jingle, tinkle'], parents: []}
+  - {id: audioset_m_07rcgpl, caption: hum, audioset: [Hum], parents: []}
+  - {id: audioset_m_07p78v5, caption: zing, audioset: [Zing], parents: []}
+  - {id: audioset_t_dd00121, caption: boing, audioset: [Boing], parents: []}
+  - {id: audioset_m_07s12q4, caption: crunch, audioset: [Crunch], parents: []}
+  - {id: audioset_m_028v0c, caption: silence, audioset: [Silence], parents: []}
+  - {id: audioset_m_01v_m0, caption: sine wave, audioset: [Sine wave], parents: []}
+  - {id: audioset_m_0b9m1, caption: harmonic, audioset: [Harmonic], parents: [audioset_m_01v_m0]}
+  - {id: audioset_m_0hdsk, caption: chirp tone, audioset: [Chirp tone], parents: [audioset_m_01v_m0]}
+  - {id: audioset_m_0c1dj, caption: sound effect, audioset: [Sound effect], parents: []}
+  - {id: audioset_m_07pt_g0, caption: pulse, audioset: [Pulse], parents: []}
+  - {id: audioset_t_dd00125, caption: 'inside, small room', audioset: ['Inside, small room'], parents: []}
+  - {id: audioset_t_dd00126, caption: 'inside, large room or hall', audioset: ['Inside, large room or hall'], parents: []}
+  - {id: audioset_t_dd00127, caption: 'inside, public space', audioset: ['Inside, public space'], parents: []}
+  - {id: audioset_t_dd00128, caption: 'outside, urban or manmade', audioset: ['Outside, urban or manmade'], parents: []}
+  - {id: audioset_t_dd00129, caption: 'outside, rural or natural', audioset: ['Outside, rural or natural'], parents: []}
+  - {id: audioset_m_01b9nn, caption: reverberation, audioset: [Reverberation], parents: []}
+  - {id: audioset_m_01jnbd, caption: echo, audioset: [Echo], parents: []}
+  - {id: audioset_m_096m7z, caption: noise, audioset: [Noise], parents: []}
+  - {id: audioset_m_06_y0by, caption: environmental noise, audioset: [Environmental noise], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_07rgkc5, caption: static, audioset: [Static], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_06xkwv, caption: mains hum, audioset: [Mains hum], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_0g12c5, caption: distortion, audioset: [Distortion], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_08p9q4, caption: sidetone, audioset: [Sidetone], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_07szfh9, caption: cacophony, audioset: [Cacophony], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_0chx_, caption: white noise, audioset: [White noise], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_0cj0r, caption: pink noise, audioset: [Pink noise], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_07p_0gm, caption: throbbing, audioset: [Throbbing], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_01jwx6, caption: vibration, audioset: [Vibration], parents: [audioset_m_096m7z]}
+  - {id: audioset_m_07c52, caption: television, audioset: [Television], parents: []}
+  - {id: audioset_m_06bz3, caption: radio, audioset: [Radio], parents: []}
+  - {id: audioset_m_07hvw1, caption: field recording, audioset: [Field recording], parents: []}

@@ -11,7 +11,7 @@ test('popup and content scripts have scoped permissions and all local assets exi
   assert.equal(manifest.action.default_popup, 'popup.html');
   assert.deepEqual(manifest.content_scripts[0].matches, ['https://www.youtube.com/*']);
   assert.match(manifest.content_security_policy.extension_pages, /script-src 'self'/);
-  const paths = [manifest.background.service_worker, ...manifest.content_scripts[0].js, ...manifest.web_accessible_resources[0].resources];
+  const paths = [manifest.background.service_worker, ...manifest.content_scripts.flatMap(script => script.js), ...manifest.web_accessible_resources[0].resources];
   for (const path of paths) await access(new URL(path, root));
   for (const entry of ['index.html', manifest.action.default_popup]) {
     const html = await readFile(new URL(entry, root), 'utf8');

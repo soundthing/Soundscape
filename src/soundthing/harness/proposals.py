@@ -91,14 +91,14 @@ def propose_shared_change(
     for key in sorted(overrides.keys()):
         parts = key.split(".")
         if parts[0] == "vocabulary":
-            if len(parts) != 3 or parts[2] not in ("clap", "audioset"):
+            if len(parts) != 3 or parts[2] != "audioset":
                 raise ValueError(f"Invalid vocabulary key: {key!r}")
             cid = parts[1]
             try:
                 sc = cfg.sound_class(cid)
             except KeyError:
                 raise ValueError(f"Unknown sound class id: {cid!r}")
-            curr_val = sc.clap if parts[2] == "clap" else sc.audioset
+            curr_val = sc.audioset
         elif parts[0] == "priors":
             if len(parts) == 2 and parts[1] == "floor":
                 curr_val = cfg.priors.floor

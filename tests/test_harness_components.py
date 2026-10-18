@@ -90,10 +90,8 @@ def _setup_clip_and_cache(
     )
     models = EventModels(
         tagger=tagger,
-        clap=None,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=None,
         audioset_names=audioset_names,
     )
 
@@ -282,7 +280,7 @@ def test_override_keys_outside_comp_sections_raise_value_error(
 
     # fake component rejects events. or thresholds.
     with pytest.raises(ValueError, match="sections"):
-        score(overrides={"events.postprocess.smoothing_sec": 0.5}, component="fake", labels_dir=labels_dir)
+        score(overrides={"events.postprocess.merge_gap_sec": 0.5}, component="fake", labels_dir=labels_dir)
 
 
 def test_promote_writes_any_component_config(

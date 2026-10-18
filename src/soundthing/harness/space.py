@@ -29,8 +29,6 @@ class ParamSpec:
 
 
 BOUNDS: dict[str, ParamSpec] = {
-    "events.clap.calibration.center": ParamSpec("float", 0.0, 0.6),
-    "events.clap.calibration.scale": ParamSpec("float", 2.0, 60.0),
     "events.vad.suppress_under_speech": ParamSpec("float", 0.0, 1.0),
     "events.vad.threshold": ParamSpec("float", 0.2, 0.9),
     "events.vad.min_speech_sec": ParamSpec("float", 0.05, 1.0),
@@ -38,12 +36,9 @@ BOUNDS: dict[str, ParamSpec] = {
     "events.vad.merge_gap_sec": ParamSpec("float", 0.0, 1.0),
     "events.separation.sep_weight": ParamSpec("float", 0.0, 1.0),
     "events.separation.suppress_under_speech": ParamSpec("float", 0.0, 1.0),
-    "events.postprocess.smoothing_sec": ParamSpec("float", 0.0, 2.0),
     "events.postprocess.min_event_sec": ParamSpec("float", 0.05, 1.5),
     "events.postprocess.merge_gap_sec": ParamSpec("float", 0.0, 2.0),
     "events.postprocess.coarse_margin": ParamSpec("float", 0.0, 0.3),
-    "events.postprocess.sustained_repeat_sec": ParamSpec("float", 10.0, 120.0),
-    "events.postprocess.max_on_screen": ParamSpec("int", 1, 4),
     "events.postprocess.onset_shift_sec": ParamSpec("float", -0.5, 0.5, default=0.0),
     "thresholds.default": ParamSpec("float", 0.05, 0.95),
     "thresholds.safety_default": ParamSpec("float", 0.05, 0.95),
@@ -120,13 +115,6 @@ def describe_space(cfg: Config, dev_event_counts: dict[str, int] | None) -> list
     # 3. Shared entries
     for cid in cfg.class_ids:
         sc = cfg.sound_class(cid)
-        entries.append({
-            "name": f"vocabulary.{cid}.clap",
-            "type": "list[str]",
-            "bounds": None,
-            "current": list(sc.clap),
-            "shared": True,
-        })
         entries.append({
             "name": f"vocabulary.{cid}.audioset",
             "type": "list[str]",

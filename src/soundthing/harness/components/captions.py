@@ -237,8 +237,6 @@ class CaptionsComponent:
                 f"captions.min_cue_sec ({min_cue_sec}) cannot exceed captions.max_cue_sec ({max_cue_sec})"
             )
 
-        text_emb = ev_comp.text_emb_for(cfg, [c.cache for c in clips])
-
         matches: list[CueMatch] = []
         per_clip: dict[str, dict[str, Any]] = {}
         tol = float(cfg.pipeline.get("eval", {}).get("onset_tolerance_sec", 0.5))
@@ -251,7 +249,7 @@ class CaptionsComponent:
                 cache = replace(cache, duration=lbl.duration)
 
             cond_segs = ev_comp.labeled_env_segments(lbl, cfg, confidence=0.7)
-            events = ev_comp.replay_events(cache, cond_segs, cfg, text_emb)
+            events = ev_comp.replay_events(cache, cond_segs, cfg)
 
             sorted_events = sorted(events, key=lambda e: e.start)
             cues = events_to_cues(sorted_events, min_cue=min_cue_sec, max_cue=max_cue_sec)

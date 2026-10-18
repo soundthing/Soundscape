@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 import math
 import re
 from pathlib import Path
 
 from .contracts import CaptionEvent
+from .events.hierarchy import suppress_ancestors
 
 
 @dataclass
@@ -17,13 +19,13 @@ class Cue:
     text: str
 
 
-def events_to_cues(events: list[CaptionEvent], min_cue: float = 1.0, max_cue: float = 6.0) -> list[Cue]:
-    """Clamp cue durations to [min_cue, max_cue] for readability."""
-    cues = []
-    for e in sorted(events, key=lambda e: e.start):
-        dur = min(max(e.end - e.start, min_cue), max_cue)
-        cues.append(Cue(e.start, e.start + dur, e.caption_text()))
-    return cues
+def events_to_cues(events: list[CaptionEvent], min_cue: float = 1.0, max_cue: float = 6.0,
+                   hierarchy: Mapping[str, frozenset[str]] | None = None) -> list[Cue]:
+    """Clamp durations, then trim ancestor overlap when hierarchy is provided."""
+    display = [replace(e, end=e.start + min(max(e.end - e.start, min_cue), max_cue)) for e in events]
+    if hierarchy:
+        display = suppress_ancestors(display, hierarchy)
+    return [Cue(e.start, e.end, e.caption_text()) for e in sorted(display, key=lambda e: e.start)]
 
 
 def _ts(t: float, sep: str) -> str:
@@ -49,9 +51,10 @@ def to_srt(cues: list[Cue]) -> str:
 
 
 def write_captions(events: list[CaptionEvent], path: str | Path, min_cue: float = 1.0, max_cue: float = 6.0,
-                   speech_subtitle_path: str | Path | None = None) -> None:
+                   speech_subtitle_path: str | Path | None = None,
+                   hierarchy: Mapping[str, frozenset[str]] | None = None) -> None:
     path = Path(path)
-    cues = events_to_cues(events, min_cue, max_cue)
+    cues = events_to_cues(events, min_cue, max_cue, hierarchy)
     if speech_subtitle_path is not None:
         cues = merge_with_speech(cues, speech_subtitle_path)
     text = to_srt(cues) if path.suffix.lower() == ".srt" else to_vtt(cues)

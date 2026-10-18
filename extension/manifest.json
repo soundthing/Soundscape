@@ -8,8 +8,11 @@
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://www.youtube.com/*"],
   "action": { "default_title": "Soundthing captions", "default_popup": "popup.html" },
   "background": { "service_worker": "background.js", "type": "module" },
-  "content_scripts": [{ "matches": ["https://www.youtube.com/*"], "js": ["content.js"], "run_at": "document_idle" }],
-  "web_accessible_resources": [{ "resources": ["player.mjs", "vtt.mjs", "settings.mjs", "direction.mjs"], "matches": ["https://www.youtube.com/*"] }],
+  "content_scripts": [
+    { "matches": ["https://www.youtube.com/*"], "js": ["content.js"], "run_at": "document_idle" },
+    { "matches": ["https://www.youtube.com/*"], "js": ["console.js"], "run_at": "document_idle", "world": "MAIN" }
+  ],
+  "web_accessible_resources": [{ "resources": ["console.js", "player.mjs", "vtt.mjs", "settings.mjs", "direction.mjs", "assets/Monocraft.ttf"], "matches": ["https://www.youtube.com/*"] }],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
   }

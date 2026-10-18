@@ -118,8 +118,6 @@ def fake_env(cfg: Config, monkeypatch: pytest.MonkeyPatch):
         lambda audio, sr, c: np.zeros(max(1, int(len(audio) / sr / vad.VAD_CHUNK_SEC)), dtype=np.float32),
     )
     monkeypatch.setattr(detector, "load_tagger", lambda c: (tagger, audioset_names))
-    monkeypatch.setattr(detector, "load_clap", lambda c: None)
-    monkeypatch.setattr(detector, "text_embeddings", lambda clap, c: None)
 
     class EnvHelper:
         @property

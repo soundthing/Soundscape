@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from soundthing import contracts as C
@@ -49,3 +51,20 @@ def test_wrong_kind_rejected(tmp_path):
     C.save_events([], tmp_path / "e.json")
     with pytest.raises(C.ContractError):
         C.load_segments(tmp_path / "e.json")
+
+
+@pytest.mark.parametrize("name,loader", [
+    ("inputs.json", C.load_inputs),
+    ("env_segments.json", C.load_segments),
+    ("events.json", C.load_events),
+    ("direction.json", C.load_direction),
+    ("labels.json", C.load_labels),
+])
+def test_previous_schema_requires_regeneration(tmp_path, name, loader):
+    payload = json.loads((EXAMPLES / name).read_text())
+    assert payload["schema_version"] == C.SCHEMA_VERSION == 2
+    payload["schema_version"] = 1
+    path = tmp_path / name
+    path.write_text(json.dumps(payload))
+    with pytest.raises(C.ContractError, match="schema_version 1 != 2"):
+        loader(path)

@@ -301,12 +301,12 @@ def test_2_every_tool_call_logs_mcp_call(tuning_env: dict[str, Any]):
     assert ledger.entries[-1]["ok"] is True
 
     # 4. score (successful)
-    tools.score(overrides={"events.postprocess.smoothing_sec": 0.5}, hypothesis="test")
+    tools.score(overrides={"events.postprocess.merge_gap_sec": 0.5}, hypothesis="test")
     mcp_calls = [e for e in ledger.entries if e.get("kind") == "mcp_call"]
     assert len(mcp_calls) == 4
     assert mcp_calls[-1]["tool"] == "score"
     assert mcp_calls[-1]["ok"] is True
-    assert mcp_calls[-1]["args"]["overrides"] == {"events.postprocess.smoothing_sec": 0.5}
+    assert mcp_calls[-1]["args"]["overrides"] == {"events.postprocess.merge_gap_sec": 0.5}
 
     # 4b. score (failing: unknown key)
     with pytest.raises(ValueError) as exc_info:
@@ -320,7 +320,7 @@ def test_2_every_tool_call_logs_mcp_call(tuning_env: dict[str, Any]):
     assert "unknown_param" in mcp_calls[-1]["error"]
 
     # 5. sweep
-    tools.sweep(params=["events.postprocess.smoothing_sec"], budget=5)
+    tools.sweep(params=["events.postprocess.merge_gap_sec"], budget=5)
     mcp_calls = [e for e in ledger.entries if e.get("kind") == "mcp_call"]
     assert len(mcp_calls) == 6
     assert mcp_calls[-1]["tool"] == "sweep"
@@ -335,7 +335,7 @@ def test_2_every_tool_call_logs_mcp_call(tuning_env: dict[str, Any]):
     assert mcp_calls[-1]["ok"] is True
 
     # 7. propose_shared_change
-    tools.propose_shared_change(overrides={f"vocabulary.{cid}.clap": ["alert sound"]}, note="proposal note")
+    tools.propose_shared_change(overrides={f"vocabulary.{cid}.audioset": ["alert sound"]}, note="proposal note")
     mcp_calls = [e for e in ledger.entries if e.get("kind") == "mcp_call"]
     assert len(mcp_calls) == 8
     assert mcp_calls[-1]["tool"] == "propose_shared_change"
@@ -371,7 +371,7 @@ def test_3_score_rules_and_rejections(tuning_env: dict[str, Any]):
 
     # Calls score_fn with split="dev"
     assert len(score_fn.calls) == 0
-    reply = tools.score(overrides={"events.postprocess.smoothing_sec": 0.4}, hypothesis="tune smoothing")
+    reply = tools.score(overrides={"events.postprocess.merge_gap_sec": 0.4}, hypothesis="tune smoothing")
     assert len(score_fn.calls) == 1
     assert score_fn.calls[0]["split"] == "dev"
 
@@ -392,7 +392,7 @@ def test_3_score_rules_and_rejections(tuning_env: dict[str, Any]):
         "objective": 0.70,
         "per_clip": make_fake_per_clip(10, tp=4),
     })
-    reply_with_best = tools.score(overrides={"events.postprocess.smoothing_sec": 0.4})
+    reply_with_best = tools.score(overrides={"events.postprocess.merge_gap_sec": 0.4})
     assert reply_with_best["bootstrap"] is not None
     assert isinstance(reply_with_best["bootstrap"], dict)
     assert "accept" in reply_with_best["bootstrap"]
@@ -400,7 +400,7 @@ def test_3_score_rules_and_rejections(tuning_env: dict[str, Any]):
     assert "gain" in reply_with_best["bootstrap"]
 
     # Shared overrides flagged shared True
-    reply_shared = tools.score(overrides={f"vocabulary.{cid}.clap": ["alert sound"]})
+    reply_shared = tools.score(overrides={f"vocabulary.{cid}.audioset": ["alert sound"]})
     assert reply_shared["shared"] is True
     assert "use propose_shared_change; promote will refuse" in reply_shared.get("note", "")
 
@@ -460,12 +460,12 @@ def test_5_sweep_budget_and_passthrough(tuning_env: dict[str, Any]):
 
     # Budget cap
     with pytest.raises(ValueError):
-        tools.sweep(params=["events.postprocess.smoothing_sec"], budget=201)
+        tools.sweep(params=["events.postprocess.merge_gap_sec"], budget=201)
     with pytest.raises(ValueError):
-        tools.sweep(params=["events.postprocess.smoothing_sec"], budget=0)
+        tools.sweep(params=["events.postprocess.merge_gap_sec"], budget=0)
 
     # Valid sweep call passes ledger and score_fn
-    res = tools.sweep(params=["events.postprocess.smoothing_sec"], strategy="coordinate", budget=15)
+    res = tools.sweep(params=["events.postprocess.merge_gap_sec"], strategy="coordinate", budget=15)
     assert isinstance(res, dict)
     assert len(sweep_fn.calls) == 1
     assert sweep_fn.calls[0]["budget"] == 15
@@ -498,7 +498,7 @@ def test_7_propose_shared_change(tuning_env: dict[str, Any]):
     cfg = tuning_env["cfg"]
     cid = cfg.class_ids[0]
 
-    ovr = {f"vocabulary.{cid}.clap": ["alert sound"]}
+    ovr = {f"vocabulary.{cid}.audioset": ["alert sound"]}
     note = f"Testing clap prompt refinement for {cid}"
     reply = tools.propose_shared_change(overrides=ovr, note=note)
 

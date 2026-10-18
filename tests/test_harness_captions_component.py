@@ -156,7 +156,7 @@ def test_stat_objective_consistency(cfg: Config, monkeypatch: pytest.MonkeyPatch
     """stat_objective(sum stats) exactly reproduces evaluation.objective."""
     fake_events_mod = types.ModuleType("soundthing.harness.components.events")
 
-    def fake_replay(cache: Any, segs: Any, c: Config, text_emb: Any) -> list[CaptionEvent]:
+    def fake_replay(cache: Any, segs: Any, c: Config) -> list[CaptionEvent]:
         return [
             CaptionEvent(start=1.0, end=3.0, label="bark", class_id="dog_bark", confidence=0.9),
             CaptionEvent(start=5.0, end=6.0, label="car", class_id="car_horn", confidence=0.8),
@@ -174,7 +174,6 @@ def test_stat_objective_consistency(cfg: Config, monkeypatch: pytest.MonkeyPatch
         ]
 
     fake_events_mod.replay_events = fake_replay  # type: ignore[attr-defined]
-    fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
     fake_events_mod.labeled_env_segments = fake_labeled_env  # type: ignore[attr-defined]
 
     monkeypatch.setattr(captions_mod, "ev_comp", fake_events_mod)
@@ -210,7 +209,7 @@ def test_raising_max_cue_sec_changes_score_for_long_events(cfg: Config, monkeypa
     fake_events_mod = types.ModuleType("soundthing.harness.components.events")
 
     # Replay produces a 12s long event
-    def fake_replay(cache: Any, segs: Any, c: Config, text_emb: Any) -> list[CaptionEvent]:
+    def fake_replay(cache: Any, segs: Any, c: Config) -> list[CaptionEvent]:
         return [CaptionEvent(start=0.0, end=12.0, label="alarm", class_id="siren", confidence=0.9)]
 
     def fake_labeled_env(labels: ClipLabels, c: Config, confidence: float = 0.7) -> list[EnvSegment]:
@@ -225,7 +224,6 @@ def test_raising_max_cue_sec_changes_score_for_long_events(cfg: Config, monkeypa
         ]
 
     fake_events_mod.replay_events = fake_replay  # type: ignore[attr-defined]
-    fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
     fake_events_mod.labeled_env_segments = fake_labeled_env  # type: ignore[attr-defined]
 
     monkeypatch.setattr(captions_mod, "ev_comp", fake_events_mod)
@@ -304,7 +302,7 @@ def test_captions_diagnostics_histogram(cfg: Config, monkeypatch: pytest.MonkeyP
     """Diagnostics include 5-bin offset error histogram."""
     fake_events_mod = types.ModuleType("soundthing.harness.components.events")
 
-    def fake_replay(cache: Any, segs: Any, c: Config, text_emb: Any) -> list[CaptionEvent]:
+    def fake_replay(cache: Any, segs: Any, c: Config) -> list[CaptionEvent]:
         return [
             CaptionEvent(start=1.0, end=3.2, label="bark", class_id="dog_bark", confidence=0.9),
             CaptionEvent(start=5.0, end=7.5, label="horn", class_id="car_horn", confidence=0.8),
@@ -322,7 +320,6 @@ def test_captions_diagnostics_histogram(cfg: Config, monkeypatch: pytest.MonkeyP
         ]
 
     fake_events_mod.replay_events = fake_replay  # type: ignore[attr-defined]
-    fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
     fake_events_mod.labeled_env_segments = fake_labeled_env  # type: ignore[attr-defined]
 
     monkeypatch.setattr(captions_mod, "ev_comp", fake_events_mod)

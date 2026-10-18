@@ -21,8 +21,7 @@ change something, re-score, keep the change only if it really helps.
   classes with enough dev events.
 - **Shared ledger.** Every experiment is logged (git SHA, parameter diff, scores), so
   parallel agents don't repeat each other.
-- **Shared files stay human-approved.** Variants of `vocabulary.yaml` (CLAP prompts,
-  AudioSet mapping) or `priors.yaml` are scored, then written up as proposals; the
+- **Shared files stay human-approved.** Variants of `vocabulary.yaml` (AudioSet mapping) or `priors.yaml` are scored, then written up as proposals; the
   harness never writes them.
 
 ## Cache
@@ -30,7 +29,6 @@ change something, re-score, keep the change only if it really helps.
 | Cached per clip | Makes tunable without a rerun |
 |---|---|
 | All 527 tagger outputs | AudioSet → vocabulary mapping |
-| CLAP audio embeddings | CLAP prompts (re-embed text only), calibration, combine rule, small heads |
 | Per-frame VAD probability | VAD threshold and suppression |
 | (replay) | smoothing, merging, thresholds, collapse, priority filter, `onset_shift_sec` |
 

@@ -65,7 +65,7 @@ video file
                 ▼
  ┌──────────── Person 1: sound events ──────────┐
  │ 3. Sliding windows (1 s / 0.25 s hop)          │
- │    AudioSet tagger → vocabulary + CLAP scores  │
+ │    PANNs tagger → vocabulary scores            │
  │    VAD speech masking                          │
  │ 4. Conditioning    soft priors P(event|env),   │
  │                    safety set bypasses         │
@@ -91,7 +91,7 @@ audio, because many important sounds come from off-screen.
 
 | | Covers | Code |
 |---|---|---|
-| **Person 1: sound events** | tagger, CLAP extra labels, AudioSet→vocabulary mapping, thresholds, safety set, VAD, post-processing, applying priors | `src/soundthing/events/`, `config/vocabulary.yaml`, `config/thresholds.yaml` |
+| **Person 1: sound events** | PANNs tagger, AudioSet→vocabulary mapping, thresholds, safety set, VAD, post-processing, applying priors | `src/soundthing/events/`, `config/vocabulary.yaml`, `config/thresholds.yaml` |
 | **Person 2: environment** | shot segmentation, visual and audio branches, fusion, confidence and `general` fallback, environment list, priors table | `src/soundthing/environment/`, `config/environments.yaml`, `config/priors.yaml` |
 | **Person 3: pipeline, product, eval** | ffmpeg extraction, orchestration/CLI, VTT/SRT and subtitle merge, FastAPI and player, eval harness, baseline vs conditioned comparison, pitch | `extract.py`, `pipeline.py`, `captions.py`, `evaluate.py`, `server/` |
 | **Labels** | hand-labeled eval clips | `labels/` |
@@ -106,7 +106,7 @@ Shared and changed only by agreement: `contracts.py`, `config.py`, `stages.py`,
 The full spec is in [docs/interfaces.md](docs/interfaces.md). The source of truth is
 [src/soundthing/contracts.py](src/soundthing/contracts.py), and valid examples are in
 [docs/examples/](docs/examples/). Every JSON file uses the envelope
-`{"schema_version": 1, "kind": ..., "data": ...}`, so a stale or mismatched file fails
+`{"schema_version": 2, "kind": ..., "data": ...}`, so a stale or mismatched file fails
 loudly. Loaders also accept the bare payload for hand-written fakes.
 
 | Contract | Direction | File | Shape |
@@ -131,8 +131,11 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
   `conf·p + (1−conf)·onehot(general)`. Conditioning reads `probs`, so low confidence
   smoothly weakens conditioning toward none.
 - **Priors.** `weight(c,t) = Σ_e probs_t[e]·w[e][c]`, and safety classes always get 1.
-  The conditioned score is `raw · (floor + (1−floor)·weight)`. The floor (0.25) means a
-  misclassified environment weakens events instead of deleting them.
+  The current fitted table uses positive odds coefficients: `raw·weight / (1−raw+raw·weight)`.
+  Weights are bounded to 0.25–4, so relevance can raise or lower confidence while
+  every sound remains possible in every environment. Old configs retain their
+  multiplicative rule unless they select `application: odds`. See
+  [environment priors](docs/environment-priors.md) for the dataset and limitations.
 - **`class_id` vs `label`.** `label` is the caption text and `class_id` is the vocabulary
   id, or a coarse group id such as `impact` when the detector isn't sure. Eval uses
   `class_id`.
@@ -143,9 +146,9 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
 
 | File | Contents |
 |---|---|
-| `environments.yaml` | 7 environments (`general` + 6), each with CLIP visual prompts and CLAP audio prompts |
-| `vocabulary.yaml` | 61 classes (10 safety) with caption text, AudioSet label mapping, CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
-| `priors.yaml` | per-environment `default` + class weights, plus `floor` |
+| `environments.yaml` | 14 environments (`general` + 13), each with CLIP visual prompts and CLAP audio prompts |
+| `vocabulary.yaml` | 527 classes (18 safety) with caption text, required AudioSet label mapping, coarse group, `safety` and `sustained` flags; 7 coarse groups |
+| `priors.yaml` | per-environment coefficients, `floor`, `application`, `max_gain` |
 | `thresholds.yaml` | default 0.5, safety default 0.6, per-class overrides (e.g. gunshot 0.75) |
 | `pipeline.yaml` | backends, extraction rate/fps, segmentation, model names, fusion weights, window/hop, VAD suppression, post-processing params, caption cue limits, eval tolerance |
 
@@ -193,8 +196,7 @@ the AudioSet names against the checkpoint's label list.
 | Person | Where | Task |
 |---|---|---|
 | 1 | `events/tagger.py` `load_tagger` | load the PANNs/BEATs checkpoint and its label list |
-| 1 | `events/clap.py` | CLAP loading, per-class text embeddings, calibrated window scores |
-| 1 | `events/core.py` `score_window` | combine tagger and CLAP scores into one window score |
+| 1 | `events/core.py` `score_window` | map PANNs scores into vocabulary class scores |
 | 1 | `events/detector.py` `load_models` | build `EventModels` |
 | 1 | `events/vad.py` `speech_regions` | Silero VAD |
 | 1 | `events/postprocess.py` | `smooth`, `threshold_to_events`, `collapse_confusable`, `priority_filter`, `add_modifiers` |
@@ -246,7 +248,7 @@ src/soundthing/
   config.py        config loading + cross-validation
   stages.py        stage interfaces, stub/real selection
   environment/     Person 2: segmentation, visual, audio, fusion, classifier, stub
-  events/          Person 1: core, tagger, clap, vad, conditioning, postprocess, detector, stub
+  events/          Person 1: core, tagger, vad, conditioning, postprocess, detector, stub
   extract.py       Person 3: ffmpeg
   captions.py      Person 3: VTT/SRT
   evaluate.py      Person 3: metrics

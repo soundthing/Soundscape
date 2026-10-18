@@ -60,9 +60,9 @@ the missing ones.
 **Choosing a focus.** Give every worker a different, concrete focus, and steer away from
 directions that keep failing in `results`. Examples:
 - per-class thresholds for frequent classes, or for safety classes;
-- postprocess smoothing, merging and min-duration;
+- postprocess merging, min-duration and coarse margin;
 - VAD and speech suppression;
-- CLAP fusion weights and prompts;
+- generic fallbacks and ancestor (hierarchy) suppression;
 - environment-conditioned priors in code;
 - onset/offset refinement code;
 - tagger calibration;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateDirection, levelsAt, channelAngle, borderPoint} from '../direction.mjs';
+import {validateDirection, levelsAt, channelAngle, borderPoint, roundedBorder, directionAnchor} from '../direction.mjs';
 import {handlePlayerRequest} from '../worker.mjs';
 
 const track = {duration:2,mode:'stereo',channels:['FL','FR'],frames:[
@@ -49,4 +49,19 @@ test('worker allows direction only through the verified video resource',async()=
   assert.deepEqual(await handlePlayerRequest({action:'direction',youtubeId:id},sender,deps),{direction:track});
   await assert.rejects(handlePlayerRequest({action:'direction',youtubeId:id},{...sender,frameId:1},deps));
   await assert.rejects(handlePlayerRequest({action:'direction',youtubeId:id},sender,{...deps,fetcher:async()=>Response.json({...track,channels:['LFE']})}));
+});
+
+test('rounded wave anchors preserve speaker directions as the caption box grows and shrinks',()=>{
+  for(const [width,height] of [[192,64],[300,90],[480,190],[90,64]]){
+    for(const angle of [0,-30,30,-90,90,-110,110,179]){
+      const anchor=directionAnchor(width,height,angle);
+      const point=roundedBorder(width,height,anchor.radius,anchor.distance);
+      const actual=Math.atan2(point.x-width/2,-(point.y-height/2))*180/Math.PI;
+      assert.ok(Math.abs(actual-angle)<.001,`${width}x${height} ${angle}: ${actual}`);
+      assert.ok(point.x>=-1e-8 && point.x<=width+1e-8 && point.y>=-1e-8 && point.y<=height+1e-8);
+      assert.ok(Math.abs(Math.hypot(point.nx,point.ny)-1)<1e-8);
+      const wrapped=roundedBorder(width,height,anchor.radius,anchor.distance+anchor.perimeter);
+      assert.ok(Math.hypot(wrapped.x-point.x,wrapped.y-point.y)<1e-6);
+    }
+  }
 });

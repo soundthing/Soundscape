@@ -12,8 +12,10 @@ import numpy as np
 
 from soundthing.config import Config
 from soundthing.events import separation, vad
+from soundthing.events.fallbacks import window_rms_dbfs
 
-CACHE_VERSION: int = 1
+# 2: CLAP embeddings dropped (events are tagger-only); per-window RMS added.
+CACHE_VERSION: int = 2
 
 
 @dataclass
@@ -26,14 +28,14 @@ class ClipCache:
     times: np.ndarray  # (T,) window centre times
     audioset_names: list[str]  # (A,) tagger label names
     tagger_raw: np.ndarray  # (T, A) float16 raw tagger probs (all 527)
-    clap_emb: np.ndarray | None  # (T, D) float16 L2-normalised CLAP audio embeddings; None if CLAP disabled
     vad_chunk_sec: float  # seconds per VAD prob (Silero 512 samples @16k = 0.032)
     vad_probs: np.ndarray  # (V,) float32 per-chunk speech probability
     # Source separation (all None when separation is disabled). Rows where sep_mask is
     # False are copies of the raw rows.
     sep_mask: np.ndarray | None = None  # (T,) bool: window was rescored on the effects stem
     tagger_sep: np.ndarray | None = None  # (T, A) float16 tagger probs on the effects stem
-    clap_emb_sep: np.ndarray | None = None  # (T, D) float16 CLAP embeddings on the effects stem
+    # (T,) float32 recording-level RMS (dBFS) per scoring window, for generic fallbacks
+    rms_dbfs: np.ndarray | None = None
 
 
 def _window_slice(audio: np.ndarray, start: int, win: int) -> np.ndarray:
@@ -47,17 +49,12 @@ def cache_key(cfg: Config) -> str:
     """sha1 hex[:12] of canonical JSON of model/window settings + CACHE_VERSION."""
     ecfg = cfg.pipeline.get("events", {})
     tagger_model = ecfg.get("tagger", {}).get("model")
-    clap_cfg = ecfg.get("clap", {})
-    clap_model = clap_cfg.get("model")
-    clap_enabled = bool(clap_cfg.get("enabled", True))
     window_sec = float(ecfg.get("window_sec", 1.0))
     hop_sec = float(ecfg.get("hop_sec", 0.25))
     vad_model = ecfg.get("vad", {}).get("model")
 
     payload: dict[str, Any] = {
         "cache_version": CACHE_VERSION,
-        "clap_enabled": clap_enabled,
-        "clap_model": clap_model,
         "hop_sec": hop_sec,
         "tagger_model": tagger_model,
         "vad_model": vad_model,
@@ -112,17 +109,12 @@ def build_cache(
     starts = list(range(0, max(1, n_samples - win + 1), hop))
 
     tagger_rows: list[np.ndarray] = []
-    clap_rows: list[np.ndarray] | None = [] if models.clap is not None else None
     times: list[float] = []
 
     for s in starts:
         chunk = _window_slice(audio, s, win)
         t_row = models.tagger(chunk[None, :], sr)[0]
         tagger_rows.append(t_row)
-        if models.clap is not None:
-            c_row = models.clap.embed_audio(chunk, sr)
-            if clap_rows is not None:
-                clap_rows.append(c_row)
         times.append((s + win / 2.0) / sr)
 
     if tagger_rows:
@@ -130,12 +122,8 @@ def build_cache(
     else:
         tagger_raw = np.zeros((0, len(models.audioset_names)), dtype=np.float16)
 
-    if clap_rows is not None:
-        clap_emb = np.array(clap_rows, dtype=np.float16)
-    else:
-        clap_emb = None
-
     times_arr = np.array(times, dtype=np.float64)
+    rms_dbfs = window_rms_dbfs(audio, sr, times_arr, window_sec).astype(np.float32)
 
     vad_probs = vad.speech_probs(audio, sr, cfg).astype(np.float32)
     vad_chunk_sec = float(vad.VAD_CHUNK_SEC)
@@ -143,7 +131,6 @@ def build_cache(
 
     sep_mask = None
     tagger_sep = None
-    clap_emb_sep = None
 
     if separation.is_enabled(cfg):
         if getattr(models, "separator", None) is None:
@@ -163,20 +150,15 @@ def build_cache(
         )
         mask = separation.window_mask(times_arr, window_sec, spans)
         tagger_sep = tagger_raw.copy()
-        clap_emb_sep = clap_emb.copy() if clap_emb is not None else None
         if mask.any():
             sep_audio = separation.separate_spans(audio, sr, spans, models.separator, cfg)
             masked_indices = np.where(mask)[0]
             for i in masked_indices:
                 chunk = _window_slice(sep_audio, starts[i], win)
                 tagger_sep[i] = models.tagger(chunk[None, :], sr)[0]
-                if models.clap is not None and clap_emb_sep is not None:
-                    clap_emb_sep[i] = models.clap.embed_audio(chunk, sr)
 
         sep_mask = mask.astype(bool)
         tagger_sep = tagger_sep.astype(np.float16)
-        if clap_emb_sep is not None:
-            clap_emb_sep = clap_emb_sep.astype(np.float16)
 
     return ClipCache(
         video_id=video_id,
@@ -187,12 +169,11 @@ def build_cache(
         times=times_arr,
         audioset_names=list(models.audioset_names),
         tagger_raw=tagger_raw,
-        clap_emb=clap_emb,
         vad_chunk_sec=vad_chunk_sec,
         vad_probs=vad_probs,
         sep_mask=sep_mask,
         tagger_sep=tagger_sep,
-        clap_emb_sep=clap_emb_sep,
+        rms_dbfs=rms_dbfs,
     )
 
 
@@ -207,7 +188,6 @@ def save_cache(c: ClipCache, path: Path) -> None:
         "hop": c.hop,
         "audioset_names": c.audioset_names,
         "vad_chunk_sec": c.vad_chunk_sec,
-        "has_clap": c.clap_emb is not None,
         "cache_version": CACHE_VERSION,
     }
     arrays: dict[str, Any] = {
@@ -216,14 +196,12 @@ def save_cache(c: ClipCache, path: Path) -> None:
         "tagger_raw": c.tagger_raw.astype(np.float16),
         "vad_probs": c.vad_probs.astype(np.float32),
     }
-    if c.clap_emb is not None:
-        arrays["clap_emb"] = c.clap_emb.astype(np.float16)
     if c.sep_mask is not None:
         arrays["sep_mask"] = c.sep_mask.astype(bool)
     if c.tagger_sep is not None:
         arrays["tagger_sep"] = c.tagger_sep.astype(np.float16)
-    if c.clap_emb_sep is not None:
-        arrays["clap_emb_sep"] = c.clap_emb_sep.astype(np.float16)
+    if c.rms_dbfs is not None:
+        arrays["rms_dbfs"] = c.rms_dbfs.astype(np.float32)
 
     np.savez_compressed(path, **arrays)
 
@@ -246,14 +224,9 @@ def load_cache(path: Path) -> ClipCache:
         times = data["times"]
         tagger_raw = data["tagger_raw"].astype(np.float16)
         vad_probs = data["vad_probs"].astype(np.float32)
-        clap_emb = (
-            data["clap_emb"].astype(np.float16)
-            if meta.get("has_clap", False) and "clap_emb" in data
-            else None
-        )
         sep_mask = data["sep_mask"].astype(bool) if "sep_mask" in data else None
         tagger_sep = data["tagger_sep"].astype(np.float16) if "tagger_sep" in data else None
-        clap_emb_sep = data["clap_emb_sep"].astype(np.float16) if "clap_emb_sep" in data else None
+        rms_dbfs = data["rms_dbfs"].astype(np.float32) if "rms_dbfs" in data else None
 
     return ClipCache(
         video_id=video_id,
@@ -264,12 +237,11 @@ def load_cache(path: Path) -> ClipCache:
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=clap_emb,
         vad_chunk_sec=vad_chunk_sec,
         vad_probs=vad_probs,
         sep_mask=sep_mask,
         tagger_sep=tagger_sep,
-        clap_emb_sep=clap_emb_sep,
+        rms_dbfs=rms_dbfs,
     )
 
 

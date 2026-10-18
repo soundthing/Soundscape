@@ -1,0 +1,10 @@
+# Tested major-version boundaries for the existing model wrappers.
+# Torch/TorchAudio/TorchVision must be installed together from the same wheel index.
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0
+# Tested with the environment CLAP and SigLIP wrappers.
+transformers==4.57.6
+numpy>=1.26,<2
+opencv-python>=4.8,<4.12
+librosa>=0.10.2,<0.12

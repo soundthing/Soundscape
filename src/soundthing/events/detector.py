@@ -12,7 +12,6 @@ from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs
 from . import postprocess as pp
 from . import separation
-from .clap import load_clap, text_embeddings
 from .core import EventModels
 from .tagger import build_tagger_map, load_tagger
 from .cache import ClipCache, build_cache, cache_key
@@ -34,11 +33,7 @@ def _freeze(val: Any) -> Any:
 def _models_cache_key(cfg: Config) -> tuple:
     ecfg = cfg.pipeline.get("events", {})
     tagger_model = ecfg.get("tagger", {}).get("model")
-    clap_cfg = ecfg.get("clap", {})
-    clap_model = clap_cfg.get("model")
-    clap_enabled = clap_cfg.get("enabled", True)
-    calibration = _freeze(clap_cfg.get("calibration", {}))
-    key = (tagger_model, clap_model, clap_enabled, calibration, tuple(cfg.class_ids))
+    key = (tagger_model, tuple((c.id, tuple(c.audioset)) for c in cfg.classes))
     if separation.is_enabled(cfg):
         sep_cfg = separation.sep_config(cfg)
         return key + (True, sep_cfg.get("model"))
@@ -64,25 +59,14 @@ def load_models(cfg: Config) -> EventModels:
     tagger, audioset_names = load_tagger(cfg)
     tagger_map = build_tagger_map(cfg, audioset_names)
 
-    clap_cfg = cfg.pipeline.get("events", {}).get("clap", {})
-    clap_enabled = clap_cfg.get("enabled", True)
-
-    clap = None
-    clap_text_emb = None
-    if clap_enabled:
-        clap = load_clap(cfg)
-        clap_text_emb = text_embeddings(clap, cfg)
-
     separator = None
     if separation.is_enabled(cfg):
         separator = separation.load_separator(cfg)
 
     return EventModels(
         tagger=tagger,
-        clap=clap,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=clap_text_emb,
         audioset_names=audioset_names,
         separator=separator,
     )
@@ -116,12 +100,7 @@ def detect(
         cache = build_cache(audio, sr, inputs.video_id, cfg, models=models)
         _clip_cache_memo = (memo_key, cache)
 
-    events = replay(
-        replace(cache, duration=inputs.duration),
-        segments,
-        cfg,
-        text_emb=models.clap_text_emb,
-    )
+    events = replay(replace(cache, duration=inputs.duration), segments, cfg)
 
     stereo_sr = getattr(inputs, "sample_rate", 16000)
     if inputs.audio_stereo_path is not None and Path(inputs.audio_stereo_path).exists():

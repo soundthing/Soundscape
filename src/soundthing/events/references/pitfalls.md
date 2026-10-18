@@ -3,28 +3,23 @@
 Traps that aren't obvious from the code. Add one when something bites; remove it when the
 cause is gone.
 
-- **Sample rates differ per model.** Audio is 16 kHz; PANNs CNN14 wants 32 kHz and CLAP
-  48 kHz. Feeding the wrong rate gives plausible-looking but wrong scores, not an error.
+- **Sample rates differ per model.** Audio is 16 kHz; PANNs CNN14 wants 32 kHz. Feeding the wrong rate gives plausible-looking but wrong scores, not an error.
 - **AudioSet names must match exactly.** `vocabulary.yaml` names are matched against the
   tagger's label list character for character. Mismatches fail at model load. Check with
   `soundthing check-config --audioset <csv>`.
-- **CLAP-only classes are silent without CLAP.** Several classes have no AudioSet labels
-  (e.g. kettle whistle, turn signal, seatbelt), so they never fire until CLAP is in.
-- **CLAP scores aren't probabilities.** Raw cosine similarities sit in a narrow band and
-  must be calibrated before they're compared with tagger probabilities or thresholds.
+- **Retired specific labels must not become generic aliases.** The five former CLAP-only classes have no AudioSet mappings and were removed. Do not map a generic click or whistle to a specific object merely to restore their captions. Version-1 stored runs must be regenerated, not relabeled as version 2.
 - **Onsets can come out early.** A 1 s window starts scoring when a sound enters its
   trailing edge, so window-centre timing can lead the real onset by up to ~0.5 s — the
   whole eval tolerance. Measure the offset on labeled clips before correcting it.
-- **Over-smoothing kills impulsive sounds.** Gunshots and door slams span only a few
-  windows; a wide median filter erases them.
+- **Minimum duration can still remove isolated detections.** Removing score smoothing
+  does not remove the 0.3-second minimum event duration. A lone 0.25-second detection
+  is still dropped unless gap merging joins it with another run.
 - **Short events stay on screen longer than their span.** The caption writer extends cues
-  to a minimum duration, which matters when capping captions on screen.
+  to a minimum duration and then trims ancestor overlap, which can make parents shorter.
+- **Small eval set overfits fast.** 10–20 clips: tune on part, check on the rest, and
+  prefer raising a threshold to adding a special case.
 - **Heavy imports break the stub path.** torch / transformers at module top level fail
   wherever the `events` extra isn't installed, including CI.
-- **CLAP calibration center/scale are untuned placeholders.** Default values
-  (center: 0.2, scale: 20.0) in pipeline config are placeholders; until tuned on
-  labeled validation clips, CLAP zero-shot scores may under- or over-trigger
-  relative to AudioSet tagger probabilities.
 - **Silero VAD expects 16 kHz mono float32.** Multi-channel audio or other sample rates must
   be averaged to mono and resampled; feeding raw multi-channel audio leads to silent failures
   or shape mismatches.
@@ -48,19 +43,28 @@ cause is gone.
 - **VAD hysteresis state across chunk boundaries.** Silero VAD per-chunk probabilities
   require maintaining hysteresis state (on at threshold, off below threshold - 0.15)
   and resetting model states between files.
-- **Overlapping events under priority filter.** Overlapping events of different priorities
-  (e.g. safety vs non-safety) will have the non-safety event suppressed by `priority_filter`.
-  When synthesizing multi-event test clips, space activations across non-overlapping time
-  windows so both events are preserved.
 - **Demucs removes dialogue well but music only partly.** Demucs separates into drums,
   bass, other, and vocals. The effects stem is mix minus vocals, so drums, bass, and
   other instruments are kept in "effects" and can still mask sound events.
 - **Extraction is 16 kHz so separator input is band-limited.** Demucs expects 44.1 kHz
   stereo. Upsampling 16 kHz mono to 44.1 kHz cannot restore high-frequency harmonics, so
   separation quality above 8 kHz is unavailable.
-- **Separated audio is out of distribution for PANNs/CLAP.** Models were pretrained on
+- **Separated audio is out of distribution for PANNs.** Models were pretrained on
   unseparated natural audio. Artifacts and altered stem balances from separation mean
   thresholds tuned on raw audio may not transfer cleanly.
 - **Windows HF cache symlink warning is harmless.** On Windows without developer mode
   enabled, huggingface_hub logs a warning about symlinks and falls back to file copies.
   This is harmless and does not affect model loading or caching.
+
+- **The full label set contains speech.** Speech-label outputs must be exempt from
+  VAD suppression; otherwise the speech detector suppresses speech's own captions.
+- **Ontology nodes and model outputs differ.** Unscored intermediate nodes may connect
+  scored ancestors and children. Project through them, and retain multiple parents.
+- **AudioSet label absence is not a verified negative.** Derived environment
+  coefficients describe annotated co-occurrence in a selected corpus, not calibrated
+  real-world event rates. Generated context captions can also be wrong.
+
+- **Stored estimates and effective weights now differ.** In the optional unfloored
+  format, a value below the configured minimum is valid evidence. Apply the bound
+  before mixing environments; clamping only the final mixture changes uncertain
+  scene behavior. Keep legacy bounded validation strict.

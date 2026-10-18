@@ -20,7 +20,7 @@ def apply_overrides(cfg: Config, overrides: dict[str, Any]) -> Config:
     - events.<a>.<b>... -> cfg.pipeline['events'][a][b]...
     - thresholds.default, thresholds.safety_default -> float
     - thresholds.classes.<id> -> float (<id> in class_ids or coarse_groups)
-    - vocabulary.<class_id>.clap / vocabulary.<class_id>.audioset -> list[str]
+    - vocabulary.<class_id>.audioset -> list[str]
     - priors.floor -> float
     - priors.<env>.default -> float
     - priors.<env>.classes.<class_id> -> float
@@ -64,7 +64,7 @@ def apply_overrides(cfg: Config, overrides: dict[str, Any]) -> Config:
                 raise KeyError(f"Unknown thresholds key: {key!r}")
 
         elif section == "vocabulary":
-            if len(parts) == 3 and parts[2] in ("clap", "audioset"):
+            if len(parts) == 3 and parts[2] == "audioset":
                 cid = parts[1]
                 field_name = parts[2]
                 if cid not in class_ids_set:

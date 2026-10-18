@@ -93,10 +93,8 @@ def _setup_clip_and_cache(
     )
     models = EventModels(
         tagger=tagger,
-        clap=None,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=None,
         audioset_names=audioset_names,
     )
 
@@ -403,12 +401,16 @@ def test_score_limits_behavior(
     }
     assert base_res.passed is True
 
-    # Craft an unfavorable prior override so conditioned drops below baseline
+    # Craft an unfavorable prior override so conditioned drops below baseline.
+    # Odds priors keep a 0.95 score fairly high (the labeled env is mixed with neutral
+    # general), so also raise the class minimum to just under the raw score: baseline
+    # still detects it, the downweighted conditioned score does not.
     env_id = lbl.segments[0].env
     unfavorable_overrides = {
-        "priors.floor": 0.0,
-        f"priors.{env_id}.default": 0.0,
-        f"priors.{env_id}.classes.{sc_id}": 0.0,
+        "priors.floor": 0.01,  # odds mode needs a positive floor
+        f"priors.{env_id}.default": 0.01,
+        f"priors.{env_id}.classes.{sc_id}": 0.01,
+        f"thresholds.classes.{sc_id}": 0.9,
     }
     unfavorable_cfg = apply_overrides(cfg, unfavorable_overrides)
     res_below_base = score(

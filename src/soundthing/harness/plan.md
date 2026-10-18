@@ -26,7 +26,7 @@ Each component declares: `name`, the config keys it tunes, `cache_key(cfg)`,
 
 | Component | Objective (fixed) | Cached model stage | Tunable by replay |
 |---|---|---|---|
-| events | micro F0.5 conditioned, coarse half credit (exists) | tagger outputs, CLAP audio embeddings, VAD probs (exists) | VAD, post-processing, thresholds, CLAP calibration, combine rule |
+| events | micro F0.5 conditioned, coarse half credit (exists) | tagger outputs, VAD probs, per-window RMS (exists) | VAD, post-processing, thresholds |
 | environment | time-weighted env accuracy + macro accuracy over envs | per-segment SigLIP + CLAP embeddings, shot boundaries | fusion weights, temperature, confidence threshold, prompts (score-only), segmentation min/max |
 | captions | cue-level F0.5 on rendered cues vs labeled events | none (cheap) | min/max cue durations, merge rules |
 | pipeline | caption F0.5 with predicted (not labeled) environment | union of the above | everything, jointly |

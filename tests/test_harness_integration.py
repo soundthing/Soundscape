@@ -109,7 +109,7 @@ def test_tuning_integration_end_to_end(
     cfg = load_config(root / "config")
     env_id = next(e for e in cfg.env_ids if e != GENERAL_ENV)
 
-    # Pick regular class that uses default threshold and has prior 1.0 in env_id
+    # Pick regular class that has no per-class override and prior 1.0 in env_id
     sc = next(
         c
         for c in cfg.classes
@@ -118,6 +118,14 @@ def test_tuning_integration_end_to_end(
         and c.id not in cfg.thresholds.classes
         and cfg.priors.environments[env_id].weight(c.id) == 1.0
     )
+    # Untier it so it uses thresholds.default (tiers would override the tuned default)
+    thr_path = root / "config" / "thresholds.yaml"
+    thr_lines = thr_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    thr_path.write_text(
+        "".join(l for l in thr_lines if not l.startswith(f"  {sc.id}: ")), encoding="utf-8"
+    )
+    cfg = load_config(root / "config")
+    assert sc.id not in cfg.thresholds.class_tiers
     safety_sc = next(c for c in cfg.classes if c.audioset and c.safety)
 
     audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
@@ -129,10 +137,8 @@ def test_tuning_integration_end_to_end(
     )
     models = EventModels(
         tagger=tagger,
-        clap=None,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=None,
         audioset_names=audioset_names,
     )
     monkeypatch.setattr(
@@ -226,7 +232,7 @@ def test_tuning_integration_end_to_end(
     # thresholds.yaml updated with comments preserved
     thr_text = (root / "config" / "thresholds.yaml").read_text(encoding="utf-8")
     assert "default: 0.4" in thr_text
-    assert "# Per-class detection thresholds" in thr_text
+    assert "# Required scores on the conditioned output" in thr_text
 
     # best.json updated
     best_data = ledger.best()

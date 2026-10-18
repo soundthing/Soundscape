@@ -2,6 +2,7 @@
 
 POST /api/videos                    upload a video; processing starts in background -> {video_id}
 POST /api/youtube                   download/process a public or unlisted video -> {video_id}
+DELETE /api/youtube/cache?url=...    clear one idle video's results and downloaded media
 GET  /api/videos/{id}               {status, demo, error?}; includes downloading
 GET  /api/videos/{id}/video         the uploaded video
 GET  /api/videos/{id}/captions/{mode}.vtt   mode = baseline | conditioned
@@ -19,7 +20,7 @@ import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -27,7 +28,7 @@ from .. import contracts as C
 from ..config import load_config
 from ..extract import video_id_for
 from ..pipeline import MODES, run_video
-from .youtube import YouTubeJobs, complete_run
+from .youtube import CacheBusyError, YouTubeJobs, complete_run, youtube_id_from_url
 
 RUNS = Path(os.environ.get("SOUNDTHING_RUNS", "runs"))
 UPLOADS = Path(os.environ.get("SOUNDTHING_UPLOADS", "uploads"))
@@ -55,6 +56,19 @@ class YouTubeRequest(BaseModel):
 @app.post("/api/youtube", status_code=202)
 def submit_youtube(request: YouTubeRequest):
     return {"video_id": youtube_jobs.submit(request.youtube_id)}
+
+
+@app.delete("/api/youtube/cache")
+def clear_youtube_cache(url: str = Query(min_length=1, max_length=2048)):
+    try:
+        return youtube_jobs.clear_cache(youtube_id_from_url(url))
+    except CacheBusyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except OSError as exc:
+        traceback.print_exc()
+        raise HTTPException(500, "Couldn't clear this video's cache. Check the server log and retry.") from exc
 
 
 def _process(video_path: Path, video_id: str) -> None:
@@ -117,7 +131,7 @@ def get_direction(video_id: str):
 @app.get("/api/videos/{video_id}/captions/{mode}.vtt")
 def get_captions(video_id: str, mode: str):
     path = RUNS / video_id / f"captions.{mode}.vtt"
-    if mode not in MODES or not path.exists():
+    if mode not in MODES or not path.exists() or not complete_run(RUNS / video_id):
         raise HTTPException(404)
     return FileResponse(path, media_type="text/vtt")
 

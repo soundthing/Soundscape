@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -14,6 +15,7 @@ from soundthing.contracts import CaptionEvent, EnvSegment, ExtractedInputs
 from soundthing.events.core import EventModels
 import soundthing.events.detector as detector
 from soundthing.events.tagger import build_tagger_map
+from soundthing.events.types import FrameScores
 
 
 class FakeTagger:
@@ -60,10 +62,8 @@ def fake_env(cfg: Config, monkeypatch):
         load_calls += 1
         return EventModels(
             tagger=tagger,
-            clap=None,
             class_ids=list(c.class_ids),
             tagger_map=tagger_map,
-            clap_text_emb=None,
             audioset_names=audioset_names,
         )
 
@@ -137,6 +137,52 @@ def test_detect_returns_valid_sorted_events_in_both_modes(cfg: Config, fake_env,
 
     assert baseline_evs == sorted(baseline_evs, key=lambda e: (e.start, e.end))
     assert conditioned_evs == sorted(conditioned_evs, key=lambda e: (e.start, e.end))
+
+
+@pytest.mark.parametrize('conditioned', [False, True])
+@pytest.mark.parametrize('legacy_settings', [False, True])
+def test_detect_preserves_brief_repeated_and_simultaneous_events(
+    cfg, fake_env, tmp_path, inject_scores, conditioned, legacy_settings,
+):
+    from soundthing.captions import events_to_cues
+
+    local_cfg = deepcopy(cfg)
+    local_cfg.pipeline['events']['modifiers']['enabled'] = False
+    if legacy_settings:
+        # Old local configs remain loadable; these retired settings have no effect.
+        local_cfg.pipeline['events']['postprocess'].update(
+            smoothing_sec=20, sustained_repeat_sec=60, max_on_screen=1,
+        )
+    local_cfg.validate()
+    assert local_cfg.sound_class('typing').sustained
+
+    class_ids = ['typing', 'cough', 'audioset_m_04rlf']  # unrelated Music label
+    times = np.arange(17) * .25 + .5
+    scores = np.zeros((len(times), len(class_ids)))
+    scores[:6, 0] = .95
+    scores[10:16, 0] = .95  # typing stops and restarts well inside 60 seconds
+    scores[[2, 4], 1] = .9  # nearby isolated peaks survive via ordinary gap merging
+    scores[:, 2] = .85
+    original_scores = scores.copy()
+    frame_scores = FrameScores(times, class_ids, scores, .25)
+    detector._clear_caches()
+    inject_scores(lambda: frame_scores)
+
+    inputs = make_inputs(tmp_path, duration=5)
+    segments = [EnvSegment(0, 5, 'general', 1, {'general': 1})] if conditioned else None
+    events = detector.detect(inputs, segments, local_cfg)
+
+    assert {event.class_id for event in events} == set(class_ids)
+    assert len(events) == 4
+    typing = [event for event in events if event.class_id == 'typing']
+    assert len(typing) == 2 and typing[1].start - typing[0].start < 60
+    cough, = [event for event in events if event.class_id == 'cough']
+    assert cough.confidence == .9 and cough.end - cough.start > .7
+    for event in events:
+        event.validate()
+    cues = events_to_cues(events, hierarchy=local_cfg.hierarchy())
+    assert sum(cue.start <= 1 < cue.end for cue in cues) == 3
+    np.testing.assert_array_equal(frame_scores.scores, original_scores)
 
 
 def test_models_and_raw_scores_cached_across_modes(cfg: Config, fake_env, tmp_path: Path):
@@ -327,8 +373,6 @@ def test_load_models_and_cache_key_with_separation(cfg: Config, monkeypatch: pyt
 
     audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
     monkeypatch.setattr(detector, "load_tagger", lambda c: (FakeTagger(audioset_names), audioset_names))
-    monkeypatch.setattr(detector, "load_clap", lambda c: None)
-    monkeypatch.setattr(detector, "text_embeddings", lambda clap, c: None)
     monkeypatch.setattr(detector.separation, "load_separator", fake_load_separator)
 
     # When disabled: separator is None and load_separator is not called
@@ -355,3 +399,15 @@ def test_load_models_and_cache_key_with_separation(cfg: Config, monkeypatch: pyt
     assert m1 is m2
     assert m1.separator is fake_separator
     assert sep_load_calls == 2
+
+
+def test_full_vocabulary_speech_is_not_suppressed_by_its_own_vad(cfg, fake_env, monkeypatch, tmp_path):
+    speech = next(c for c in cfg.classes if c.audioset == ['Speech'])
+    assert speech.id in cfg.pipeline['events']['vad']['exempt_classes']
+    assert speech.id not in cfg.safety_ids()
+    fake_env.tagger.set_score('Speech', .95)
+    from soundthing.events import vad
+    monkeypatch.setattr(vad, 'speech_regions_from_probs', lambda *args: [(0., 3.)])
+    detector._clear_caches()
+    result = detector.detect(make_inputs(tmp_path, duration=3.), None, cfg)
+    assert speech.id in {event.class_id for event in result}

@@ -41,7 +41,7 @@ def test_propose_shared_change_fake_result(tmp_path: Path, monkeypatch: pytest.M
     first_cid = cfg.class_ids[0]
 
     overrides = {
-        f"vocabulary.{first_cid}.clap": ["custom prompt a", "custom prompt b"],
+        f"vocabulary.{first_cid}.audioset": ["custom prompt a", "custom prompt b"],
         "priors.floor": 0.05,
     }
 
@@ -59,8 +59,8 @@ def test_propose_shared_change_fake_result(tmp_path: Path, monkeypatch: pytest.M
     assert "## Note" in text
     assert "Tuned CLAP prompt and floor" in text
     assert "## Change" in text
-    assert f"- vocabulary.{first_cid}.clap:" in text
-    assert f'+ vocabulary.{first_cid}.clap: ["custom prompt a", "custom prompt b"]' in text
+    assert f"- vocabulary.{first_cid}.audioset:" in text
+    assert f'+ vocabulary.{first_cid}.audioset: ["custom prompt a", "custom prompt b"]' in text
     assert "- priors.floor:" in text
     assert "+ priors.floor: 0.05" in text
     assert "## Scores" in text
@@ -98,7 +98,7 @@ def test_propose_shared_change_result_none(tmp_path: Path, monkeypatch: pytest.M
     cfg = load_config()
     first_cid = cfg.class_ids[0]
 
-    overrides = {f"vocabulary.{first_cid}.clap": ["prompt"]}
+    overrides = {f"vocabulary.{first_cid}.audioset": ["prompt"]}
     path = propose_shared_change(overrides, None, "No scoring performed", cfg=cfg)
 
     assert path.exists()
@@ -121,14 +121,14 @@ def test_propose_shared_change_invalid_inputs(tmp_path: Path, monkeypatch: pytes
 
     # Non-shared keys
     with pytest.raises(ValueError):
-        propose_shared_change({"events.postprocess.smoothing_sec": 0.5}, None, "note", cfg=cfg)
+        propose_shared_change({"events.postprocess.merge_gap_sec": 0.5}, None, "note", cfg=cfg)
 
     with pytest.raises(ValueError):
         propose_shared_change({"thresholds.default": 0.5}, None, "note", cfg=cfg)
 
     # Unknown class id in vocabulary
     with pytest.raises(ValueError):
-        propose_shared_change({"vocabulary.unknown_class_xyz.clap": ["a"]}, None, "note", cfg=cfg)
+        propose_shared_change({"vocabulary.unknown_class_xyz.audioset": ["a"]}, None, "note", cfg=cfg)
 
     # Unknown class id in priors
     first_env = cfg.env_ids[0]

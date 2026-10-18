@@ -96,13 +96,12 @@ def test_predicted_env_passed_to_events_replay(cfg: Config, monkeypatch: pytest.
     # Fake events component
     fake_events_mod = types.ModuleType("soundthing.harness.components.events")
 
-    def fake_replay(cache: Any, segs: Any, c: Config, text_emb: Any) -> list[CaptionEvent]:
+    def fake_replay(cache: Any, segs: Any, c: Config) -> list[CaptionEvent]:
         if segs is not None:
             recorded_segments.append(segs)
         return [CaptionEvent(start=1.0, end=3.0, label="clatter", class_id="dishes", confidence=0.9)]
 
     fake_events_mod.replay_events = fake_replay  # type: ignore[attr-defined]
-    fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
 
     monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
     monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)
@@ -260,10 +259,9 @@ def test_pipeline_env_time_acc_diagnostic(cfg: Config, monkeypatch: pytest.Monke
     fake_env_mod.predict_segments = lambda cache, c: pred_segs  # type: ignore[attr-defined]
 
     fake_events_mod = types.ModuleType("soundthing.harness.components.events")
-    fake_events_mod.replay_events = lambda cache, segs, c, text_emb: [
+    fake_events_mod.replay_events = lambda cache, segs, c: [
         CaptionEvent(start=1.0, end=3.0, label="bark", class_id="dog_bark", confidence=0.9)
     ]
-    fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
 
     monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
     monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)
@@ -299,10 +297,9 @@ def test_pipeline_clips_without_env_labels_scored(cfg: Config, monkeypatch: pyte
     fake_env_mod.predict_segments = lambda cache, c: pred_segs  # type: ignore[attr-defined]
 
     fake_events_mod = types.ModuleType("soundthing.harness.components.events")
-    fake_events_mod.replay_events = lambda cache, segs, c, text_emb: [
+    fake_events_mod.replay_events = lambda cache, segs, c: [
         CaptionEvent(start=1.0, end=2.5, label="bark", class_id="dog_bark", confidence=0.9)
     ]
-    fake_events_mod.text_emb_for = lambda c, caches: None  # type: ignore[attr-defined]
 
     monkeypatch.setattr(pipeline_mod, "env_comp", fake_env_mod)
     monkeypatch.setattr(pipeline_mod, "ev_comp", fake_events_mod)

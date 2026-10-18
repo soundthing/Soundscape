@@ -87,6 +87,25 @@ def test_analysis_failure_is_cached_and_does_not_break_caption_outputs(tmp_path,
     assert not (tmp_path / "direction.json.tmp").exists()
 
 
+def test_real_direction_is_ready_before_caption_model_failure(tmp_path, tools, cfg, monkeypatch):
+    from soundthing import pipeline
+    samples = np.column_stack([np.ones(8000) * .5, np.zeros(8000)])
+    source = wav(tmp_path, "stereo", samples)
+    run = tmp_path / "run"
+    C.save_inputs(C.ExtractedInputs("clip", str(source), str(source), str(run), 1, .5), run / "inputs.json")
+
+    def failed_classifier(inputs, config):
+        track = C.load_direction(run / "direction.json")
+        assert track.mode == "stereo" and track.frames[-1].levels["FL"] > .8
+        raise RuntimeError("caption model unavailable")
+
+    monkeypatch.setattr(pipeline, "get_environment_classifier", lambda config: failed_classifier)
+    with pytest.raises(RuntimeError, match="caption model unavailable"):
+        pipeline.run_video(run / "inputs.json", tmp_path / "runs", cfg)
+    assert C.load_direction(run / "direction.json").mode == "stereo"
+    assert not (run / "captions.conditioned.vtt").exists()
+
+
 def test_audio_format_prefers_surround_only_in_selected_language():
     from soundthing.server.youtube import audio_format
     metadata = {"requested_formats": [{"acodec": "aac", "language": "en"}], "formats": [
@@ -111,6 +130,7 @@ def test_direction_endpoint_backfills_once_without_reprocessing_captions(tmp_pat
     run.mkdir(parents=True)
     C.save_inputs(C.ExtractedInputs(key, "old.mp4", "audio.wav", str(run), 1, 2), run / "inputs.json")
     for mode in ("baseline", "conditioned"):
+        C.save_events([], run / f"events.{mode}.json")
         (run / f"captions.{mode}.vtt").write_text("WEBVTT\n\n")
     entered, release = threading.Event(), threading.Event()
 

@@ -10,6 +10,7 @@ import pytest
 
 from soundthing import contracts as C
 from soundthing.harness import paths
+from soundthing.harness import space as space_mod
 from soundthing.harness.space import (
     BOUNDS,
     MIN_CLASS_EVENTS,
@@ -43,19 +44,14 @@ def test_describe_space_defaults_and_repo_config(cfg):
 
     # Currents equal yaml values
     events_cfg = cfg.pipeline["events"]
-    assert idx["events.clap.calibration.center"]["current"] == events_cfg["clap"]["calibration"]["center"]
-    assert idx["events.clap.calibration.scale"]["current"] == events_cfg["clap"]["calibration"]["scale"]
     assert idx["events.vad.suppress_under_speech"]["current"] == events_cfg["vad"]["suppress_under_speech"]
     assert idx["events.vad.threshold"]["current"] == events_cfg["vad"]["threshold"]
     assert idx["events.vad.min_speech_sec"]["current"] == events_cfg["vad"]["min_speech_sec"]
     assert idx["events.vad.pad_sec"]["current"] == events_cfg["vad"]["pad_sec"]
     assert idx["events.vad.merge_gap_sec"]["current"] == events_cfg["vad"]["merge_gap_sec"]
-    assert idx["events.postprocess.smoothing_sec"]["current"] == events_cfg["postprocess"]["smoothing_sec"]
     assert idx["events.postprocess.min_event_sec"]["current"] == events_cfg["postprocess"]["min_event_sec"]
     assert idx["events.postprocess.merge_gap_sec"]["current"] == events_cfg["postprocess"]["merge_gap_sec"]
     assert idx["events.postprocess.coarse_margin"]["current"] == events_cfg["postprocess"]["coarse_margin"]
-    assert idx["events.postprocess.sustained_repeat_sec"]["current"] == events_cfg["postprocess"]["sustained_repeat_sec"]
-    assert idx["events.postprocess.max_on_screen"]["current"] == events_cfg["postprocess"]["max_on_screen"]
     assert idx["thresholds.default"]["current"] == cfg.thresholds.default
     assert idx["thresholds.safety_default"]["current"] == cfg.thresholds.safety_default
 
@@ -92,14 +88,8 @@ def test_describe_space_shared_entries(cfg):
     idx = space_index(space)
 
     for cid in cfg.class_ids:
-        clap_key = f"vocabulary.{cid}.clap"
         audioset_key = f"vocabulary.{cid}.audioset"
-        assert clap_key in idx
-        assert idx[clap_key]["shared"] is True
-        assert idx[clap_key]["type"] == "list[str]"
-        assert idx[clap_key]["bounds"] is None
-        assert idx[clap_key]["current"] == cfg.sound_class(cid).clap
-
+        assert f"vocabulary.{cid}.clap" not in idx
         assert audioset_key in idx
         assert idx[audioset_key]["shared"] is True
         assert idx[audioset_key]["type"] == "list[str]"
@@ -121,8 +111,10 @@ def test_describe_space_shared_entries(cfg):
             assert entry["shared"] is False
 
 
-def test_validate_overrides(cfg):
+def test_validate_overrides(cfg, monkeypatch):
     """validate_overrides accepts valid values and rejects malformed/out-of-bounds inputs."""
+    # No int tunable remains in the live space; register a test-only one.
+    monkeypatch.setitem(space_mod.BOUNDS, "events.postprocess.int_param", space_mod.ParamSpec("int", 1, 4, default=2))
     cid0 = cfg.class_ids[0]
     cid1 = cfg.class_ids[1]
     counts = {cid0: MIN_CLASS_EVENTS}
@@ -130,9 +122,9 @@ def test_validate_overrides(cfg):
 
     # Valid in-bounds values
     validate_overrides({"events.vad.threshold": 0.5}, space)
-    validate_overrides({"events.postprocess.max_on_screen": 3}, space)
+    validate_overrides({"events.postprocess.int_param": 3}, space)
     validate_overrides({f"thresholds.classes.{cid0}": 0.7}, space)
-    validate_overrides({f"vocabulary.{cid0}.clap": ["a prompt", "another prompt"]}, space)
+    validate_overrides({f"vocabulary.{cid0}.audioset": ["Siren", "Dog"]}, space)
 
     # Unknown key
     with pytest.raises(ValueError, match="Unknown parameter 'events.unknown_param'"):
@@ -144,18 +136,18 @@ def test_validate_overrides(cfg):
 
     # Out of bounds int
     with pytest.raises(ValueError, match="outside bounds"):
-        validate_overrides({"events.postprocess.max_on_screen": 10}, space)
+        validate_overrides({"events.postprocess.int_param": 10}, space)
 
-    # Non-int for max_on_screen
+    # Non-int for int_param
     with pytest.raises(ValueError, match="non-integral"):
-        validate_overrides({"events.postprocess.max_on_screen": 2.5}, space)
+        validate_overrides({"events.postprocess.int_param": 2.5}, space)
 
     # Bool rejected
     with pytest.raises(ValueError, match="boolean"):
         validate_overrides({"events.vad.threshold": True}, space)
 
     with pytest.raises(ValueError, match="boolean"):
-        validate_overrides({"events.postprocess.max_on_screen": False}, space)
+        validate_overrides({"events.postprocess.int_param": False}, space)
 
     # Per-class threshold below MIN_CLASS_EVENTS: error message mentions MIN_CLASS_EVENTS
     with pytest.raises(ValueError, match="MIN_CLASS_EVENTS"):
@@ -163,10 +155,10 @@ def test_validate_overrides(cfg):
 
     # Non-list or non-string list for list[str]
     with pytest.raises(ValueError, match="list\\[str\\]"):
-        validate_overrides({f"vocabulary.{cid0}.clap": "not a list"}, space)
+        validate_overrides({f"vocabulary.{cid0}.audioset": "not a list"}, space)
 
     with pytest.raises(ValueError, match="list\\[str\\]"):
-        validate_overrides({f"vocabulary.{cid0}.clap": [123]}, space)
+        validate_overrides({f"vocabulary.{cid0}.audioset": [123]}, space)
 
 
 def test_is_shared_and_dev_event_counts(cfg, tmp_path, monkeypatch):
@@ -177,7 +169,7 @@ def test_is_shared_and_dev_event_counts(cfg, tmp_path, monkeypatch):
     cid1 = cfg.class_ids[1]
     env0 = cfg.env_ids[0]
 
-    assert is_shared(f"vocabulary.{cid0}.clap") is True
+    assert is_shared(f"vocabulary.{cid0}.audioset") is True
     assert is_shared("priors.floor") is True
     assert is_shared(f"priors.{env0}.default") is True
     assert is_shared("events.vad.threshold") is False

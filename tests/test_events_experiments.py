@@ -52,10 +52,8 @@ def fake_env(cfg: Config, monkeypatch):
     def fake_load_models(c: Config) -> EventModels:
         return EventModels(
             tagger=tagger,
-            clap=None,
             class_ids=list(c.class_ids),
             tagger_map=tagger_map,
-            clap_text_emb=None,
             audioset_names=audioset_names,
         )
 

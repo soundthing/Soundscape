@@ -30,6 +30,7 @@ def artifacts(source, runs, cfg):
     run.mkdir(parents=True, exist_ok=True)
     C.save_inputs(C.ExtractedInputs(video_id=source.stem, video_path=str(source), audio_path=str(source), frames_dir=str(run), fps=1, duration=2), run / "inputs.json")
     for mode in ("baseline", "conditioned"):
+        C.save_events([C.CaptionEvent(0, 2, "footsteps", "footsteps", .9)], run / f"events.{mode}.json")
         (run / f"captions.{mode}.vtt").write_text("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\n[footsteps]\n")
 
 
@@ -92,6 +93,29 @@ def test_failed_jobs_retry_and_incomplete_runs_are_not_ready(tmp_path, cfg):
         jobs.submit(ID)
         jobs.executor.submit(lambda: None).result(timeout=3)
         assert jobs.status[video_id]["status"] == "done"
+    finally:
+        jobs.close()
+
+
+@pytest.mark.parametrize('stale', ['inputs.json', 'events.baseline.json', 'events.conditioned.json'])
+def test_previous_schema_cache_is_reprocessed(tmp_path, cfg, stale):
+    source = make_source(tmp_path / 'uploads', ID)
+    runs = tmp_path / 'runs'
+    artifacts(source, runs, cfg)
+    run = runs / source.stem
+    old = json.loads((run / stale).read_text())
+    old['schema_version'] = 1
+    (run / stale).write_text(json.dumps(old))
+    assert not complete_run(run)
+    processed = Mock(side_effect=artifacts)
+    jobs = YouTubeJobs(runs, tmp_path / 'uploads', cfg, {},
+                       downloader=lambda *args: source, processor=processed)
+    try:
+        jobs.submit(ID)
+        jobs.executor.submit(lambda: None).result(timeout=3)
+        assert processed.call_count == 1
+        assert complete_run(run)
+        assert jobs.status[source.stem]['status'] == 'done'
     finally:
         jobs.close()
 
@@ -190,6 +214,24 @@ def test_api_submission_status_vtt_and_restart_detection(monkeypatch, tmp_path, 
         assert client.get(f"/api/videos/{key}").json()["status"] == "done"
         (jobs.runs / key / "captions.conditioned.vtt").unlink()
         assert client.get(f"/api/videos/{key}").status_code == 404
+
+
+def test_api_does_not_serve_previous_schema_caption_cache(monkeypatch, tmp_path, cfg):
+    app = importlib.import_module('soundthing.server.app')
+    source = make_source(tmp_path / 'uploads', ID)
+    runs = tmp_path / 'runs'
+    artifacts(source, runs, cfg)
+    stale = runs / source.stem / 'events.conditioned.json'
+    payload = json.loads(stale.read_text())
+    payload['schema_version'] = 1
+    stale.write_text(json.dumps(payload))
+    jobs = YouTubeJobs(runs, tmp_path / 'uploads', cfg, {})
+    monkeypatch.setattr(app, 'youtube_jobs', jobs)
+    monkeypatch.setattr(app, 'RUNS', runs)
+    monkeypatch.setattr(app, 'status', jobs.status)
+    with TestClient(app.app) as client:
+        assert client.get(f'/api/videos/{source.stem}').status_code == 404
+        assert client.get(f'/api/videos/{source.stem}/captions/conditioned.vtt').status_code == 404
 
 
 def test_cookie_configuration_is_optional():

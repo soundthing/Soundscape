@@ -34,9 +34,9 @@ def tmp_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_split_target_valid():
-    assert split_target("events.postprocess.smoothing_sec") == (
+    assert split_target("events.postprocess.merge_gap_sec") == (
         "pipeline.yaml",
-        ["events", "postprocess", "smoothing_sec"],
+        ["events", "postprocess", "merge_gap_sec"],
     )
     assert split_target("thresholds.default") == ("thresholds.yaml", ["default"])
     assert split_target("thresholds.safety_default") == (
@@ -61,7 +61,7 @@ def test_split_target_refusals():
     with pytest.raises(PromoteError):
         split_target("thresholds.other")
     with pytest.raises(PromoteError):
-        split_target("vocabulary.gunshot.clap")
+        split_target("vocabulary.gunshot.audioset")
     with pytest.raises(PromoteError):
         split_target("priors.floor")
     with pytest.raises(PromoteError):
@@ -89,14 +89,14 @@ def test_format_scalar():
         format_scalar(None)
 
 
-def test_edit_smoothing_sec_minimal_diff(tmp_config_dir: Path):
-    # Acceptance check 1: Changing events.postprocess.smoothing_sec to 0.75:
+def test_edit_coarse_margin_minimal_diff(tmp_config_dir: Path):
+    # Acceptance check 1: Changing events.postprocess.coarse_margin to 0.2:
     # only that one line differs (compare line lists), its trailing comment is kept,
-    # load_config(tmp) gives 0.75.
+    # load_config(tmp) gives 0.2.
     pipe_path = tmp_config_dir / "pipeline.yaml"
     orig_lines = pipe_path.read_text(encoding="utf-8").splitlines()
 
-    changed = write_overrides({"events.postprocess.smoothing_sec": 0.75}, tmp_config_dir)
+    changed = write_overrides({"events.postprocess.coarse_margin": 0.2}, tmp_config_dir)
     assert changed == [pipe_path]
 
     new_lines = pipe_path.read_text(encoding="utf-8").splitlines()
@@ -106,11 +106,11 @@ def test_edit_smoothing_sec_minimal_diff(tmp_config_dir: Path):
     assert len(diff_indices) == 1
     diff_idx = diff_indices[0]
 
-    assert "smoothing_sec: 0.75" in new_lines[diff_idx]
-    assert "# two-sided median filter width" in new_lines[diff_idx]
+    assert "coarse_margin: 0.2" in new_lines[diff_idx]
+    assert "# top-2 within this margin" in new_lines[diff_idx]
 
     cfg = load_config(tmp_config_dir)
-    assert cfg.pipeline["events"]["postprocess"]["smoothing_sec"] == 0.75
+    assert cfg.pipeline["events"]["postprocess"]["coarse_margin"] == 0.2
 
 
 def test_edit_thresholds(tmp_config_dir: Path):
@@ -138,10 +138,9 @@ def test_edit_thresholds(tmp_config_dir: Path):
     new_text = thr_path.read_text(encoding="utf-8")
 
     # Comments in thresholds.yaml unchanged
-    assert "# Per-class detection thresholds on the (conditioned) score. OWNER: Person 1." in new_text
-    assert "# Precision over recall: when in doubt, raise a threshold." in new_text
-    assert "# Lookup: classes[id] -> safety_default (if class is safety) -> default." in new_text
-    assert "# safety classes bypass priors, so they need a higher bar against false alarms" in new_text
+    assert "# Required scores on the conditioned output. OWNER: Person 1." in new_text
+    assert "# Safety: explicit override -> safety_default; tiers never change it." in new_text
+    assert "# Explicit overrides remain minimums; safety overrides remain exact." in new_text
 
     # Newly added class has right indent (2 spaces)
     assert f"  {missing_class_id}: 0.68" in new_text
@@ -156,14 +155,14 @@ def test_edit_thresholds(tmp_config_dir: Path):
 def test_missing_key_insertion(tmp_config_dir: Path):
     # Acceptance check 3:
     # Missing key events.postprocess.onset_shift_sec = -0.1 is inserted inside the postprocess: block
-    # (before modifiers:), and a missing intermediate mapping (e.g. events.clap.newgroup.x) is created
+    # (before modifiers:), and a missing intermediate mapping (e.g. events.tagger.newgroup.x) is created
     # correctly; yaml.safe_load gives the values; the captions:/eval: sections are unchanged.
     pipe_path = tmp_config_dir / "pipeline.yaml"
     orig_text = pipe_path.read_text(encoding="utf-8")
 
     overrides = {
         "events.postprocess.onset_shift_sec": -0.1,
-        "events.clap.newgroup.x": 42,
+        "events.tagger.newgroup.x": 42,
     }
 
     changed = write_overrides(overrides, tmp_config_dir)
@@ -179,16 +178,16 @@ def test_missing_key_insertion(tmp_config_dir: Path):
     assert postprocess_idx < onset_idx < modifiers_idx
 
     # Intermediate mapping
-    clap_idx = next(i for i, l in enumerate(lines) if re.match(r"^\s*clap:", l))
+    tagger_idx = next(i for i, l in enumerate(lines) if re.match(r"^\s*tagger:", l))
     newgroup_idx = next(i for i, l in enumerate(lines) if "newgroup:" in l)
     x_idx = next(i for i, l in enumerate(lines) if re.match(r"^\s*x:\s*42", l))
     vad_idx = next(i for i, l in enumerate(lines) if re.match(r"^\s*vad:", l))
 
-    assert clap_idx < newgroup_idx < x_idx < vad_idx
+    assert tagger_idx < newgroup_idx < x_idx < vad_idx
 
     loaded = yaml.safe_load(new_text)
     assert loaded["events"]["postprocess"]["onset_shift_sec"] == -0.1
-    assert loaded["events"]["clap"]["newgroup"]["x"] == 42
+    assert loaded["events"]["tagger"]["newgroup"]["x"] == 42
 
     # captions: and eval: unchanged
     captions_marker = "captions:           # Person 3"
@@ -200,16 +199,16 @@ def test_missing_key_insertion(tmp_config_dir: Path):
 def test_refusals_nothing_written(tmp_config_dir: Path):
     # Acceptance check 4:
     # Refusals with nothing written (files byte-identical afterwards):
-    # vocabulary.x.clap, priors.floor, events.backend, a mapping key (events.postprocess),
+    # vocabulary.x.audioset, priors.floor, events.backend, a mapping key (events.postprocess),
     # a mix of one good + one bad key.
     bad_overrides_list = [
-        {"vocabulary.x.clap": ["prompt"]},
+        {"vocabulary.x.audioset": ["prompt"]},
         {"priors.floor": 0.05},
         {"events.backend": "real"},
         {"events.postprocess": 0.5},
-        {"events.postprocess.smoothing_sec": 0.75, "events.backend": "real"},
-        {"events.postprocess.smoothing_sec": 0.75, "events.postprocess": 0.5},
-        {"events.postprocess.smoothing_sec": 0.75, "vocabulary.x.clap": ["a"]},
+        {"events.postprocess.merge_gap_sec": 0.75, "events.backend": "real"},
+        {"events.postprocess.merge_gap_sec": 0.75, "events.postprocess": 0.5},
+        {"events.postprocess.merge_gap_sec": 0.75, "vocabulary.x.audioset": ["a"]},
     ]
 
     for bad in bad_overrides_list:
@@ -227,7 +226,7 @@ def test_crlf_preserved(tmp_config_dir: Path):
     content = pipe_path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     pipe_path.write_bytes(content)
 
-    write_overrides({"events.postprocess.smoothing_sec": 0.75}, tmp_config_dir)
+    write_overrides({"events.postprocess.merge_gap_sec": 0.75}, tmp_config_dir)
 
     new_bytes = pipe_path.read_bytes()
     assert b"\r\n" in new_bytes
@@ -386,14 +385,16 @@ def test_promote_happy_path(repo_root: Path):
     # Pre-seed one older ## entry to check ordering
     pre_seed_text = (
         tuning_log_path.read_text(encoding="utf-8").replace(
-            "_No runs yet._",
+            "```\n\n",
+            "```\n\n"
             "## 2026-10-15 — promote old_run\n"
             "Git: 1111222233    Split: dev (30 clips)\n"
-            "Params: events.postprocess.smoothing_sec: 0.5000 -> 0.6000\n"
+            "Params: events.postprocess.merge_gap_sec: 0.5000 -> 0.6000\n"
             "Dev F0.5: 0.6000 -> 0.7200   (baseline 0.5500, wrong-env 0.5000)\n"
             "Bootstrap gain: 0.1200 [0.0500, 0.1800]\n"
             "Holdout: pass\n"
-            "Outcome: promoted\n",
+            "Outcome: promoted\n\n",
+            1,
         )
     )
     tuning_log_path.write_text(pre_seed_text, encoding="utf-8")
@@ -402,7 +403,7 @@ def test_promote_happy_path(repo_root: Path):
     cand_entry = {
         "run_id": run_id,
         "kind": "score",
-        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "overrides": {"events.postprocess.merge_gap_sec": 0.75},
         "objective": 0.88,
         "baseline": 0.70,
         "wrong_env": 0.65,
@@ -450,8 +451,8 @@ def test_promote_happy_path(repo_root: Path):
 
     # 2. pipeline.yaml in root has the new value with comment kept
     pipe_text = (repo_root / "config" / "pipeline.yaml").read_text(encoding="utf-8")
-    assert "smoothing_sec: 0.75" in pipe_text
-    assert "# two-sided median filter width" in pipe_text
+    assert "merge_gap_sec: 0.75" in pipe_text
+    assert "# top-2 within this margin" in pipe_text
 
     # 3. ledger.set_best called with git_sha
     assert ledger.set_best_called is not None
@@ -493,7 +494,7 @@ def test_promote_refusals(repo_root: Path):
     base_cand = {
         "run_id": "cand_refuse",
         "kind": "score",
-        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "overrides": {"events.postprocess.merge_gap_sec": 0.75},
         "objective": 0.88,
         "baseline": 0.70,
         "wrong_env": 0.65,
@@ -515,7 +516,7 @@ def test_promote_refusals(repo_root: Path):
 
     cases = [
         # (name, cand_mods, holdout_fn, expected_reason_sub, holdout_pass_val)
-        ("shared_key", {"overrides": {"vocabulary.gunshot.clap": ["woof"]}}, lambda ov: True, "propose_shared_change", None),
+        ("shared_key", {"overrides": {"vocabulary.gunshot.audioset": ["woof"]}}, lambda ov: True, "propose_shared_change", None),
         ("limits_not_passed", {"passed": False}, lambda ov: True, "limits not passed", None),
         ("bootstrap_fail", {"per_clip": best_per_clip}, lambda ov: True, "bootstrap lower bound <= 0", None),
         (
@@ -567,7 +568,7 @@ def test_promote_no_best_in_ledger(repo_root: Path):
     cand_entry = {
         "run_id": "cand_nobest",
         "kind": "score",
-        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "overrides": {"events.postprocess.merge_gap_sec": 0.75},
         "objective": 0.88,
         "baseline": 0.70,
         "wrong_env": 0.65,
@@ -645,22 +646,22 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # 1. All pass: cand >= cur objective, cand >= cur safety, cand <= cur fp
     cand_pass = FakeResult(run_id="cand", objective=0.75, safety_recall=0.92, fp_per_min=0.20)
     score_calls.clear()
-    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur)) is True
+    assert holdout_check({"events.postprocess.merge_gap_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur)) is True
     assert len(score_calls) == 2
     assert all(c["split"] == "holdout" for c in score_calls)
     assert all(c["labels_dir"] == tmp_hdir for c in score_calls)
 
     # 2. Objective fail
     cand_obj_fail = FakeResult(run_id="cand", objective=0.69, safety_recall=0.92, fp_per_min=0.20)
-    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_obj_fail, base_cur)) is False
+    assert holdout_check({"events.postprocess.merge_gap_sec": 0.75}, score_fn=make_score_fn(cand_obj_fail, base_cur)) is False
 
     # 3. Safety fail
     cand_safety_fail = FakeResult(run_id="cand", objective=0.75, safety_recall=0.88, fp_per_min=0.20)
-    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_safety_fail, base_cur)) is False
+    assert holdout_check({"events.postprocess.merge_gap_sec": 0.75}, score_fn=make_score_fn(cand_safety_fail, base_cur)) is False
 
     # 4. FP fail
     cand_fp_fail = FakeResult(run_id="cand", objective=0.75, safety_recall=0.92, fp_per_min=0.26)
-    assert holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_fp_fail, base_cur)) is False
+    assert holdout_check({"events.postprocess.merge_gap_sec": 0.75}, score_fn=make_score_fn(cand_fp_fail, base_cur)) is False
 
     # 5. Missing dir -> PromoteError
     tmp_missing = tmp_path / "missing_holdout"
@@ -671,7 +672,7 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(sys.modules["soundthing.harness"], "holdout", mod_missing, raising=False)
     monkeypatch.setattr(promote_mod, "holdout", mod_missing, raising=False)
     with pytest.raises(PromoteError, match="holdout set not available"):
-        holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
+        holdout_check({"events.postprocess.merge_gap_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
 
     # 6. Empty dir -> PromoteError
     tmp_empty = tmp_path / "empty_holdout"
@@ -683,7 +684,7 @@ def test_holdout_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(sys.modules["soundthing.harness"], "holdout", mod_empty, raising=False)
     monkeypatch.setattr(promote_mod, "holdout", mod_empty, raising=False)
     with pytest.raises(PromoteError, match="holdout set not available"):
-        holdout_check({"events.postprocess.smoothing_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
+        holdout_check({"events.postprocess.merge_gap_sec": 0.75}, score_fn=make_score_fn(cand_pass, base_cur))
 
 
 def test_append_tuning_log_formatting(tmp_path: Path):
@@ -695,13 +696,13 @@ def test_append_tuning_log_formatting(tmp_path: Path):
 
     entry = {
         "run_id": "run_test_1",
-        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "overrides": {"events.postprocess.merge_gap_sec": 0.75},
         "objective": 0.825,
         "baseline": 0.65,
         "wrong_env": 0.55,
         "per_clip": {f"clip_{i}": {} for i in range(25)},
     }
-    old = {"events.postprocess.smoothing_sec": 0.5}
+    old = {"events.postprocess.merge_gap_sec": 0.5}
     ci = {"gain": 0.075, "lo": 0.02, "hi": 0.13}
 
     append_tuning_log(log_file, entry, old, ci, before=0.75, git_sha="1234567890abcdef")
@@ -711,7 +712,7 @@ def test_append_tuning_log_formatting(tmp_path: Path):
     assert "## " in content
     assert "promote run_test_1" in content
     assert "Git: 1234567890    Split: dev (25 clips)" in content
-    assert "Params: events.postprocess.smoothing_sec: 0.5000 -> 0.7500" in content
+    assert "Params: events.postprocess.merge_gap_sec: 0.5000 -> 0.7500" in content
     assert "Dev F0.5: 0.7500 -> 0.8250   (baseline 0.6500, wrong-env 0.5500)" in content
     assert "Bootstrap gain: 0.0750 [0.0200, 0.1300]" in content
     assert "Holdout: pass" in content
@@ -720,13 +721,13 @@ def test_append_tuning_log_formatting(tmp_path: Path):
     # Add a second entry, verify it is inserted before the first entry
     entry2 = {
         "run_id": "run_test_2",
-        "overrides": {"events.postprocess.smoothing_sec": 0.85},
+        "overrides": {"events.postprocess.merge_gap_sec": 0.85},
         "objective": 0.85,
         "baseline": 0.65,
         "wrong_env": 0.55,
         "per_clip": {f"clip_{i}": {} for i in range(25)},
     }
-    old2 = {"events.postprocess.smoothing_sec": 0.75}
+    old2 = {"events.postprocess.merge_gap_sec": 0.75}
     ci2 = {"gain": 0.025, "lo": 0.01, "hi": 0.04}
 
     append_tuning_log(log_file, entry2, old2, ci2, before=0.825, git_sha="abcdef1234567890")
@@ -743,7 +744,7 @@ def test_promote_write_failure_refusal(repo_root: Path, monkeypatch: pytest.Monk
     cand_entry = {
         "run_id": "cand_write_fail",
         "kind": "score",
-        "overrides": {"events.postprocess.smoothing_sec": 0.75},
+        "overrides": {"events.postprocess.merge_gap_sec": 0.75},
         "objective": 0.88,
         "baseline": 0.70,
         "wrong_env": 0.65,

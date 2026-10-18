@@ -18,7 +18,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, TypeVar
 
-SCHEMA_VERSION = 1
+# Version 2 retires the five unmapped event classes and requires PANNs-only runs.
+# Optional prior formats and specificity tiers affect configuration, not JSON shape.
+SCHEMA_VERSION = 2
 
 # Fallback environment used when the classifier is not confident. It must also
 # exist in config/environments.yaml.
@@ -143,13 +145,14 @@ def env_probs_at(segments: list[EnvSegment], t: float) -> dict[str, float]:
 
 @dataclass
 class CaptionEvent:
+    """Final event; ids may be curated or AudioSet-based. Confidence is a score, not calibrated probability."""
     """A final, display-ready non-speech caption."""
 
     start: float
     end: float
     label: str  # caption text without brackets, e.g. "door slams"
     class_id: str  # vocabulary id (or coarse group id) e.g. "door_slam" / "impact"; used by eval
-    confidence: float
+    confidence: float  # peak final score; specificity tiers only change the required threshold
     modifiers: list[str] = field(default_factory=list)  # subset of MODIFIERS
 
     def validate(self) -> None:

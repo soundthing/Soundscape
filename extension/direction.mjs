@@ -39,21 +39,68 @@ export function borderPoint(width, height, degrees) {
   return { x: width / 2 + dx * distance, y: height / 2 + dy * distance, dx, dy };
 }
 
+// Clockwise distance around a rounded border, starting at the top-left tangent.
+export function roundedBorder(width, height, radius, distance) {
+  const r = Math.min(radius, width / 2, height / 2), a = width - 2 * r, b = height - 2 * r, q = Math.PI * r / 2;
+  const perimeter = 2 * (a + b) + 4 * q;
+  let d = ((distance % perimeter) + perimeter) % perimeter;
+  if (d <= a) return { x: r + d, y: 0, nx: 0, ny: -1 };
+  d -= a;
+  const arc = (cx, cy, angle) => ({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), nx: Math.cos(angle), ny: Math.sin(angle) });
+  if (d <= q) return arc(width - r, r, d / r - Math.PI / 2);
+  d -= q;
+  if (d <= b) return { x: width, y: r + d, nx: 1, ny: 0 };
+  d -= b;
+  if (d <= q) return arc(width - r, height - r, d / r);
+  d -= q;
+  if (d <= a) return { x: width - r - d, y: height, nx: 0, ny: 1 };
+  d -= a;
+  if (d <= q) return arc(r, height - r, d / r + Math.PI / 2);
+  d -= q;
+  if (d <= b) return { x: 0, y: height - r - d, nx: -1, ny: 0 };
+  d -= b;
+  return arc(r, r, d / r + Math.PI);
+}
+
+export function directionAnchor(width, height, degrees, radius = 12) {
+  const r = Math.min(radius, width / 2, height / 2);
+  const perimeter = 2 * (width + height - 4 * r) + 2 * Math.PI * r;
+  const origin = width / 2 - r;
+  const desired = (degrees + 360) % 360;
+  let low = 0, high = perimeter;
+  for (let i = 0; i < 24; i++) {
+    const mid = (low + high) / 2, point = roundedBorder(width, height, r, origin + mid);
+    const angle = (Math.atan2(point.x - width / 2, -(point.y - height / 2)) * 180 / Math.PI + 360) % 360;
+    if (angle < desired) low = mid; else high = mid;
+  }
+  return { distance: origin + (low + high) / 2, perimeter, radius: r };
+}
+
 export class DirectionWaves {
   constructor(text, shadow, document) {
     this.text = text;
     this.width = this.height = 0;
-    this.paths = new Map();
     this.document = document;
     this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.svg.setAttribute("aria-hidden", "true");
     this.svg.setAttribute("data-direction", "unavailable");
-    this.svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none";
+    this.svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0";
+    this.path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    this.path.setAttribute("data-wave", "border");
+    this.path.setAttribute("fill", "rgb(12 16 20 / 32%)");
+    this.path.setAttribute("stroke", "#c4c4c4");
+    this.path.setAttribute("stroke-width", "1");
+    this.path.setAttribute("stroke-linejoin", "round");
+    this.svg.append(this.path);
     shadow.append(this.svg);
     this.motion = document.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)");
     const Observer = document.defaultView?.ResizeObserver;
     if (Observer) {
-      this.observer = new Observer(() => this.measure());
+      this.observer = new Observer(() => {
+        this.measure();
+        // Rebuild geometry before paint, including every step of a size transition.
+        if (this.lastTime !== undefined) this.render(this.lastTime, this.lastVisible);
+      });
       this.observer.observe(text);
     }
     this.measure();
@@ -61,47 +108,62 @@ export class DirectionWaves {
 
   measure() {
     const bounds = this.text.getBoundingClientRect();
+    if (Math.abs(bounds.width - this.width) < .01 && Math.abs(bounds.height - this.height) < .01) return;
     this.width = bounds.width; this.height = bounds.height;
+    this.anchors = null;
+    if (this.width && this.height) this.svg.setAttribute("viewBox", `0 0 ${this.width} ${this.height}`);
   }
 
   setTrack(track) {
     this.track = validateDirection(track);
-    this.svg.replaceChildren();
-    this.paths.clear();
+    this.anchors = null;
     this.svg.setAttribute("data-direction", track.mode);
-    for (const channel of track.channels) {
-      const path = this.document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("data-channel", channel);
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "#7dd3fc");
-      path.setAttribute("stroke-width", "2.25");
-      path.setAttribute("stroke-linecap", "round");
-      this.paths.set(channel, path); this.svg.append(path);
-    }
   }
 
   render(time, visible) {
+    this.lastTime = time; this.lastVisible = visible;
     const levels = visible ? levelsAt(this.track, time) : {};
     this.svg.style.visibility = visible ? "visible" : "hidden";
     if (!this.width || !this.height) this.measure();
-    for (const [channel, path] of this.paths) {
-      const strength = levels[channel] || 0;
-      path.style.display = strength > .04 ? "" : "none";
-      if (strength <= .04) continue;
-      const { x, y, dx, dy } = borderPoint(this.width, this.height, channelAngle(this.track.mode, channel));
-      const vertical = Math.abs(x) < .01 || Math.abs(x - this.width) < .01;
-      const half = Math.min(24, (vertical ? this.height : this.width) * .35);
-      const points = [];
-      for (let i = 0; i <= 24; i++) {
-        const along = (i / 24 * 2 - 1) * half;
-        const wave = this.motion?.matches ? 0 : Math.sin(i / 24 * Math.PI * 4 - time * 8) * Math.sin(i / 24 * Math.PI) * strength * 9;
-        const px = x + (vertical ? 0 : along) + dx * wave;
-        const py = y + (vertical ? along : 0) + dy * wave;
-        points.push(`${i ? "L" : "M"}${px.toFixed(2)},${py.toFixed(2)}`);
+    if (!this.width || !this.height) return;
+    if (!this.anchors) {
+      this.anchors = new Map((this.track?.channels || []).map(channel => [channel,
+        directionAnchor(this.width, this.height, channelAngle(this.track.mode, channel))]));
+      for (const [channel, anchor] of this.anchors) {
+        anchor.span = Math.min(220, Math.max(96, this.height * 1.6));
+        for (const [other, neighbor] of this.anchors) {
+          if (other === channel) continue;
+          const gap = Math.abs(anchor.distance - neighbor.distance);
+          anchor.span = Math.min(anchor.span, Math.min(gap, anchor.perimeter - gap) * 1.15);
+        }
       }
-      path.setAttribute("d", points.join(" "));
-      path.setAttribute("opacity", String(.25 + .75 * strength));
     }
+    const radius = Math.min(12, this.width / 2, this.height / 2);
+    const perimeter = 2 * (this.width + this.height - 4 * radius) + 2 * Math.PI * radius;
+    const samples = Math.max(160, Math.ceil(perimeter / 3)), points = [];
+    // All speakers deform one shared silhouette, including the panel's fill.
+    // Silence and unavailable direction leave the same border at rest.
+    for (let i = 0; i < samples; i++) {
+      const distance = i / samples * perimeter;
+      const edge = roundedBorder(this.width, this.height, radius, distance);
+      let outward = 0;
+      for (const [channel, anchor] of this.anchors) {
+        const strength = levels[channel] || 0;
+        if (strength <= .04) continue;
+        const delta = ((distance - anchor.distance + perimeter * 1.5) % perimeter) - perimeter / 2;
+        const t = delta / anchor.span + .5;
+        if (t <= 0 || t >= 1) continue;
+        const envelope = Math.sin(t * Math.PI) ** 1.5;
+        const swell = this.motion?.matches ? 0 : .55 + .45 * Math.sin(t * Math.PI * 3.4 - time * 3.4);
+        outward += envelope * strength * (2 + (9 + strength * 23) * swell);
+      }
+      outward = Math.min(40, outward);
+      points.push(`${i ? "L" : "M"}${(edge.x + edge.nx * outward).toFixed(2)},${(edge.y + edge.ny * outward).toFixed(2)}`);
+    }
+    const geometry = points.join(" ") + " Z";
+    if (this.path.getAttribute("d") !== geometry) this.path.setAttribute("d", geometry);
+    const strength = Math.max(0, ...Object.values(levels));
+    this.path.setAttribute("stroke-opacity", String(.18 + .28 * strength));
   }
 
   dispose() { this.observer?.disconnect(); this.svg.remove(); }

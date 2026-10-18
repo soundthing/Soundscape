@@ -6,6 +6,7 @@ video -> audio.wav (16 kHz mono), audio_stereo.wav (optional), frames/frame_%06d
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -32,6 +33,42 @@ def probe_duration(path: str | Path) -> float:
         check=True, capture_output=True, text=True,
     ).stdout
     return float(json.loads(out)["format"]["duration"])
+
+
+def prepare_analysis_video(source: str | Path, run_dir: Path) -> Path:
+    """OpenCV wheels cannot reliably decode AV1; provide a real H.264 copy.
+
+    Audio streams are copied verbatim, retaining stereo/5.1 information. The
+    resulting media is referenced through the existing inputs.video_path field.
+    """
+    source = Path(source).resolve()
+    probe = subprocess.run([_require("ffprobe"), "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=codec_name", "-of", "json", str(source)],
+                           check=True, capture_output=True, text=True, timeout=30)
+    streams = json.loads(probe.stdout).get("streams", [])
+    if not streams or streams[0].get("codec_name") != "av1":
+        return source
+    target = Path(run_dir) / "video.analysis.mkv"
+    if target.is_file() and target.stat().st_mtime >= source.stat().st_mtime:
+        return target.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".tmp.mkv")
+    ffmpeg = _require("ffmpeg")
+    encoders = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], check=True,
+                              capture_output=True, text=True).stdout
+    encoder = next((name for name in ("libx264", "libopenh264") if name in encoders), None)
+    if encoder is None:
+        raise RuntimeError("AV1 scene analysis needs ffmpeg with libx264 or libopenh264")
+    logging.getLogger(__name__).info("Preparing H.264 scene-analysis video; preserving original audio: %s", source)
+    try:
+        subprocess.run([ffmpeg, "-y", "-v", "error", "-nostdin", "-i", str(source),
+                        "-map", "0:v:0", "-map", "0:a?", "-c:v", encoder,
+                        "-pix_fmt", "yuv420p", "-b:v", "4M", "-c:a", "copy", str(temporary)],
+                       check=True, timeout=900)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target.resolve()
 
 
 def extract(video_path: str | Path, out_dir: str | Path, cfg: Config, video_id: str | None = None) -> ExtractedInputs:

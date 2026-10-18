@@ -24,7 +24,7 @@ def _assert_cfgs_equal(a: Config, b: Config) -> None:
 def test_overrides_preserve_input_cfg(cfg: Config) -> None:
     original = copy.deepcopy(cfg)
     cid = cfg.class_ids[0]
-    env = cfg.env_ids[0]
+    env = next(e for e in cfg.env_ids if e != "general")  # general must stay neutral in odds mode
     cg = next(iter(cfg.coarse_groups))
 
     overrides = {
@@ -32,7 +32,7 @@ def test_overrides_preserve_input_cfg(cfg: Config) -> None:
         "thresholds.default": 0.45,
         f"thresholds.classes.{cid}": 0.75,
         f"thresholds.classes.{cg}": 0.65,
-        f"vocabulary.{cid}.clap": ["custom clap prompt"],
+        f"vocabulary.{cid}.audioset": ["Siren"],
         "priors.floor": 0.3,
         f"priors.{env}.default": 0.4,
         f"priors.{env}.classes.{cid}": 0.8,
@@ -46,7 +46,7 @@ def test_overrides_preserve_input_cfg(cfg: Config) -> None:
     assert new_cfg.thresholds.default == 0.45
     assert new_cfg.thresholds.classes[cid] == 0.75
     assert new_cfg.thresholds.classes[cg] == 0.65
-    assert new_cfg.sound_class(cid).clap == ["custom clap prompt"]
+    assert new_cfg.sound_class(cid).audioset == ["Siren"]
     assert new_cfg.priors.floor == 0.3
     assert new_cfg.priors.environments[env].default == 0.4
     assert new_cfg.priors.environments[env].classes[cid] == 0.8
@@ -86,7 +86,7 @@ def test_vocabulary_audioset_override(cfg: Config) -> None:
         "thresholds.classes.nonexistent_class_xyz",
         "thresholds.classes.a.b",
         "vocabulary",
-        "vocabulary.nonexistent_class_xyz.clap",
+        "vocabulary.nonexistent_class_xyz.audioset",
         "vocabulary.nonexistent_class_xyz.audioset",
         "priors",
         "priors.invalid_sub",
@@ -149,9 +149,9 @@ def test_touches_shared(cfg: Config) -> None:
     assert not touches_shared({"events.window_sec": 1.0})
     assert not touches_shared({"thresholds.default": 0.5})
     assert not touches_shared({f"thresholds.classes.{cid}": 0.6})
-    assert touches_shared({f"vocabulary.{cid}.clap": ["prompt"]})
+    assert touches_shared({f"vocabulary.{cid}.audioset": ["prompt"]})
     assert touches_shared({f"vocabulary.{cid}.audioset": ["label"]})
     assert touches_shared({"priors.floor": 0.3})
     assert touches_shared({f"priors.{env}.default": 0.5})
     assert touches_shared({f"priors.{env}.classes.{cid}": 0.5})
-    assert touches_shared({"events.window_sec": 1.0, f"vocabulary.{cid}.clap": ["prompt"]})
+    assert touches_shared({"events.window_sec": 1.0, f"vocabulary.{cid}.audioset": ["prompt"]})

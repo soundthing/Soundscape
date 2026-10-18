@@ -24,7 +24,6 @@ esc50:
     insects: insects
     keyboard_typing: typing
     laughing: laughter
-    mouse_click: mouse_click
     rain: rain
     sea_waves: waves
     siren: siren
@@ -44,6 +43,7 @@ esc50:
     - frog
     - hand_saw
     - hen
+    - mouse_click  # class retired with event CLAP
     - pig
     - pouring_water
     - rooster

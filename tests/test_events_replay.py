@@ -10,7 +10,7 @@ import soundfile as sf
 
 from soundthing.config import Config
 from soundthing.contracts import CaptionEvent, EnvSegment, ExtractedInputs
-from soundthing.events import clap, detector, vad
+from soundthing.events import detector, vad
 from soundthing.events.core import EventModels
 from soundthing.events.tagger import build_tagger_map
 from soundthing.events.cache import (
@@ -19,13 +19,7 @@ from soundthing.events.cache import (
     load_cache,
     save_cache,
 )
-from soundthing.harness.paths import cache_root
-from soundthing.events.replay import (
-    _clear_text_emb_memo,
-    class_scores,
-    replay,
-    text_embeddings_for,
-)
+from soundthing.events.replay import class_scores, replay
 
 
 class ControllableTagger:
@@ -49,51 +43,18 @@ class ControllableTagger:
         return probs
 
 
-class ControllableClap:
-    """CLAP mock with deterministic embeddings matching prompt text and audio."""
-
-    def __init__(self, dim: int = 16, center: float = 0.2, scale: float = 20.0) -> None:
-        self.dim = dim
-        self.center = center
-        self.scale = scale
-        self.target_prompt: str | None = None
-
-    def embed_text(self, prompts: list[str]) -> np.ndarray:
-        out = []
-        for p in prompts:
-            vec = np.zeros(self.dim, dtype=np.float32)
-            if self.target_prompt and p == self.target_prompt:
-                vec[0] = 1.0
-            else:
-                vec[1] = 1.0
-            out.append(vec)
-        return np.array(out, dtype=np.float32)
-
-    def embed_audio(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        # Match target_prompt embedding (vec[0]=1.0) when audio has energy in second half
-        vec = np.zeros(self.dim, dtype=np.float32)
-        rms = float(np.sqrt(np.mean(audio**2)))
-        if rms > 0.1:
-            vec[0] = 1.0
-        else:
-            vec[-1] = 1.0
-        return vec
-
-
 @pytest.fixture(autouse=True)
 def setup_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path / "tuning"))
     detector._clear_caches()
-    _clear_text_emb_memo()
     yield
     detector._clear_caches()
-    _clear_text_emb_memo()
 
 
 def test_equivalence_detect_and_replay(cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    # Select an audioset class and a clap class
-    sc_tagger = next(c for c in cfg.classes if c.audioset and not c.safety)
-    sc_clap = next(c for c in cfg.classes if c.clap and not c.audioset and not c.safety)
+    # Select an audioset class that speech suppression applies to
+    exempt = set(cfg.pipeline["events"]["vad"].get("exempt_classes", []))
+    sc_tagger = next(c for c in cfg.classes if c.audioset and not c.safety and c.id not in exempt)
 
     audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
     tagger_map = build_tagger_map(cfg, audioset_names)
@@ -101,24 +62,17 @@ def test_equivalence_detect_and_replay(cfg: Config, tmp_path: Path, monkeypatch:
     fake_tagger = ControllableTagger(audioset_names)
     fake_tagger.active_class_name = sc_tagger.audioset[0]
 
-    fake_clap = ControllableClap(dim=16)
-    fake_clap.target_prompt = sc_clap.clap[0]
-
-    text_emb = clap.text_embeddings(fake_clap, cfg)
-
     models = EventModels(
         tagger=fake_tagger,
-        clap=fake_clap,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=text_emb,
         audioset_names=audioset_names,
     )
 
     monkeypatch.setattr(detector, "load_models", lambda c: models)
     monkeypatch.setattr(detector, "get_models", lambda c: models)
 
-    # 4s audio: first 2s has energy (triggers tagger and clap)
+    # 4s audio: first 2s has energy (triggers the tagger)
     sr = 16000
     duration = 4.0
     audio = np.zeros(int(duration * sr), dtype=np.float32)
@@ -155,15 +109,11 @@ def test_equivalence_detect_and_replay(cfg: Config, tmp_path: Path, monkeypatch:
     strip_mods = lambda evs: [replace(e, modifiers=[]) for e in evs]
 
     det_base = strip_mods(detector.detect(inputs, None, cfg))
-    rep_base = replay(cache, None, cfg, text_emb=models.clap_text_emb)
+    rep_base = replay(cache, None, cfg)
 
     assert len(det_base) > 0, "Detections must be non-empty"
     assert len(rep_base) > 0, "Replay must be non-empty"
     assert det_base == rep_base
-
-    # Check that at least one CLAP-driven event is present
-    clap_events = [e for e in det_base if e.class_id == sc_clap.id]
-    assert len(clap_events) > 0, "Must include at least one CLAP-driven event"
 
     # 2. Equivalence in conditioned mode
     segs = [
@@ -177,7 +127,7 @@ def test_equivalence_detect_and_replay(cfg: Config, tmp_path: Path, monkeypatch:
     ]
     detector._clear_caches()
     det_cond = strip_mods(detector.detect(inputs, segs, cfg))
-    rep_cond = replay(cache, segs, cfg, text_emb=models.clap_text_emb)
+    rep_cond = replay(cache, segs, cfg)
 
     assert len(det_cond) > 0
     assert det_cond == rep_cond
@@ -186,7 +136,7 @@ def test_equivalence_detect_and_replay(cfg: Config, tmp_path: Path, monkeypatch:
     vad_probs_off = np.zeros(n_vad_chunks, dtype=np.float32)
     monkeypatch.setattr(vad, "speech_probs", lambda a, s, c: vad_probs_off)
     cache_novad = build_cache(audio, sr, "clip01", cfg, models=models)
-    rep_novad = replay(cache_novad, None, cfg, text_emb=models.clap_text_emb)
+    rep_novad = replay(cache_novad, None, cfg)
 
     # Scores under speech are multiplied by 0.3 when VAD is on, so rep_base and rep_novad must differ
     assert rep_base != rep_novad, "Speech suppression must have a demonstrable effect"
@@ -202,10 +152,8 @@ def test_replay_on_loaded_cache_equals_original(cfg: Config, tmp_path: Path, mon
 
     models = EventModels(
         tagger=tagger,
-        clap=None,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=None,
         audioset_names=audioset_names,
     )
 
@@ -244,7 +192,6 @@ def test_onset_shift_sec(cfg: Config):
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=None,
         vad_chunk_sec=0.032,
         vad_probs=vad_probs,
     )
@@ -276,98 +223,6 @@ def test_onset_shift_sec(cfg: Config):
         assert evs_neg[0].end > 0.0
 
 
-def test_combine_modes(cfg: Config):
-    sc = next(c for c in cfg.classes if c.audioset and c.clap)
-    audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
-
-    times = np.array([0.5], dtype=np.float64)
-    # Tagger gives low score (0.2)
-    tagger_raw = np.full((1, len(audioset_names)), 0.2, dtype=np.float16)
-
-    # CLAP audio embedding aligned with text embedding -> CLAP similarity = 1.0 -> score ~1.0
-    dim = 8
-    clap_emb = np.zeros((1, dim), dtype=np.float16)
-    clap_emb[0, 0] = 1.0
-
-    text_emb = np.zeros((len(cfg.classes), dim), dtype=np.float32)
-    sc_idx = cfg.class_ids.index(sc.id)
-    text_emb[sc_idx, 0] = 1.0
-
-    cache = ClipCache(
-        video_id="combine_test",
-        duration=1.0,
-        key="key123",
-        window_sec=1.0,
-        hop=0.25,
-        times=times,
-        audioset_names=audioset_names,
-        tagger_raw=tagger_raw,
-        clap_emb=clap_emb,
-        vad_chunk_sec=0.032,
-        vad_probs=np.zeros(1, dtype=np.float32),
-    )
-
-    # 1. combine: max -> class gets high CLAP score (~1.0)
-    p_max = copy.deepcopy(cfg.pipeline)
-    p_max["events"]["clap"]["combine"] = "max"
-    cfg_max = replace(cfg, pipeline=p_max)
-    scores_max = class_scores(cache, cfg_max, text_emb=text_emb)
-    val_max = scores_max.column(sc.id)[0]
-    assert val_max > 0.9
-
-    # 2. combine: fallback -> class has AudioSet labels, so CLAP score is ignored, tagger score (0.2) used
-    p_fallback = copy.deepcopy(cfg.pipeline)
-    p_fallback["events"]["clap"]["combine"] = "fallback"
-    cfg_fallback = replace(cfg, pipeline=p_fallback)
-    scores_fallback = class_scores(cache, cfg_fallback, text_emb=text_emb)
-    val_fallback = scores_fallback.column(sc.id)[0]
-    assert abs(val_fallback - 0.2) < 1e-4
-
-    assert val_max != val_fallback
-
-    # 3. Unknown combine mode raises ValueError
-    p_bad = copy.deepcopy(cfg.pipeline)
-    p_bad["events"]["clap"]["combine"] = "invalid_mode"
-    cfg_bad = replace(cfg, pipeline=p_bad)
-    with pytest.raises(ValueError, match="Unknown clap combine mode"):
-        class_scores(cache, cfg_bad, text_emb=text_emb)
-
-
-def test_text_embeddings_for_memo_and_disk(cfg: Config, monkeypatch: pytest.MonkeyPatch):
-    fake_clap = ControllableClap(dim=8)
-    load_count = 0
-
-    def fake_load_clap(c):
-        nonlocal load_count
-        load_count += 1
-        return fake_clap
-
-    monkeypatch.setattr(clap, "load_clap", fake_load_clap)
-
-    # First call: computes via fake_load_clap and writes to disk
-    emb1 = text_embeddings_for(cfg)
-    assert emb1 is not None
-    assert emb1.shape == (len(cfg.classes), 8)
-    assert load_count == 1
-
-    # In-process memo hit: no load_clap call
-    emb2 = text_embeddings_for(cfg)
-    assert emb2 is emb1
-    assert load_count == 1
-
-    # Clear in-process memo: disk hit, no load_clap call
-    _clear_text_emb_memo()
-    emb3 = text_embeddings_for(cfg)
-    assert load_count == 1
-    assert np.array_equal(emb3, emb1)
-
-    # Disabled clap returns None
-    p_disabled = copy.deepcopy(cfg.pipeline)
-    p_disabled["events"]["clap"]["enabled"] = False
-    cfg_disabled = replace(cfg, pipeline=p_disabled)
-    assert text_embeddings_for(cfg_disabled) is None
-
-
 def test_replay_separation_disabled_with_sep_arrays_matches_without_them(cfg: Config):
     """When separation is disabled in cfg, caches with sep arrays match caches without them."""
     audioset_names = sorted({n for c in cfg.classes for n in c.audioset})
@@ -386,14 +241,12 @@ def test_replay_separation_disabled_with_sep_arrays_matches_without_them(cfg: Co
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=None,
         vad_chunk_sec=0.032,
         vad_probs=np.zeros(4, dtype=np.float32),
         sep_mask=sep_mask,
         tagger_sep=tagger_sep,
-        clap_emb_sep=None,
     )
-    cache_no_sep = replace(cache_with_sep, sep_mask=None, tagger_sep=None, clap_emb_sep=None)
+    cache_no_sep = replace(cache_with_sep, sep_mask=None, tagger_sep=None)
 
     # Separation is disabled in cfg by default
     assert not cfg.pipeline["events"]["separation"]["enabled"]
@@ -444,12 +297,10 @@ def test_replay_separation_fusion_modes(cfg: Config):
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=None,
         vad_chunk_sec=0.032,
         vad_probs=np.zeros(4, dtype=np.float32),
         sep_mask=sep_mask,
         tagger_sep=tagger_sep,
-        clap_emb_sep=None,
     )
 
     # Base raw scores for comparison
@@ -515,12 +366,10 @@ def test_replay_separation_enabled_with_none_sep_arrays(cfg: Config):
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=None,
         vad_chunk_sec=0.032,
         vad_probs=np.zeros(4, dtype=np.float32),
         sep_mask=None,
         tagger_sep=None,
-        clap_emb_sep=None,
     )
 
     p_enabled = copy.deepcopy(cfg.pipeline)
@@ -575,12 +424,10 @@ def test_replay_separation_vad_suppression(cfg: Config):
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=None,
         vad_chunk_sec=vad_chunk_sec,
         vad_probs=vad_probs,
         sep_mask=sep_mask,
         tagger_sep=tagger_sep,
-        clap_emb_sep=None,
     )
 
     p = copy.deepcopy(cfg.pipeline)
@@ -624,12 +471,10 @@ def test_replay_separation_validation_errors(cfg: Config):
         times=times,
         audioset_names=audioset_names,
         tagger_raw=tagger_raw,
-        clap_emb=None,
         vad_chunk_sec=0.032,
         vad_probs=np.zeros(4, dtype=np.float32),
         sep_mask=np.array([False, True], dtype=bool),
         tagger_sep=np.zeros((2, len(audioset_names)), dtype=np.float16),
-        clap_emb_sep=None,
     )
 
     # 1. Unknown fusion mode

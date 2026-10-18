@@ -6,6 +6,7 @@ The real extension, worker, HTTP API and VTT writer run against controlled
 YouTube DOM/media clocks and a fixture downloader/model processor.
 """
 import importlib
+import re
 import tempfile
 import threading
 import time
@@ -26,13 +27,20 @@ HTML = """<!doctype html><html><head><title>Owned video fixture</title></head><b
 </body></html>"""
 
 
+def wave_bounds(overlay):
+    geometry = overlay.locator('[data-wave="border"]').get_attribute("d")
+    assert geometry.endswith(" Z")
+    points = [(float(x), float(y)) for x, y in re.findall(r"[ML](-?[\d.]+),(-?[\d.]+)", geometry)]
+    return min(x for x, y in points), min(y for x, y in points), max(x for x, y in points), max(y for x, y in points)
+
+
 def main():
     work = Path(tempfile.mkdtemp(prefix="soundthing-overlay-smoke-"))
     backend = importlib.import_module("soundthing.server.app")
     backend.RUNS, backend.UPLOADS = work / "runs", work / "uploads"
     backend.status = {}
     downloads = []
-    outage = {"offline": False, "missing_status": None, "direction_failures": 2}
+    outage = {"offline": False, "missing_status": None, "direction_failures": 2, "offline_requests": 0}
 
     @backend.app.middleware("http")
     async def simulate_restart(request, call_next):
@@ -40,6 +48,7 @@ def main():
             outage["direction_failures"] -= 1
             return JSONResponse({"detail": "direction not ready"}, status_code=503 if outage["direction_failures"] else 404)
         if outage["offline"] and request.url.path.startswith("/api/"):
+            outage["offline_requests"] += 1
             return JSONResponse({"detail": "temporary test outage"}, status_code=503)
         if request.url.path == outage["missing_status"]:
             outage["missing_status"] = None
@@ -60,9 +69,13 @@ def main():
         run.mkdir(parents=True, exist_ok=True)
         C.save_inputs(C.ExtractedInputs(video_id=source.stem, video_path=str(source), audio_path=str(source), frames_dir=str(run), fps=1, duration=10), run / "inputs.json")
         cls = cfg.classes[0]
-        events = [C.CaptionEvent(start=1, end=3, label=cls.caption, class_id=cls.id, confidence=.9)]
+        events = [C.CaptionEvent(start=1, end=3, label=cls.caption, class_id=cls.id, confidence=.9),
+                  C.CaptionEvent(start=2.2, end=2.8, label=" · ".join([cls.caption] * 8), class_id=cls.id, confidence=.9)]
         for mode in ("baseline", "conditioned"):
+            C.save_events(events, run / f"events.{mode}.json")
             write_captions(events, run / f"captions.{mode}.vtt")
+        environment = cfg.environments[0].id
+        C.save_segments([C.EnvSegment(0, 10, environment, 1, {environment: 1})], run / "env_segments.json")
         if source.stem == f"youtube_{OTHER}":
             channels = ["FL", "FR", "FC", "SL", "SR"]
             track = C.DirectionTrack(10, "surround51", channels, [C.DirectionFrame(0, {"FL": 0, "FR": 0, "FC": .9, "SL": 0, "SR": .8})])
@@ -102,8 +115,20 @@ def main():
             sw = context.service_workers[0] if context.service_workers else context.wait_for_event("serviceworker")
             origin = "/".join(sw.url.split("/")[:3])
             errors = []
+            debug_logs = []
             page = context.new_page()
+            cdp = context.new_cdp_session(page)
+            execution_contexts = {}
+            cdp.on("Runtime.executionContextCreated", lambda event: execution_contexts.update({event["context"]["id"]: event["context"]}))
+            cdp.on("Runtime.executionContextDestroyed", lambda event: execution_contexts.pop(event["executionContextId"], None))
+            cdp.on("Runtime.executionContextsCleared", lambda event: execution_contexts.clear())
+            cdp.send("Runtime.enable")
             page.on("pageerror", lambda error: errors.append(str(error)))
+            def capture_debug(message):
+                if message.type == "log" and message.text.startswith("[Soundthing]"):
+                    debug_logs.append(message.text)
+            page.on("console", capture_debug)
+            page.on("console", lambda msg: print("BROWSER:", msg.text, flush=True) if msg.type in ("warning", "error") else None)
             page.goto(f"https://www.youtube.com/watch?v={ID}")
             popup = context.new_page()
             popup.goto(f"{origin}/popup.html")
@@ -122,30 +147,74 @@ def main():
             overlay = page.locator("#soundthing-caption-overlay")
             expected = f"[{backend.cfg.classes[0].caption}]"
             expect(overlay.locator("div")).to_contain_text(expected)
+            page.wait_for_function("[...document.fonts].some(font=>font.family.includes('Soundthing Monocraft') && font.status==='loaded')")
+            assert overlay.locator("header, .brand, .mode").count() == 0
+            assert "Soundthing Monocraft" in overlay.locator("div").evaluate("el=>getComputedStyle(el).fontFamily")
             expect(page.locator("#speech")).to_have_text("YouTube speech captions stay intact")
             expect(overlay.locator("svg")).to_have_attribute("data-direction", "stereo", timeout=15000)
-            expect(overlay.locator('[data-channel="FL"]')).to_be_visible()
-            expect(overlay.locator('[data-channel="FR"]')).to_be_hidden()
+            expect(overlay.locator('[data-wave="border"]')).to_be_visible()
+            assert overlay.locator("svg path").count() == 1
+            left, top, right, bottom = wave_bounds(overlay)
+            assert left < -2 and abs(right - overlay.bounding_box()["width"]) < 1
             assert not outage["direction_failures"]
-            frozen = overlay.locator('[data-channel="FL"]').get_attribute("d")
+            assert len(debug_logs) == 3, debug_logs
+            import json
+            assert json.loads(debug_logs[0].split("\n", 1)[1])["youtubeId"] == ID
+            assert debug_logs[1].startswith("[Soundthing] Conditioned VTT:\nWEBVTT")
+            assert expected in debug_logs[1]
+            logged_scenes = json.loads(debug_logs[2].split("\n", 1)[1])
+            assert logged_scenes[0]["start"] == 0 and logged_scenes[0]["end"] == 10
+            assert logged_scenes[0]["env"] == backend.cfg.environments[0].id
+            frozen = overlay.locator('[data-wave="border"]').get_attribute("d")
             page.wait_for_timeout(150)
-            assert overlay.locator('[data-channel="FL"]').get_attribute("d") == frozen
+            assert overlay.locator('[data-wave="border"]').get_attribute("d") == frozen
             page.emulate_media(reduced_motion="reduce")
             page.wait_for_timeout(100)
-            static = overlay.locator('[data-channel="FL"]').get_attribute("d")
+            static = overlay.locator('[data-wave="border"]').get_attribute("d")
             page.evaluate("document.querySelector('video').currentTime=1.7")
             page.wait_for_timeout(100)
-            assert overlay.locator('[data-channel="FL"]').get_attribute("d") == static
+            assert overlay.locator('[data-wave="border"]').get_attribute("d") == static
             page.emulate_media(reduced_motion="no-preference")
             print("PASS: stereo waves, independent recovery from direction 503/404, pause and reduced motion", flush=True)
             page.screenshot(path=str(work / "overlay.png"))
             print("PASS: global toggle, real worker/API/VTT overlay, and closing the popup during processing", flush=True)
             page.evaluate("document.querySelector('video').currentTime=4")
-            expect(overlay).to_be_hidden()
+            expect(overlay).to_be_visible()
+            expect(overlay.locator("div")).to_be_hidden()
+            expect(overlay.locator('[data-wave="border"]')).to_be_visible()
+            page.wait_for_timeout(350)
+            idle_box = overlay.bounding_box()
+            idle_wave = overlay.locator('[data-wave="border"]').get_attribute("d")
+            assert overlay.locator("section").inner_text() == ""
+            assert overlay.locator("svg path").count() == 1
+            left, top, right, bottom = wave_bounds(overlay)
+            assert abs(left) < 1 and right > idle_box["width"] + 2
+            assert top <= 1 and bottom >= idle_box["height"] - 1
+            assert overlay.locator("section").evaluate("el=>getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
+            assert overlay.locator('[data-wave="border"]').get_attribute("fill") != "none"
+            assert idle_box["width"] >= 191 and idle_box["height"] >= 63
+            page.screenshot(path=str(work / "idle-waves.png"))
+            page.evaluate("document.querySelector('video').currentTime=2.5")
+            expect(overlay.locator("div")).to_contain_text(" · ")
+            page.wait_for_timeout(350)
+            expanded_box = overlay.bounding_box()
+            assert expanded_box["width"] > idle_box["width"] + 50
+            assert expanded_box["height"] > idle_box["height"] + 20
+            assert overlay.locator('[data-wave="border"]').get_attribute("d") != idle_wave
+            view_box = [float(value) for value in overlay.locator("svg").get_attribute("viewBox").split()]
+            assert abs(view_box[2] - expanded_box["width"]) < 1
+            assert abs(view_box[3] - expanded_box["height"]) < 1
+            page.screenshot(path=str(work / "expanded-waves.png"))
+            page.evaluate("document.querySelector('video').currentTime=4")
+            page.wait_for_timeout(350)
+            shrunk_box = overlay.bounding_box()
+            assert abs(shrunk_box["width"] - idle_box["width"]) < 1
+            assert abs(shrunk_box["height"] - idle_box["height"]) < 1
+            print("PASS: always-visible minimum panel, independent waves in caption gaps, and synchronized panel/wave resizing", flush=True)
             page.evaluate("document.querySelector('video').currentTime=2;document.querySelector('video').playbackRate=2")
             expect(overlay.locator("div")).to_contain_text(expected)
-            expect(overlay.locator('[data-channel="FR"]')).to_be_visible()
-            expect(overlay.locator('[data-channel="FL"]')).to_be_hidden()
+            left, top, right, bottom = wave_bounds(overlay)
+            assert abs(left) < 1 and right > overlay.bounding_box()["width"] + 2
             page.evaluate("document.querySelector('#movie_player').classList.add('ad-showing')")
             expect(overlay).to_be_hidden()
             page.evaluate("document.querySelector('#movie_player').classList.remove('ad-showing')")
@@ -155,6 +224,8 @@ def main():
             parent = page.locator("#movie_player").bounding_box()
             assert box["x"] > parent["x"] + parent["width"] / 2
             assert box["y"] > parent["y"] + parent["height"] / 2
+            assert len(debug_logs) == 3, "Seeking and rendering repeated completion logs"
+            print("PASS: full VTT and environment scenes appear once in the YouTube console", flush=True)
             print("PASS: seek/speed timing, ad suppression, preserved speech captions, and bottom-right placement", flush=True)
             second = context.new_page()
             second.goto(f"https://www.youtube.com/watch?v={ID}")
@@ -166,11 +237,20 @@ def main():
             assert OTHER in downloads
             page.evaluate("document.querySelector('video').currentTime=1.5")
             expect(overlay.locator("svg")).to_have_attribute("data-direction", "surround51")
-            expect(overlay.locator('[data-channel="FC"]')).to_be_visible()
-            expect(overlay.locator('[data-channel="SR"]')).to_be_visible()
-            assert overlay.locator('[data-channel="LFE"]').count() == 0
+            expect(overlay.locator('[data-wave="border"]')).to_be_visible()
+            assert overlay.locator("svg path").count() == 1
+            # The caption panel can still be resizing after the track becomes ready.
+            deadline = time.monotonic() + 3
+            while True:
+                left, top, right, bottom = wave_bounds(overlay)
+                if top < -2 and right > overlay.bounding_box()["width"] + 2:
+                    break
+                if time.monotonic() >= deadline:
+                    break
+                page.wait_for_timeout(50)
+            assert top < -2 and right > overlay.bounding_box()["width"] + 2
             page.screenshot(path=str(work / "surround-waves.png"))
-            print("PASS: automatic stereo-to-5.1 switch, independent front/surround waves, and no LFE direction", flush=True)
+            print("PASS: automatic stereo-to-5.1 switch, front/surround activity combined in one wave border", flush=True)
             print("PASS: cross-tab deduplication and automatic processing on YouTube SPA navigation", flush=True)
             page.evaluate("async () => { await document.querySelector('#movie_player').requestFullscreen(); }")
             page.wait_for_function("document.fullscreenElement?.id === 'movie_player'")
@@ -185,7 +265,12 @@ def main():
             outage["offline"] = True
             recovering = "rR3dE_fG-12"
             page.evaluate(f"history.pushState({{}},'', '/watch?v={recovering}');document.dispatchEvent(new Event('yt-navigate-finish'))")
-            expect(page.locator('#soundthing-caption-overlay').locator('div')).to_contain_text("reconnecting")
+            deadline = time.monotonic() + 10
+            while not outage["offline_requests"] and time.monotonic() < deadline:
+                page.wait_for_timeout(50)
+            assert outage["offline_requests"]
+            expect(page.locator('#soundthing-caption-overlay')).to_be_visible()
+            assert page.locator('#soundthing-caption-overlay').locator('section').inner_text() == ""
             outage["offline"] = False
             page.wait_for_function("document.querySelector('#soundthing-caption-overlay')?.shadowRoot?.querySelector('div')?.hasAttribute('data-status') === false", timeout=20000)
             restarted = "sS3dE_fG-12"
@@ -194,6 +279,31 @@ def main():
             page.wait_for_function("document.querySelector('#soundthing-caption-overlay')?.shadowRoot?.querySelector('div')?.hasAttribute('data-status') === false", timeout=20000)
             assert downloads.count(restarted) == 1
             print("PASS: automatic recovery from temporary server outages and missing jobs after restart", flush=True)
+            cleared = page.evaluate("async () => soundthing.clearCache()")
+            assert cleared["cleared"] and set(cleared["removed"]) == {"results", "downloads"}
+            expect(page.locator("#soundthing-caption-overlay")).to_have_count(0)
+            page.wait_for_timeout(1100)  # Periodic refresh must not recreate the deleted cache.
+            assert not (backend.RUNS / f"youtube_{restarted}").exists()
+            assert downloads.count(restarted) == 1
+            assert (backend.RUNS / f"youtube_{ID}").is_dir()
+            helpers = []
+            for context_id, execution in execution_contexts.items():
+                if execution.get("auxData", {}).get("isDefault") is not False:
+                    continue
+                probe = cdp.send("Runtime.evaluate", {"expression": "typeof window.soundthing?.clearCache === 'function'", "contextId": context_id, "returnByValue": True})
+                if probe.get("result", {}).get("value") is True:
+                    helpers.append(context_id)
+            assert helpers, "The helper must also exist in the extension console context"
+            result = cdp.send("Runtime.evaluate", {"expression": "soundthing.clearCache()", "contextId": helpers[0], "awaitPromise": True, "returnByValue": True})
+            assert result["result"]["value"]["removed"] == []
+            sw.evaluate("""async id => {
+              const tabs=await chrome.tabs.query({url:'https://www.youtube.com/*'});
+              const tab=tabs.find(tab=>new URL(tab.url).searchParams.get('v')===id);
+              await chrome.tabs.sendMessage(tab.id,{type:'soundthing:retry'});
+            }""", restarted)
+            page.wait_for_function("document.querySelector('#soundthing-caption-overlay')?.shadowRoot?.querySelector('div')?.hasAttribute('data-status') === false")
+            assert downloads.count(restarted) == 2
+            print("PASS: clearing while enabled drops loaded captions/direction and waits for explicit regeneration", flush=True)
             popup = context.new_page()
             popup.goto(f"{origin}/popup.html")
             expect(popup.locator("#enabled")).to_be_checked()
@@ -202,6 +312,23 @@ def main():
             expect(second.locator("#soundthing-caption-overlay")).to_have_count(0)
             popup.screenshot(path=str(work / "popup.png"))
             print("PASS: toggle persists and disabling clears every tab", flush=True)
+
+            # The normal page console reaches the extension worker, even while off.
+            cleared = page.evaluate("async () => soundthing.clearCache()")
+            assert cleared["cleared"] and cleared["video_id"] == f"youtube_{restarted}"
+            assert set(cleared["removed"]) == {"results", "downloads"}
+            assert not (backend.RUNS / f"youtube_{restarted}").exists()
+            assert (backend.RUNS / f"youtube_{ID}").is_dir()
+            assert page.evaluate("async () => (await soundthing.clearCache()).removed") == []
+            wrong_video = page.evaluate("async id => { try { await soundthing.clearCache('https://youtu.be/'+id); } catch (error) { return error.message; } }", OTHER)
+            assert "Open that video's" in wrong_video
+            workspace = context.new_page()
+            workspace.goto("http://127.0.0.1:8766")
+            assert workspace.evaluate("async id => (await soundthing.clearCache('https://youtu.be/'+id)).cleared", OTHER)
+            workspace.close()
+            assert not (backend.RUNS / f"youtube_{OTHER}").exists()
+            assert (backend.RUNS / f"youtube_{ID}").is_dir()
+            print("PASS: per-video cache deletion from YouTube and localhost consoles, with other videos preserved", flush=True)
 
             # Test both developer policies against the same production controller.
             popup.evaluate("""async origin => {
@@ -220,6 +347,8 @@ def main():
                 const fakeWindow={location:{href:'https://www.youtube.com/watch?v=aB3dE_fG-12'},requestAnimationFrame:requestAnimationFrame.bind(window),cancelAnimationFrame:cancelAnimationFrame.bind(window),setTimeout:setTimeout.bind(window),clearTimeout:clearTimeout.bind(window)};
                 window.policyController=new CaptionController({window:fakeWindow,document,playbackPolicy:policy,send:async message=>{
                   if(message.action==='ensure')return {ok:true};
+                  if(message.action==='direction')return {ok:true,direction:{duration:5,mode:'stereo',channels:['FL','FR'],frames:[{time:0,levels:{FL:.9,FR:.3}}]}};
+                  if(message.action==='scenes')return {ok:true,scenes:[]};
                   if(message.action==='status'){await window.readyGate;return {ok:true,status:'done'}};
                   return {ok:true,vtt:'WEBVTT\\n\\n00:00:00.000 --> 00:00:05.000\\n[test]\\n'};
                 }});
@@ -228,8 +357,30 @@ def main():
             }""", origin)
             popup.evaluate("makePolicyFixture('keep-playing')")
             assert popup.evaluate("pauseCalls") == 0
+            popup.wait_for_function("policyController.session.waves.track?.mode==='stereo'")
+            expect(popup.locator('#soundthing-caption-overlay').locator('[data-wave="border"]')).to_be_visible()
+            assert popup.evaluate("policyController.session.status!=='done'")
+            assert popup.locator('#soundthing-caption-overlay').locator('section').inner_text() == ""
             popup.evaluate("finishPolicy()")
             popup.wait_for_function("policyController.state.status==='done'")
+            popup.evaluate("policyController.session.cues=[];policyController.render()")
+            expect(popup.locator('#soundthing-caption-overlay')).to_be_visible()
+            expect(popup.locator('#soundthing-caption-overlay').locator('div')).to_be_hidden()
+            expect(popup.locator('#soundthing-caption-overlay').locator('[data-wave="border"]')).to_be_visible()
+            for mode in ("silent", "unavailable"):
+                popup.evaluate("""mode=>{
+                  const track=mode==='silent'
+                    ? {duration:5,mode:'stereo',channels:['FL','FR'],frames:[{time:0,levels:{FL:0,FR:0}}]}
+                    : {duration:5,mode:'unavailable',channels:[],frames:[]};
+                  policyController.session.waves.setTrack(track);policyController.render();
+                }""", mode)
+                resting = popup.locator('#soundthing-caption-overlay')
+                expect(resting.locator('[data-wave="border"]')).to_be_visible()
+                left, top, right, bottom = wave_bounds(resting)
+                box = resting.bounding_box()
+                assert abs(left) < 1 and abs(top) < 1
+                assert abs(right-box["width"]) < 1 and abs(bottom-box["height"]) < 1
+            print("PASS: one shared border/fill, direction before captions, empty VTT, and resting silent/unavailable outline", flush=True)
             popup.evaluate("makePolicyFixture('pause-until-ready')")
             assert popup.evaluate("pausedState && pauseCalls===1")
             popup.evaluate("finishPolicy()")

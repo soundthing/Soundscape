@@ -109,8 +109,7 @@ def hf_models() -> list[str]:
     from .config import load_config
 
     p = load_config(validate=False).pipeline
-    ids = [p["environment"]["visual"]["model"], p["environment"]["audio"]["model"],
-           p["events"]["clap"]["model"]]
+    ids = [p["environment"]["visual"]["model"], p["environment"]["audio"]["model"]]
     return list(dict.fromkeys(ids))
 
 
@@ -170,7 +169,7 @@ def check(args: argparse.Namespace | None = None) -> int:
 
         major = int(transformers.__version__.split(".")[0])
         r.line("OK" if major < 5 else "MISSING", f"transformers {transformers.__version__} < 5",
-               "" if major < 5 else 'pip install "transformers<5" (events/clap.py breaks on 5.x)')
+               "" if major < 5 else 'pip install "transformers<5" (environment CLAP breaks on 5.x)')
 
     print("== model weights")
     for name in PANNS_FILES:

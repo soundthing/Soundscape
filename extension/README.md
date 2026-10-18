@@ -25,9 +25,21 @@ not a measurement of a recorded object's physical location.
   and `5.1(side)` layouts use these nominal playback positions.
 - LFE (bass) is excluded from direction. Mono and unidentified layouts have no
   direction waves. A stereo mix is never upmixed to fabricate surround channels.
-- Waves appear while a caption is visible, follow seeking/playback speed, freeze
-  on pause, and disappear during ads or when Soundthing is off. Reduced-motion
-  preferences replace oscillation with static channel-strength lines.
+- The simple translucent caption panel remains visible and empty between captions,
+  with no branding, mode badge, or processing text. It has a minimum size
+  of 192 × 64 px (clamped for narrow players). It smoothly grows for longer or
+  overlapping captions and shrinks during gaps. A single closed wave forms the
+  panel border and translucent fill, with all active speaker directions deforming
+  that shared shape. It follows resizing and retains the speaker angles.
+- Captions use the bundled Minecraft-style [Monocraft v4.2.1](https://github.com/IdreesInc/Monocraft/tree/v4.2.1)
+  font. No font service or system font install is needed. The original font and
+  its SIL Open Font License are in `assets/Monocraft.ttf` and `assets/Monocraft-LICENSE.txt`.
+  Processing and error status remain available in the extension popup.
+- Direction loads independently of captions and keeps showing soundtrack activity
+  during caption gaps, even when no sound class meets its caption threshold.
+  Waves follow seeking/playback speed, freeze on pause, and disappear during ads
+  or when Soundthing is off. Silence produces a quiet panel rather than invented
+  motion. Reduced-motion preferences disable size transitions and oscillation.
 
 Downloads prefer available six-channel audio in the selected soundtrack language,
 otherwise stereo. FFprobe verifies the downloaded layout. YouTube may expose only
@@ -40,6 +52,8 @@ with 50 ms attack and 200 ms release smoothing. The existing mono model input an
 stereo modifier input remain unchanged. Results are cached in
 `runs/<video_id>/direction.json`, independently of caption events. An unavailable
 result is also cached; remove only this artifact to request another analysis.
+For newly processed videos, this track is generated after extraction and before
+the model stages, making direction available while captions are still processing.
 
 Older completed runs gain direction data when the extension requests it, without
 regenerating captions. The server may reacquire the original into
@@ -50,6 +64,64 @@ Direction failures never hide working captions. The extension retries missing
 direction tracks independently and keeps ready tracks in tab memory.
 
 ## Setup
+
+### Real captions (model installation and launch)
+
+For actual model-generated captions, use the real launcher from WSL/Linux:
+
+```sh
+bash extension/real.sh start --cookies "/absolute/path/to/youtube-cookies.txt"
+```
+
+This installs all `server`, `dev`, `events`, and `environment` extras plus yt-dlp,
+selects matching CUDA 12.8 PyTorch wheels when NVIDIA is available (CPU otherwise),
+validates the actual AudioSet labels, downloads/loads the model weights, and starts
+the server. First setup downloads several gigabytes. ffmpeg, ffprobe, and Node
+must already be installed; diagnostics explain missing tools. No sudo or shell
+profile changes are performed.
+
+For later launches after installation:
+
+```sh
+bash extension/real.sh serve --cookies "/absolute/path/to/youtube-cookies.txt"
+```
+
+Or run each step explicitly:
+
+```sh
+bash extension/real.sh setup
+bash extension/real.sh models
+bash extension/real.sh run /path/to/video.mp4
+bash extension/real.sh serve --cookies "/absolute/path/to/youtube-cookies.txt"
+```
+
+`doctor` checks the model imports, AudioSet mappings, and available device. Run
+commands from anywhere by using the script's absolute path. Dependencies use the
+compatibility constraints in `requirements-real.txt`; all Torch packages come from
+the same official wheel index. Keep the matching versions together.
+
+The launcher generates an ignored copy of configuration under `runs/.real-config/`
+with **both** backends set to `real`. Shared `config/` remains unchanged. Model
+captions go to `runs/real/<video_id>/`, so cached demo captions under `runs/<id>/`
+cannot be returned by this server. Passing an existing extraction's `inputs.json`
+reuses its media/audio/frames but writes new outputs into the real run directory.
+The API reports `demo: false` with this configuration and there is no automatic
+fallback to stub detection. Detection quality still depends on the team's
+untuned thresholds/calibration; model-generated captions can be incorrect.
+For AV1 downloads, ffmpeg writes `video.analysis.mkv` (H.264) in the real run
+directory so OpenCV can detect scene boundaries. Original audio streams are copied
+without re-encoding, preserving their channels; `inputs.video_path` references
+this compatible media. The downloaded original and extracted frames stay intact.
+
+PANNs uses `~/panns_data/`; Hugging Face uses its standard model cache. The launcher
+prepares AudioSet labels over HTTPS rather than using PANNs' legacy HTTP fallback.
+PANNs weights are checked against the publisher's size and checksum and installed
+atomically, so interrupted downloads are retried instead of treated as usable.
+Model downloads are reused after restart. Stop any server already listening on
+8000 with Ctrl+C before launching another one, then refresh the YouTube tab and
+use the same extension toggle. Cookie refresh instructions below still apply.
+
+### Demo and frontend development
 
 From the repository root, in WSL/Linux:
 
@@ -226,9 +298,9 @@ subtitle files in your video player.
   if no capped format exists it falls back to an available video. Media stays in
   `uploads/youtube/<youtube_id>/`; pipeline artifacts live in
   `runs/youtube_<youtube_id>/`. There is no automatic cleanup or cache expiry.
-- After changing model configuration, stop the server and remove the specific
-  generated `runs/youtube_<youtube_id>/` cache directory to regenerate that video's
-  captions. This extension does not change shared model backends or configuration.
+- After changing model configuration, clear just that video with the console helper
+  below, then refresh YouTube. This extension does not change shared model backends
+  or configuration.
 - Download failures (including YouTube sign-in/bot challenges) are shown in the
   popup. Cookies are used only when an exported file is explicitly configured
   on the backend as described above. Updating yt-dlp may be needed
@@ -254,12 +326,69 @@ smoke tests.
 
 ## Backend API and extension state
 
+When video processing finishes and its VTT loads, the YouTube tab logs a completion
+message, the complete conditioned VTT text, and the detected environment scenes
+(`start`, `end`, `env`, `confidence`, `probs`) using `console.log`. Open Chrome DevTools
+on that YouTube tab (F12 → Console) and filter for `Soundthing`. Logs include
+VTT/scene URLs and the `demo` flag, and appear once per loaded player session, including
+cached videos. Scenes print as formatted JSON for copying. Seeking or replaying
+does not print them again. The scenes are the
+classifier's merged environment intervals, not every raw visual shot boundary.
+If scene retrieval fails, the VTT is still logged alongside a diagnostic message;
+captions and direction waves continue independently. Reload the extension and refresh
+YouTube after installing this change; enable Preserve log to retain output across navigation.
+
+### Clear one video's cache from the console
+
+After restarting the backend, syncing/reloading the extension, and refreshing
+YouTube, run this in that YouTube tab's normal DevTools console:
+
+```js
+await soundthing.clearCache()
+```
+
+It clears the current video's generated VTTs, sound events, scenes, direction,
+extracted audio/frames, downloaded YouTube media, and remembered backend job status.
+Other videos, model weights, coefficients, cookies, and extension preferences stay
+intact. It also works while the extension toggle is off. A second call succeeds
+with an empty `removed` list. Active download/processing/direction jobs return HTTP
+409; wait for that video to finish and retry. Refresh the tab afterward to request
+new processing. A successful clear immediately removes loaded captions and
+direction from the calling tab and pauses automatic processing there. The popup
+shows **Video cache cleared** with a **Regenerate captions** button. Refreshing,
+choosing regeneration, or turning captions off/on allows fresh processing.
+The helper is available in both the normal page and extension DevTools contexts,
+and prints a `[Soundthing] Cache cleared` confirmation on success.
+
+For a specific URL or ID, open the local backend page (normally
+`http://127.0.0.1:8000`) and run:
+
+```js
+await soundthing.clearCache("https://www.youtube.com/watch?v=lpQPfGkmkr8")
+```
+
+The YouTube-tab helper accepts an optional URL/ID too, but requires it to match
+that tab's current watch video. It uses the extension's configured local server,
+so a cross-origin fetch from YouTube is unnecessary.
+
+The HTTP equivalent, from the local backend console, is:
+
+```js
+await fetch(`/api/youtube/cache?url=${encodeURIComponent("https://youtu.be/lpQPfGkmkr8")}`, {
+  method: "DELETE"
+}).then(response => response.json())
+```
+
 Person 3's additive HTTP API:
 
 - `POST /api/youtube` with `{"youtube_id":"<11-character-id>"}` returns HTTP 202
   and `{"video_id":"youtube_<id>"}`. It reuses active/complete jobs and retries
   failed ones. Only canonical YouTube IDs are accepted; no caller-controlled URLs,
   output paths, cookies, or download commands.
+- `DELETE /api/youtube/cache?url=<URL-or-ID>` returns HTTP 200 and
+  `{ "video_id": "youtube_<id>", "cleared": true, "removed": ["results", "downloads"] }`.
+  `removed` lists only groups actually deleted. Invalid links return 400/422; active
+  jobs return 409. It never downloads the supplied URL.
 - `GET /api/videos/{video_id}` returns `status` (`queued`, `downloading`,
   `processing`, `done`, `error`), optional `error`, and `demo` (whether either
   configured model backend is a stub). Only complete runs are recovered as done
@@ -282,7 +411,7 @@ reopening a video asks the server to reuse any completed job.
 
 The background worker validates the extension sender, top frame, current YouTube
 watch ID, and enabled preference before making narrowly constructed local API
-requests. Long work belongs to Python, not Chrome's temporary popup or worker.
+requests. Explicit cache clearing is also allowed while captions are off. Long work belongs to Python, not Chrome's temporary popup or worker.
 Polling and overlays belong to each content script. The overlay uses text content
 and isolated shadow styles rather than interpreting captions as HTML.
 

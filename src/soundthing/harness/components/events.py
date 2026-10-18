@@ -24,7 +24,7 @@ from soundthing.events.cache import (
     cache_path,
     load_cache,
 )
-from soundthing.events.replay import replay as replay_events, text_embeddings_for
+from soundthing.events.replay import replay as replay_events
 from soundthing.harness.bootstrap import _vectorized_f_beta
 from soundthing.harness.components.base import Clip, Evaluation
 from soundthing.harness.objective import (
@@ -52,17 +52,6 @@ def load_event_caches(cfg: Config, labels: list[ClipLabels]) -> list[ClipCache]:
             )
         caches.append(load_cache(cpath))
     return caches
-
-
-def text_emb_for(cfg: Config, caches: list[ClipCache]) -> np.ndarray | None:
-    """Return text embeddings if CLAP is enabled and at least one cache contains CLAP features."""
-    clap_cfg = cfg.pipeline.get("events", {}).get("clap", {})
-    clap_enabled = bool(clap_cfg.get("enabled", True))
-    has_clap_cache = any(c.clap_emb is not None for c in caches)
-
-    if clap_enabled and has_clap_cache:
-        return text_embeddings_for(cfg)
-    return None
 
 
 def labeled_env_segments(
@@ -221,7 +210,6 @@ class EventsComponent:
     def evaluate(self, clips: list[Clip], cfg: Config) -> Evaluation:
         caches = [c.cache for c in clips]
         labels = [c.labels for c in clips]
-        text_emb = text_emb_for(cfg, caches)
         tol = float(cfg.pipeline.get("eval", {}).get("onset_tolerance_sec", 0.5))
 
         cond_matches: list[ClipMatch] = []
@@ -236,9 +224,9 @@ class EventsComponent:
             cond_segs = labeled_env_segments(lbl, cfg)
             wrong_segs = experiments.wrong_env_segments(cond_segs, cfg)
 
-            pred_cond = replay_events(cache, cond_segs, cfg, text_emb=text_emb)
-            pred_base = replay_events(cache, None, cfg, text_emb=text_emb)
-            pred_wrong = replay_events(cache, wrong_segs, cfg, text_emb=text_emb)
+            pred_cond = replay_events(cache, cond_segs, cfg)
+            pred_base = replay_events(cache, None, cfg)
+            pred_wrong = replay_events(cache, wrong_segs, cfg)
 
             m_cond = match_clip(pred_cond, lbl, cfg, tol)
             m_base = match_clip(pred_base, lbl, cfg, tol)

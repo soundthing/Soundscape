@@ -50,7 +50,7 @@ class FakeTools:
         if self.should_raise:
             raise self.should_raise
         self.calls.append(("describe_space", {}))
-        return {"params": ["events.postprocess.smoothing_sec"]}
+        return {"params": ["events.postprocess.merge_gap_sec"]}
 
     def get_best(self, component: str = "events", **kwargs: Any) -> dict[str, Any] | None:
         if self.should_raise:
@@ -82,7 +82,7 @@ def test_cli_score_set(
         [
             "score",
             "--set",
-            "events.postprocess.smoothing_sec=0.75",
+            "events.postprocess.merge_gap_sec=0.75",
             "--set",
             "thresholds.default=0.6",
             "--hypothesis",
@@ -95,7 +95,7 @@ def test_cli_score_set(
     call_name, args = fake.calls[0]
     assert call_name == "score"
     assert args["overrides"] == {
-        "events.postprocess.smoothing_sec": 0.75,
+        "events.postprocess.merge_gap_sec": 0.75,
         "thresholds.default": 0.6,
     }
     assert args["hypothesis"] == "h"
@@ -282,7 +282,7 @@ def test_cli_routing_space_best_ledger_propose_recache(
     code = main(["space"], tools=fake)
     assert code == 0
     assert fake.calls[-1] == ("describe_space", {})
-    assert json.loads(capsys.readouterr().out)["params"] == ["events.postprocess.smoothing_sec"]
+    assert json.loads(capsys.readouterr().out)["params"] == ["events.postprocess.merge_gap_sec"]
 
     # best
     code = main(["best"], tools=fake)
@@ -298,13 +298,13 @@ def test_cli_routing_space_best_ledger_propose_recache(
 
     # propose --note
     code = main(
-        ["propose", "--set", "vocabulary.siren.clap=['alarm']", "--note", "clarify siren"],
+        ["propose", "--set", "vocabulary.siren.audioset=['alarm']", "--note", "clarify siren"],
         tools=fake,
     )
     assert code == 0
     assert fake.calls[-1] == (
         "propose_shared_change",
-        {"overrides": {"vocabulary.siren.clap": ["alarm"]}, "note": "clarify siren"},
+        {"overrides": {"vocabulary.siren.audioset": ["alarm"]}, "note": "clarify siren"},
     )
     assert json.loads(capsys.readouterr().out)["run_id"] == "run_prop"
 

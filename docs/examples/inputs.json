@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "extracted_inputs",
   "data": {
     "video_id": "clip01",

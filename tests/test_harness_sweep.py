@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from soundthing.harness import paths
+from soundthing.harness import paths, space
 from soundthing.harness.sweep import log_result, result_as_dict, sweep
 
 
@@ -62,11 +62,11 @@ class FakeScoreFn:
 
     def __init__(
         self,
-        center_smoothing: float = 0.76,
+        center_merge_gap: float = 0.76,
         center_min_event: float = 0.3,
         fail_predicate: Any = None,
     ) -> None:
-        self.center_smoothing = center_smoothing
+        self.center_merge_gap = center_merge_gap
         self.center_min_event = center_min_event
         self.fail_predicate = fail_predicate
         self.calls: list[dict[str, Any]] = []
@@ -84,10 +84,10 @@ class FakeScoreFn:
         run_id = f"run_{self._counter:04d}"
         ovr = dict(overrides or {})
 
-        smoothing = float(
+        merge_gap = float(
             ovr.get(
-                "events.postprocess.smoothing_sec",
-                cfg.pipeline["events"]["postprocess"]["smoothing_sec"] if cfg else 0.5,
+                "events.postprocess.merge_gap_sec",
+                cfg.pipeline["events"]["postprocess"]["merge_gap_sec"] if cfg else 0.5,
             )
         )
         min_event = float(
@@ -99,7 +99,7 @@ class FakeScoreFn:
 
         obj = float(
             0.5
-            - (smoothing - self.center_smoothing) ** 2
+            - (merge_gap - self.center_merge_gap) ** 2
             - (min_event - self.center_min_event) ** 2
         )
 
@@ -162,16 +162,16 @@ def test_log_result():
 
 
 def test_acceptance_1_coordinate_single_param(cfg, tmp_path, monkeypatch):
-    """Check 1: coordinate on smoothing_sec with budget 6: <= 6 calls, logged, best adopted, improved flag."""
+    """Check 1: coordinate on merge_gap_sec with budget 6: <= 6 calls, logged, best adopted, improved flag."""
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
     ledger = FakeLedger()
     # Peak at 0.76 ensures 1.0 strictly improves upon incumbent 0.5:
     # 0.5: obj = 0.5 - (0.5 - 0.76)^2 = 0.4324
     # 1.0: obj = 0.5 - (1.0 - 0.76)^2 = 0.4424 (best among [0.0, 1.0, 1.5, 2.0])
-    score_fn = FakeScoreFn(center_smoothing=0.76, center_min_event=0.3)
+    score_fn = FakeScoreFn(center_merge_gap=0.76, center_min_event=0.3)
 
     res = sweep(
-        params=["events.postprocess.smoothing_sec"],
+        params=["events.postprocess.merge_gap_sec"],
         strategy="coordinate",
         score_fn=score_fn,
         budget=6,
@@ -192,7 +192,7 @@ def test_acceptance_1_coordinate_single_param(cfg, tmp_path, monkeypatch):
         assert entry["git"]["sha"] == "abc1234"
 
     # Best smoothing is 1.0 (the linspace point in [0, 2] closest to 0.75, skipping incumbent 0.5)
-    assert res["best_overrides"]["events.postprocess.smoothing_sec"] == 1.0
+    assert res["best_overrides"]["events.postprocess.merge_gap_sec"] == 1.0
     assert res["improved"] is True
     assert res["best_objective"] == pytest.approx(0.5 - (1.0 - 0.76) ** 2)
 
@@ -204,10 +204,10 @@ def test_acceptance_2_coordinate_two_params_stops_when_no_improvement(cfg, tmp_p
 
     # Linspace for smoothing [0.0, 2.0] n_values=5: [0.0, 0.5, 1.0, 1.5, 2.0]. Peak 1.0 is on the grid.
     # Linspace for min_event [0.05, 1.5] n_values=5: [0.05, 0.4125, 0.775, 1.1375, 1.5]. Peak 0.775 is on the grid.
-    score_fn = FakeScoreFn(center_smoothing=1.0, center_min_event=0.775)
+    score_fn = FakeScoreFn(center_merge_gap=1.0, center_min_event=0.775)
 
     res = sweep(
-        params=["events.postprocess.smoothing_sec", "events.postprocess.min_event_sec"],
+        params=["events.postprocess.merge_gap_sec", "events.postprocess.min_event_sec"],
         strategy="coordinate",
         score_fn=score_fn,
         budget=30,
@@ -229,7 +229,7 @@ def test_acceptance_2_coordinate_two_params_stops_when_no_improvement(cfg, tmp_p
     assert len(ledger.entries) == 18
     assert res["improved"] is True
     assert res["best_overrides"] == {
-        "events.postprocess.smoothing_sec": 1.0,
+        "events.postprocess.merge_gap_sec": 1.0,
         "events.postprocess.min_event_sec": 0.775,
     }
     assert res["best_objective"] == pytest.approx(0.5)
@@ -242,15 +242,15 @@ def test_acceptance_3_unpassed_candidates_never_adopted(cfg, tmp_path, monkeypat
     ledger = FakeLedger()
 
     # Fail any candidate with smoothing == 1.0
-    def fail_smoothing_1(ovr, obj):
-        return ovr.get("events.postprocess.smoothing_sec") == 1.0
+    def fail_merge_gap_1(ovr, obj):
+        return ovr.get("events.postprocess.merge_gap_sec") == 1.0
 
     score_fn = FakeScoreFn(
-        center_smoothing=1.0, center_min_event=0.3, fail_predicate=fail_smoothing_1
+        center_merge_gap=1.0, center_min_event=0.3, fail_predicate=fail_merge_gap_1
     )
 
     res = sweep(
-        params=["events.postprocess.smoothing_sec"],
+        params=["events.postprocess.merge_gap_sec"],
         strategy="coordinate",
         score_fn=score_fn,
         budget=10,
@@ -260,7 +260,7 @@ def test_acceptance_3_unpassed_candidates_never_adopted(cfg, tmp_path, monkeypat
     )
 
     # Candidate 1.0 had highest objective (0.5), but passed=False, so must not be adopted.
-    assert res["best_overrides"].get("events.postprocess.smoothing_sec") != 1.0
+    assert res["best_overrides"].get("events.postprocess.merge_gap_sec") != 1.0
 
     # Also test with optuna: all trials fail
     def all_fail(ovr, obj):
@@ -268,7 +268,7 @@ def test_acceptance_3_unpassed_candidates_never_adopted(cfg, tmp_path, monkeypat
 
     fail_score_fn = FakeScoreFn(fail_predicate=all_fail)
     res_optuna = sweep(
-        params=["events.postprocess.smoothing_sec"],
+        params=["events.postprocess.merge_gap_sec"],
         strategy="optuna",
         score_fn=fail_score_fn,
         budget=5,
@@ -281,14 +281,16 @@ def test_acceptance_3_unpassed_candidates_never_adopted(cfg, tmp_path, monkeypat
 
 
 @requires_optuna
-def test_acceptance_4_int_param_max_on_screen(cfg, tmp_path, monkeypatch):
-    """Check 4: int param events.postprocess.max_on_screen suggested/linspace values are ints, deduped."""
+def test_acceptance_4_int_param(cfg, tmp_path, monkeypatch):
+    """Check 4: an int param's suggested/linspace values are ints, deduped."""
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
+    # No int tunable remains in the live space; register a test-only one.
+    monkeypatch.setitem(space.BOUNDS, "events.postprocess.int_param", space.ParamSpec("int", 1, 4, default=2))
     ledger = FakeLedger()
     score_fn = FakeScoreFn()
 
     res = sweep(
-        params=["events.postprocess.max_on_screen"],
+        params=["events.postprocess.int_param"],
         strategy="coordinate",
         score_fn=score_fn,
         budget=10,
@@ -298,15 +300,15 @@ def test_acceptance_4_int_param_max_on_screen(cfg, tmp_path, monkeypatch):
     )
 
     for item in res["history"]:
-        if "events.postprocess.max_on_screen" in item["overrides"]:
-            val = item["overrides"]["events.postprocess.max_on_screen"]
+        if "events.postprocess.int_param" in item["overrides"]:
+            val = item["overrides"]["events.postprocess.int_param"]
             assert isinstance(val, int)
             assert not isinstance(val, bool)
             assert type(val) is int
 
     # Optuna int suggestion
     res_opt = sweep(
-        params=["events.postprocess.max_on_screen"],
+        params=["events.postprocess.int_param"],
         strategy="optuna",
         score_fn=score_fn,
         budget=5,
@@ -316,8 +318,8 @@ def test_acceptance_4_int_param_max_on_screen(cfg, tmp_path, monkeypatch):
     )
 
     for item in res_opt["history"]:
-        if "events.postprocess.max_on_screen" in item["overrides"]:
-            val = item["overrides"]["events.postprocess.max_on_screen"]
+        if "events.postprocess.int_param" in item["overrides"]:
+            val = item["overrides"]["events.postprocess.int_param"]
             assert isinstance(val, int)
             assert not isinstance(val, bool)
             assert type(val) is int
@@ -329,9 +331,9 @@ def test_acceptance_5_optuna_budget_and_determinism(cfg, tmp_path, monkeypatch):
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
 
     ledger1 = FakeLedger()
-    score_fn1 = FakeScoreFn(center_smoothing=0.8, center_min_event=0.4)
+    score_fn1 = FakeScoreFn(center_merge_gap=0.8, center_min_event=0.4)
     res1 = sweep(
-        params=["events.postprocess.smoothing_sec", "events.postprocess.min_event_sec"],
+        params=["events.postprocess.merge_gap_sec", "events.postprocess.min_event_sec"],
         strategy="optuna",
         score_fn=score_fn1,
         budget=8,
@@ -347,16 +349,16 @@ def test_acceptance_5_optuna_budget_and_determinism(cfg, tmp_path, monkeypatch):
     # Check bounds
     for item in res1["history"]:
         ovr = item["overrides"]
-        if "events.postprocess.smoothing_sec" in ovr:
-            assert 0.0 <= ovr["events.postprocess.smoothing_sec"] <= 2.0
+        if "events.postprocess.merge_gap_sec" in ovr:
+            assert 0.0 <= ovr["events.postprocess.merge_gap_sec"] <= 2.0
         if "events.postprocess.min_event_sec" in ovr:
             assert 0.05 <= ovr["events.postprocess.min_event_sec"] <= 1.5
 
     # Run 2 with identical seed
     ledger2 = FakeLedger()
-    score_fn2 = FakeScoreFn(center_smoothing=0.8, center_min_event=0.4)
+    score_fn2 = FakeScoreFn(center_merge_gap=0.8, center_min_event=0.4)
     res2 = sweep(
-        params=["events.postprocess.smoothing_sec", "events.postprocess.min_event_sec"],
+        params=["events.postprocess.merge_gap_sec", "events.postprocess.min_event_sec"],
         strategy="optuna",
         score_fn=score_fn2,
         budget=8,
@@ -390,12 +392,12 @@ def test_acceptance_6_error_cases(cfg, tmp_path, monkeypatch):
     # Shared param: vocabulary
     cid0 = cfg.class_ids[0]
     with pytest.raises(ValueError, match="shared"):
-        sweep([f"vocabulary.{cid0}.clap"], score_fn=score_fn, cfg=cfg, ledger=ledger)
+        sweep([f"vocabulary.{cid0}.audioset"], score_fn=score_fn, cfg=cfg, ledger=ledger)
 
     # Unknown strategy 'grid'
     with pytest.raises(ValueError, match="Unknown strategy 'grid'"):
         sweep(
-            ["events.postprocess.smoothing_sec"],
+            ["events.postprocess.merge_gap_sec"],
             strategy="grid",
             score_fn=score_fn,
             cfg=cfg,
@@ -405,7 +407,7 @@ def test_acceptance_6_error_cases(cfg, tmp_path, monkeypatch):
     # Budget 0
     with pytest.raises(ValueError, match="budget must be >= 1"):
         sweep(
-            ["events.postprocess.smoothing_sec"],
+            ["events.postprocess.merge_gap_sec"],
             budget=0,
             score_fn=score_fn,
             cfg=cfg,
@@ -419,7 +421,7 @@ def test_acceptance_6_error_cases(cfg, tmp_path, monkeypatch):
     # Base_overrides with shared key
     with pytest.raises(ValueError, match="base_overrides contains shared key"):
         sweep(
-            ["events.postprocess.smoothing_sec"],
+            ["events.postprocess.merge_gap_sec"],
             base_overrides={"priors.floor": 0.2},
             score_fn=score_fn,
             cfg=cfg,
@@ -435,7 +437,7 @@ def test_acceptance_7_budget_1(cfg, tmp_path, monkeypatch):
     score_fn = FakeScoreFn()
 
     res = sweep(
-        params=["events.postprocess.smoothing_sec"],
+        params=["events.postprocess.merge_gap_sec"],
         strategy="coordinate",
         score_fn=score_fn,
         budget=1,
@@ -455,7 +457,7 @@ def test_acceptance_7_budget_1(cfg, tmp_path, monkeypatch):
     # Also for optuna
     ledger_opt = FakeLedger()
     res_opt = sweep(
-        params=["events.postprocess.smoothing_sec"],
+        params=["events.postprocess.merge_gap_sec"],
         strategy="optuna",
         score_fn=score_fn,
         budget=1,

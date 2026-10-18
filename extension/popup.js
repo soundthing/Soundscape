@@ -28,6 +28,7 @@ async function refresh() {
       processing: ["Creating sound captions", "The caption track will appear inside the player when ready."],
       reconnecting: ["Reconnecting to Soundthing", "Check that the local server is running. Retrying automatically; you can close this popup."],
       done: ["Captions are on", "Synchronized with the video, at the bottom right of the player."],
+      "cache-cleared": ["Video cache cleared", "Refresh YouTube or regenerate this video's captions."],
       error: ["Something needs attention", state.error || "Check the local server, then retry this video."],
     };
     const [title, detail] = labels[state.status] || labels.queued;
@@ -38,8 +39,8 @@ async function refresh() {
       $("status-detail").textContent += ` ${direction[state.directionMode] || direction.pending}`;
     }
     $("status-dot").className = state.status === "done" ? "ready" : state.status === "error" ? "error" : "";
-    $("retry").hidden = !["error", "reconnecting"].includes(state.status);
-    $("retry").textContent = state.status === "reconnecting" ? "Retry now" : "Retry this video";
+    $("retry").hidden = !["error", "reconnecting", "cache-cleared"].includes(state.status);
+    $("retry").textContent = state.status === "cache-cleared" ? "Regenerate captions" : state.status === "reconnecting" ? "Retry now" : "Retry this video";
     $("demo").hidden = !state.demo;
   } catch (error) {
     $("status-title").textContent = "Couldn't load extension settings";

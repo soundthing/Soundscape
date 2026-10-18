@@ -121,7 +121,6 @@ class PipelineComponent:
             )
 
         ev_caches = [_extract_caches(c.cache)[0] for c in clips]
-        text_emb = ev_comp.text_emb_for(cfg, ev_caches)
 
         matches: list[Any] = []
         base_matches: list[Any] = []
@@ -140,7 +139,7 @@ class PipelineComponent:
             pred_segs = env_comp.predict_segments(env_cache, cfg)
             pred_envs.append((clip, pred_segs))
 
-            events = ev_comp.replay_events(ev_cache, pred_segs, cfg, text_emb)
+            events = ev_comp.replay_events(ev_cache, pred_segs, cfg)
             sorted_events = sorted(events, key=lambda e: e.start)
             cues = events_to_cues(sorted_events, min_cue=min_cue_sec, max_cue=max_cue_sec)
             pred_cues = [
@@ -150,7 +149,7 @@ class PipelineComponent:
             m = match_cues(pred_cues, lbl, cfg, tol)
             matches.append(m)
 
-            base_events = ev_comp.replay_events(ev_cache, None, cfg, text_emb)
+            base_events = ev_comp.replay_events(ev_cache, None, cfg)
             sorted_base = sorted(base_events, key=lambda e: e.start)
             base_cues = events_to_cues(sorted_base, min_cue=min_cue_sec, max_cue=max_cue_sec)
             pred_base_cues = [
