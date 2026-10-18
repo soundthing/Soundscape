@@ -431,9 +431,10 @@ def test_load_separator_missing_demucs_raises(cfg: Config, monkeypatch: pytest.M
         load_separator(cfg)
 
 
-def test_demucs_separator_mock_pipeline():
+def test_demucs_separator_mock_pipeline(monkeypatch: pytest.MonkeyPatch):
     """Test DemucsSeparator operations (resampling, apply_model, channel average, pad/trim)."""
-    import torch
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchaudio")
 
     class FakeModel:
         samplerate = 44100
@@ -464,29 +465,25 @@ def test_demucs_separator_mock_pipeline():
     mock_apply_module = MagicMock()
     mock_apply_module.apply_model = fake_apply
     mock_demucs.apply = mock_apply_module
-    sys.modules["demucs"] = mock_demucs
-    sys.modules["demucs.apply"] = mock_apply_module
+    monkeypatch.setitem(sys.modules, "demucs", mock_demucs)
+    monkeypatch.setitem(sys.modules, "demucs.apply", mock_apply_module)
 
-    try:
-        # At model sample rate (no resampling)
-        sr = 44100
-        audio = np.ones(4410, dtype=np.float32)  # 0.1s
-        res = sep(audio, sr)
-        assert len(res) == len(audio)
-        assert res.dtype == np.float32
-        assert np.allclose(res, 6.0)
+    # At model sample rate (no resampling)
+    sr = 44100
+    audio = np.ones(4410, dtype=np.float32)  # 0.1s
+    res = sep(audio, sr)
+    assert len(res) == len(audio)
+    assert res.dtype == np.float32
+    assert np.allclose(res, 6.0)
 
-        # With resampling (sr != 44100)
-        sr_16k = 16000
-        audio_16k = np.ones(1600, dtype=np.float32)
-        res_16k = sep(audio_16k, sr_16k)
-        assert len(res_16k) == len(audio_16k)
-        assert res_16k.dtype == np.float32
-        # Interior away from sinc filter edges is 6.0
-        assert np.allclose(res_16k[50:-50], 6.0, atol=1e-2)
-    finally:
-        sys.modules.pop("demucs.apply", None)
-        sys.modules.pop("demucs", None)
+    # With resampling (sr != 44100)
+    sr_16k = 16000
+    audio_16k = np.ones(1600, dtype=np.float32)
+    res_16k = sep(audio_16k, sr_16k)
+    assert len(res_16k) == len(audio_16k)
+    assert res_16k.dtype == np.float32
+    # Interior away from sinc filter edges is 6.0
+    assert np.allclose(res_16k[50:-50], 6.0, atol=1e-2)
 
 
 def test_load_separator_real_demucs_skipped(cfg: Config):

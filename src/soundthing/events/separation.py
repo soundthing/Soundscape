@@ -301,21 +301,14 @@ def separate_spans(
             offset = p_start - ext_start
             span_sep[:] = sep_pieces[0][offset : offset + span_len]
         else:
-            if cf_len == 0:
-                for k, (p_start, p_end) in enumerate(pieces):
-                    sp_s = p_start - s_idx
-                    sp_e = p_end - s_idx
-                    ext_start = max(0, p_start - cf_len)
-                    off = p_start - ext_start
-                    span_sep[sp_s:sp_e] = sep_pieces[k][off : off + (p_end - p_start)]
-            else:
-                for k, (p_start, p_end) in enumerate(pieces):
-                    sp_s = p_start - s_idx
-                    sp_e = p_end - s_idx
-                    ext_start = max(0, p_start - cf_len)
-                    off = p_start - ext_start
-                    span_sep[sp_s:sp_e] = sep_pieces[k][off : off + (p_end - p_start)]
+            for k, (p_start, p_end) in enumerate(pieces):
+                sp_s = p_start - s_idx
+                sp_e = p_end - s_idx
+                ext_start = max(0, p_start - cf_len)
+                off = p_start - ext_start
+                span_sep[sp_s:sp_e] = sep_pieces[k][off : off + (p_end - p_start)]
 
+            if cf_len > 0:
                 for k in range(len(pieces) - 1):
                     p_curr_s, p_curr_e = pieces[k]
                     p_next_s, p_next_e = pieces[k + 1]
