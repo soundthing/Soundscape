@@ -35,3 +35,6 @@ Promotion updates `config/pipeline.yaml` (`events:` section) and `config/thresho
 
 ## Every MCP and CLI call is logged to the shared ledger — events
 All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) under `data/harness/`, so parallel agents across worktrees have full visibility into past hypotheses, parameters, and results without repeating experiments.
+
+## Kaggle kernel ships the working tree instead of cloning — harness
+The kernel used to clone the (private) repo at a pushed sha, which needed a GitHub token as a Kaggle secret and a commit+push before every recache. Cache building needs only `src/soundthing`, `config/` and `pyproject.toml` (~160 KB base64), so the pusher embeds them in the script and records their sha256 in the cache meta. Trade-off: provenance is a bundle hash rather than a commit.

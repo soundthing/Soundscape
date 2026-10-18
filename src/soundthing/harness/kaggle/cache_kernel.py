@@ -1,95 +1,104 @@
-"""Kaggle kernel script to build tuning caches on GPU."""
+"""Kaggle kernel script to build harness caches on GPU.
+
+Runs the code embedded in BUNDLE (the pusher's working tree), so nothing is cloned.
+Builds AudioSet dev + holdout caches when the AudioSet dataset is attached, and ESC-50
+synthetic mixes when ESC-50 is attached. Only caches, dev labels and meta.json are
+written to the output; holdout labels never leave the kernel.
+"""
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
 import glob
+import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
-from urllib.parse import urlparse, urlunparse
+import tarfile
+import tempfile
 
 PARAMS = {}  # filled in by kaggle_io.push_cache_kernel
+BUNDLE = ""  # filled in by kaggle_io.push_cache_kernel
 
 
-def _clone_url(repo_url: str) -> str:
-    try:
-        from kaggle_secrets import UserSecretsClient
-
-        token = UserSecretsClient().get_secret("GITHUB_TOKEN")
-        if token and repo_url.startswith("https://"):
-            parsed = urlparse(repo_url)
-            netloc = f"x-access-token:{token}@{parsed.netloc}"
-            return urlunparse(parsed._replace(netloc=netloc))
-    except Exception:
-        pass
-    return repo_url
+def _find(pattern: str) -> Path | None:
+    matches = sorted(glob.glob(f"/kaggle/input/**/{pattern}", recursive=True))
+    return Path(matches[0]).resolve() if matches else None
 
 
-def _find_esc50_dir() -> Path:
-    matches = glob.glob("/kaggle/input/**/esc50.csv", recursive=True)
-    if not matches:
-        raise FileNotFoundError("Could not find esc50.csv under /kaggle/input")
-    csv_path = Path(matches[0]).resolve()
-    if (csv_path.parent / "audio").is_dir():
-        return csv_path.parent
-    if (csv_path.parent.parent / "audio").is_dir():
-        return csv_path.parent.parent
-    if csv_path.parent.name == "meta":
-        return csv_path.parent.parent
-    return csv_path.parent
+def _esc50_dir(csv_path: Path) -> Path:
+    for d in (csv_path.parent, csv_path.parent.parent):
+        if (d / "audio").is_dir():
+            return d
+    return csv_path.parent.parent if csv_path.parent.name == "meta" else csv_path.parent
 
 
 def main() -> None:
-    repo_url = PARAMS["repo_url"]
-    git_sha = PARAMS["git_sha"]
     window = float(PARAMS["window_sec"])
     hop = float(PARAMS["hop_sec"])
     model = str(PARAMS["tagger_model"])
-    n_per_env = int(PARAMS.get("n_per_env", 20))
-    seed = int(PARAMS.get("seed", 0))
 
-    work_dir = Path("/kaggle/working").resolve()
-    clone_dir = work_dir / "repo"
-    home_dir = work_dir / "tuning"
+    src_dir = Path("/tmp/soundthing")
+    home_dir = Path("/tmp/harness")
+    out_dir = Path("/kaggle/working/tuning")
     os.environ["SOUNDTHING_HARNESS_HOME"] = str(home_dir)
 
-    target_url = _clone_url(repo_url)
-    subprocess.run(["git", "clone", target_url, str(clone_dir)], check=True)
-    subprocess.run(["git", "checkout", git_sha], cwd=clone_dir, check=True)
+    src_dir.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(base64.b64decode(BUNDLE)), mode="r:gz") as tar:
+        tar.extractall(src_dir)
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", ".[events]"],
-        cwd=clone_dir,
+        [sys.executable, "-m", "pip", "install", "-q", "-e", ".[events]", "transformers>=4.40,<5"],
+        cwd=src_dir,
         check=True,
     )
-
-    sys.path.insert(0, str(clone_dir / "src"))
+    sys.path.insert(0, str(src_dir / "src"))
 
     from soundthing.config import load_config
     from soundthing.events.cache import CACHE_VERSION, cache_key
-    from soundthing.harness.datasets import build_dev_caches, esc50_mixes
+    from soundthing.events.detector import get_models
+    from soundthing.harness import datasets, paths
     from soundthing.harness.overrides import apply_overrides
 
-    cfg = load_config(clone_dir / "config")
     cfg = apply_overrides(
-        cfg,
-        {
-            "events.window_sec": window,
-            "events.hop_sec": hop,
-            "events.tagger.model": model,
-        },
+        load_config(src_dir / "config"),
+        {"events.window_sec": window, "events.hop_sec": hop, "events.tagger.model": model},
+    )
+    key = cache_key(cfg)
+    models = get_models(cfg)
+    counts: dict[str, int] = {}
+
+    tsv = _find("audioset_eval_strong.tsv")
+    if tsv is not None:
+        with tempfile.TemporaryDirectory() as tmp:
+            datasets.audioset_strong_labels(tsv, cfg, Path(tmp), tsv.parent / "class_labels_indices.csv")
+            split = datasets.split_audioset(
+                Path(tmp) / "labels", tsv.parent / "audio", holdout_frac=float(PARAMS["holdout_frac"])
+            )
+        counts["audioset_dev"] = len(split["dev"])
+        counts["audioset_holdout"] = len(split["holdout"])
+        counts["holdout_caches"] = len(datasets.build_holdout_caches(cfg, models=models))
+
+    esc50_csv = _find("esc50.csv")
+    if esc50_csv is not None:
+        mixes = datasets.esc50_mixes(
+            _esc50_dir(esc50_csv), cfg, int(PARAMS["n_per_env"]), int(PARAMS["seed"]),
+            out_dir=home_dir / "dev",
+        )
+        counts["esc50_mixes"] = len(mixes)
+
+    counts["dev_caches"] = len(
+        datasets.build_dev_caches(paths.dev_audio_dir(), paths.dev_labels_dir(), cfg, models=models)
     )
 
-    key = cache_key(cfg)
-    esc50_dir = _find_esc50_dir()
-    dev_dir = home_dir / "dev"
-    audio_dir = dev_dir / "audio"
-    labels_dir = dev_dir / "labels"
-
-    mix_paths = esc50_mixes(esc50_dir, cfg, n_per_env, seed, out_dir=dev_dir)
-    cache_paths = build_dev_caches(audio_dir, labels_dir, cfg)
+    shutil.copytree(paths.cache_root() / key, out_dir / "cache" / key)
+    shutil.copytree(paths.dev_labels_dir(), out_dir / "dev" / "labels")
+    manifest = paths.dev_labels_dir().parent / "manifest.json"
+    if manifest.exists():
+        shutil.copy2(manifest, out_dir / "dev" / "manifest.json")
 
     meta = {
         "cache_key": key,
@@ -97,16 +106,13 @@ def main() -> None:
         "window_sec": window,
         "hop_sec": hop,
         "tagger_model": model,
-        "git_sha": git_sha,
-        "n_clips": len(cache_paths) if cache_paths else len(mix_paths),
-        "seed": seed,
-        "n_per_env": n_per_env,
+        "git_sha": PARAMS.get("git_sha"),
+        "bundle_sha256": PARAMS.get("bundle_sha256"),
+        "counts": counts,
         "built_at": datetime.now(timezone.utc).isoformat(),
     }
-    home_dir.mkdir(parents=True, exist_ok=True)
-    meta_path = home_dir / "meta.json"
-    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    print(f"Built cache {key} with {meta['n_clips']} clips at {meta_path}")
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    print(f"Built cache {key}: {counts}")
 
 
 if __name__ == "__main__":

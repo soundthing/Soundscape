@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "soundthing",
+  "version": "0.1.0",
+  "description": "Add synchronized non-speech captions to your YouTube videos with a local Soundthing server.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "downloads"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://www.youtube.com/*"],
+  "action": { "default_title": "Soundthing captions", "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{ "matches": ["https://www.youtube.com/*"], "js": ["content.js"], "run_at": "document_idle" }],
+  "web_accessible_resources": [{ "resources": ["player.mjs", "vtt.mjs", "settings.mjs", "direction.mjs"], "matches": ["https://www.youtube.com/*"] }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  }
+}

@@ -63,8 +63,9 @@ Converted dataset labels go in `data/` (gitignored), in `clip_labels` format.
 ## Compute: Kaggle
 
 Model scoring runs in a Kaggle notebook on a free T4 or P100 (about 10–20 min per cache
-build). The notebook attaches ESC-50 and FSD50K from Kaggle mirrors and saves the cache as
-a private Kaggle dataset. The harness downloads it with the `kaggle` CLI and checks its
+build). The notebook attaches the AudioSet eval audio (private dataset
+`<user>/soundthing-audioset-eval`) and ESC-50, runs the pusher's working tree (embedded in
+the script), and saves the cache as kernel output. The harness downloads it with the `kaggle` CLI and checks its
 config hash. Hill-climbing runs locally on CPU.
 
 ## Agent interface: MCP

@@ -29,9 +29,13 @@ environments:
     visual_prompts:
       - a photo of a kitchen
       - a photo of someone cooking at a stove
+      - a photo inside a commercial restaurant kitchen with stainless steel equipment and food prep stations
+      - a photo of cooks preparing food on a grill and fryer in a fast food kitchen
     audio_prompts:
       - the sound of cooking in a kitchen
       - dishes clinking and food sizzling in a kitchen
+      - the sound of a busy commercial kitchen with a sizzling grill and fryer
+      - food preparation and kitchen equipment operating behind a restaurant counter
 
   - id: office
     display: Office / indoor workplace
@@ -62,10 +66,73 @@ environments:
       - the sound of a referee whistle and crowd in a stadium
 
   - id: vehicle_interior
-    display: Inside a vehicle
+    display: Inside a private vehicle
     visual_prompts:
       - a photo taken inside a car
-      - a photo of the interior of a bus or train
+      - a photo of a driver and dashboard inside a private car
     audio_prompts:
       - engine hum heard from inside a car
-      - the inside of a moving vehicle
+      - the sound inside a moving private car
+
+  - id: lecture_hall
+    display: School lecture hall
+    visual_prompts:
+      - a photo of a lecturer in a large lecture hall with tiered seats
+      - a photo of students seated in a university lecture auditorium
+    audio_prompts:
+      - the sound of a lecturer speaking to a large audience in a lecture hall
+      - students listening and applauding in a school lecture hall
+
+  - id: restaurant
+    display: Restaurant
+    visual_prompts:
+      - a photo of a restaurant dining room with tables and diners
+      - a photo of customers eating at tables in a restaurant dining room
+    audio_prompts:
+      - restaurant dining ambience with plates and conversation
+      - cutlery and conversation among diners in a restaurant dining room
+
+  - id: cafe
+    display: Cafe
+    visual_prompts:
+      - a photo of a coffee shop counter and tables
+      - a photo of a barista serving coffee in a cafe
+    audio_prompts:
+      - coffee shop ambience with an espresso machine and conversation
+      - cups clinking and people talking in a cafe
+
+  - id: public_transportation
+    display: Public transportation
+    visual_prompts:
+      - a photo inside a city bus with passengers
+      - a photo inside a subway or passenger train car
+    audio_prompts:
+      - passengers and transit doors inside a bus or train
+      - rumbling and announcements inside a subway train
+
+  - id: factory
+    display: Factory
+    visual_prompts:
+      - a photo of an industrial factory floor with machinery
+      - a photo of workers on a manufacturing assembly line
+    audio_prompts:
+      - machinery running on a factory floor
+      - industrial equipment humming and clanking in a factory
+
+  - id: construction
+    display: Construction site
+    visual_prompts:
+      - a photo of an active construction site with workers and cranes
+      - a photo of a building site with excavators
+    audio_prompts:
+      - power tools and hammering at a construction site
+      - heavy equipment operating on a building site
+
+  - id: classroom
+    display: School classroom
+    visual_prompts:
+      - a photo of a school classroom with desks and a teacher
+      - a photo of students in a small classroom with a blackboard
+    audio_prompts:
+      - a teacher speaking to students in a classroom
+      - students talking in a school classroom

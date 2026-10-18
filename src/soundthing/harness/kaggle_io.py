@@ -2,16 +2,65 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
+import tarfile
 import tempfile
 from typing import Any
 
 from soundthing.config import Config, load_config
 from soundthing.harness.paths import cache_root, dev_labels_dir, harness_home
+
+
+def _kaggle_cli() -> str:
+    env = os.environ.get("SOUNDTHING_KAGGLE_CLI")
+    if env:
+        return env
+    found = shutil.which("kaggle")
+    if found:
+        return found
+    local = Path.home() / ".local" / "bin" / ("kaggle.exe" if os.name == "nt" else "kaggle")
+    if local.is_file():
+        return str(local)
+    raise RuntimeError("kaggle CLI not found; install it (`uv tool install kaggle`) or set SOUNDTHING_KAGGLE_CLI")
+
+
+class CliApi:
+    """The subset of KaggleApi we use, backed by the `kaggle` CLI.
+
+    The CLI can live in its own Python: new-style `KGAT_` API tokens need kaggle>=1.8,
+    which requires Python 3.11+.
+    """
+
+    def _run(self, *args: str) -> str:
+        res = subprocess.run([_kaggle_cli(), *args], capture_output=True, text=True)
+        if res.returncode != 0:
+            raise RuntimeError(f"kaggle {' '.join(args)} failed: {res.stderr.strip() or res.stdout.strip()}")
+        return res.stdout
+
+    def kernels_push(self, folder: str) -> dict[str, Any]:
+        return {"output": self._run("kernels", "push", "-p", folder).strip()}
+
+    def kernels_status(self, slug: str) -> str:
+        out = self._run("kernels", "status", slug)
+        m = re.search(r'status "?(?:KernelWorkerStatus\.)?(\w+)"?', out)
+        return m.group(1) if m else out.strip()
+
+    def kernels_output(self, slug: str, path: str) -> None:
+        self._run("kernels", "output", slug, "-p", path, "-o")
+
+    def dataset_download_files(self, slug: str, path: str, unzip: bool) -> None:
+        args = ["datasets", "download", slug, "-p", path]
+        if unzip:
+            args.append("--unzip")
+        self._run(*args)
 
 
 class KaggleClient:
@@ -22,11 +71,7 @@ class KaggleClient:
 
     def _get_api(self) -> Any:
         if self._api is None:
-            from kaggle.api.kaggle_api_extended import KaggleApi
-
-            api = KaggleApi()
-            api.authenticate()
-            self._api = api
+            self._api = CliApi()
         return self._api
 
     def push_kernel(self, folder: Path) -> dict[str, Any]:
@@ -94,6 +139,33 @@ def _default_dataset_slug() -> str:
 dataset_slug = _default_dataset_slug
 
 
+def audioset_dataset_slug() -> str | None:
+    """Kaggle dataset holding the AudioSet eval audio (`audio/*.flac`) and label files."""
+    env = os.environ.get("SOUNDTHING_KAGGLE_AUDIOSET")
+    if env:
+        return env
+    user = os.environ.get("KAGGLE_USERNAME")
+    return f"{user}/soundthing-audioset-eval" if user else None
+
+
+BUNDLE_PATHS = ("src/soundthing", "config", "pyproject.toml")
+
+
+def code_bundle(root: Path | None = None) -> tuple[str, str]:
+    """Tar+gzip the package and config from the working tree; return (base64, sha256)."""
+    root = Path(root) if root is not None else Path(__file__).resolve().parents[3]
+
+    def skip_cache(ti: tarfile.TarInfo) -> tarfile.TarInfo | None:
+        return None if "__pycache__" in ti.name or ti.name.endswith(".pyc") else ti
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for rel in BUNDLE_PATHS:
+            tar.add(root / rel, arcname=rel, filter=skip_cache)
+    raw = buf.getvalue()
+    return base64.b64encode(raw).decode("ascii"), hashlib.sha256(raw).hexdigest()
+
+
 def push_cache_kernel(
     window: float,
     hop: float,
@@ -102,13 +174,10 @@ def push_cache_kernel(
     git_sha: str | None = None,
     n_per_env: int = 20,
     seed: int = 0,
+    holdout_frac: float = 0.2,
     client: KaggleClient | None = None,
 ) -> dict[str, Any]:
-    """Render kernel files into a temporary directory and push to Kaggle."""
-    repo_url = os.environ.get("SOUNDTHING_REPO_URL")
-    if not repo_url:
-        raise RuntimeError("SOUNDTHING_REPO_URL environment variable is required")
-
+    """Render kernel files (with the working tree's code embedded) and push to Kaggle."""
     if git_sha is None:
         import soundthing.harness.ledger as ledger_module
 
@@ -127,7 +196,8 @@ def push_cache_kernel(
     meta = {k: v for k, v in template_data.items() if not k.startswith("_soundthing")}
     meta["id"] = slug
     meta["title"] = title
-    meta["dataset_sources"] = [esc50_slug] if esc50_slug else []
+    audioset_slug = audioset_dataset_slug()
+    meta["dataset_sources"] = [d for d in (audioset_slug, esc50_slug) if d]
     meta["enable_gpu"] = True
     meta["enable_internet"] = True
     meta["is_private"] = True
@@ -137,15 +207,20 @@ def push_cache_kernel(
         "hop_sec": hop,
         "tagger_model": model,
         "git_sha": git_sha,
-        "repo_url": repo_url,
         "n_per_env": n_per_env,
         "seed": seed,
+        "holdout_frac": holdout_frac,
         "esc50_dataset": esc50_slug,
+        "audioset_dataset": audioset_slug,
     }
+    bundle_b64, bundle_sha = code_bundle()
+    params["bundle_sha256"] = bundle_sha
 
     kernel_src = (kaggle_dir / "cache_kernel.py").read_text(encoding="utf-8")
     params_line = f"PARAMS = {json.dumps(params)}  # filled in by kaggle_io.push_cache_kernel"
-    kernel_code = re.sub(r"^PARAMS\s*=.*$", params_line, kernel_src, flags=re.MULTILINE)
+    kernel_code = re.sub(r"^PARAMS\s*=.*$", lambda _: params_line, kernel_src, count=1, flags=re.MULTILINE)
+    bundle_line = f'BUNDLE = "{bundle_b64}"  # filled in by kaggle_io.push_cache_kernel'
+    kernel_code = re.sub(r"^BUNDLE\s*=.*$", lambda _: bundle_line, kernel_code, count=1, flags=re.MULTILINE)
 
     if client is None:
         client = KaggleClient()
@@ -300,13 +375,10 @@ def request_recache(
     git_sha = state["sha"]
     dirty = bool(state.get("dirty", False))
 
-    if dirty:
-        note = (
-            "Working directory has uncommitted changes which are NOT in the Kaggle build; "
-            "the commit sha must be pushed to the remote repository first."
-        )
-    else:
-        note = "Ensure the commit sha is pushed to the remote repository before running the kernel."
+    note = (
+        "The kernel builds the working tree as bundled (see bundle_sha256), "
+        + ("including uncommitted changes." if dirty else "which matches the commit sha.")
+    )
 
     push_result = push_cache_kernel(
         window=window,
@@ -329,6 +401,7 @@ def request_recache(
         "window_sec": window,
         "hop_sec": hop,
         "tagger_model": model,
+        "bundle_sha256": push_result["params"]["bundle_sha256"],
         "status": "pushed",
         "note": note,
     }

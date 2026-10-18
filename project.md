@@ -26,7 +26,7 @@ breaking, screams, gunshots, explosions and a baby crying.
   classes.
 - A web demo: upload a video, then play it back with baseline and conditioned captions side
   by side.
-- A small hand-labeled eval set: 10–20 clips across 5–6 environments.
+- Eval data: the AudioSet strong-label eval split (~6k 10 s clips with event onsets mapped to our vocabulary). It has no environment labels, so it scores baseline mode. No hand labeling.
 
 **Out of scope (for now):** live streams (but the model core is designed so it can be
 reused for them), speech transcription (a VAD only masks speech regions), music or speaker
@@ -202,14 +202,13 @@ the AudioSet names against the checkpoint's label list.
 | 2 | `environment/visual.py` | CLIP/SigLIP frame pooling and prompt similarity |
 | 2 | `environment/audio.py` | CLAP segment pooling and prompt similarity |
 | 3 | `captions.py` `merge_with_speech` | parse and interleave the speech subtitle track |
-| all | `labels/` | hand-label the eval clips |
 
 ---
 
 ## Milestones
 
 1. **Data and vocabulary:** finish the environment list, vocabulary and safety set, then
-   collect and label the eval clips. *(Starter config is done; labeling is still open.)*
+   import the AudioSet strong-label eval set. *(Done.)*
 2. **Baseline:** audio-only detection over the full vocabulary → VTT. Measure event F1 and
    false positives per minute.
 3. **Environment classifier:** audio-only, then video-only, then fused. Measure accuracy
@@ -224,7 +223,7 @@ the AudioSet names against the checkpoint's label list.
 
 ### How the team works in parallel
 - **Kickoff:** confirm the environment list, vocabulary and contracts (drafted in this
-  repo), then divide up the labeling.
+  repo).
 - **Parallel build:** P1 swaps `events.backend` to `real` once the baseline works. P2 does
   the same for `environment.backend`. P3 keeps the stub path working end to end the whole
   time, so it's the fallback if a model component runs late.
@@ -242,7 +241,7 @@ config/            shared YAML config (see above)
 docs/
   interfaces.md    full contract spec
   examples/        valid example JSON for each contract
-labels/            hand labels, one JSON per clip (+ labeling guide)
+labels/            optional `clip_labels` JSON for pipeline runs (eval data: labels/README.md)
 src/soundthing/
   contracts.py     shared types + JSON IO + validation
   config.py        config loading + cross-validation

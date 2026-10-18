@@ -50,7 +50,7 @@ whole path works with fake output until the real models land.
 config/                 shared config — see docs/interfaces.md for owners
   environments.yaml  vocabulary.yaml  priors.yaml  thresholds.yaml  pipeline.yaml
 docs/interfaces.md      the JSON contracts between components  (+ docs/examples/)
-labels/                 hand labels for the eval set, one JSON per clip
+labels/                 optional clip labels for pipeline runs (eval data: labels/README.md)
 src/soundthing/
   contracts.py          shared dataclasses + JSON IO + validation      (everyone)
   config.py             config loading + cross-validation              (everyone)

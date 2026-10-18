@@ -386,3 +386,30 @@ def test_on_screen_cap_respects_min_cue_sec_extension(cfg):
     assert len(filtered2) == 2
     for e in filtered2:
         e.validate()
+
+
+def test_coarse_group_inherits_safety_and_sustained(cfg):
+    """Relabeled coarse events keep safety priority (any member safety) and
+    sustained repeat suppression (all members sustained)."""
+    safety_group = next(g for g in cfg.coarse_groups if any(c.safety for c in cfg.classes if c.coarse == g))
+    sustained_group = next(
+        g for g in cfg.coarse_groups
+        if all(c.sustained for c in cfg.classes if c.coarse == g)
+        and any(c.coarse == g for c in cfg.classes)
+    )
+    non_safety_cid = next(c.id for c in cfg.classes if not c.safety and not c.coarse)
+
+    cfg.pipeline["events"]["postprocess"]["max_on_screen"] = 1
+    ev_non = C.CaptionEvent(start=1.0, end=3.0, label=cfg.caption_for(non_safety_cid), class_id=non_safety_cid, confidence=0.95)
+    ev_group = C.CaptionEvent(start=1.5, end=3.5, label=cfg.caption_for(safety_group), class_id=safety_group, confidence=0.55)
+    filtered = pp.priority_filter([ev_non, ev_group], cfg)
+    assert [e.class_id for e in filtered] == [safety_group]
+
+    cfg.pipeline["events"]["postprocess"]["max_on_screen"] = 10
+    cfg.pipeline["events"]["postprocess"]["sustained_repeat_sec"] = 60.0
+    label = cfg.caption_for(sustained_group)
+    events = [
+        C.CaptionEvent(start=5.0, end=6.0, label=label, class_id=sustained_group, confidence=0.8),
+        C.CaptionEvent(start=15.0, end=16.0, label=label, class_id=sustained_group, confidence=0.8),
+    ]
+    assert [e.start for e in pp.priority_filter(events, cfg)] == [5.0]

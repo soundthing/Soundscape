@@ -12,16 +12,17 @@ environment:        # Person 2
   segmentation:
     detector: content         # PySceneDetect detector
     threshold: 27.0
-    min_segment_sec: 2.0
+    min_segment_sec: 5.0
     max_segment_sec: 30.0     # split long shots so the env can drift
   visual:
     model: google/siglip-base-patch16-224
   audio:
     model: laion/clap-htsat-unfused
   fusion:
-    audio_weight: 0.5
-    visual_weight: 0.5
+    audio_weight: 0.3
+    visual_weight: 0.7
     temperature: 0.01         # softmax temperature over prompt similarities
+    visual_similarity_floor: 0.0  # all visual prompt similarities below this -> general
   confidence_threshold: 0.45  # below this -> env = general
 
 events:             # Person 1

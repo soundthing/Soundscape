@@ -7,8 +7,10 @@ cause is gone.
 - **Holdout clips must never appear in dev.** AudioSet holdout clips evaluate models
   strictly on promotion; allowing holdout ids into dev risks tuning against the test split,
   so import refuses overlaps and enforces disjoint sets.
-- **`import kaggle` authenticates at import time.** Importing `kaggle` or any of its submodules without valid credentials immediately raises; import lazily inside client accessors only.
-- **Kaggle builds only committed and pushed code.** The cache kernel clones the repo at a specified git SHA; uncommitted local edits or unpushed commits will not be in the remote build.
+- **`import kaggle` authenticates at import time** and raises without credentials, so the harness never imports it; it shells out to the CLI.
+- **New Kaggle tokens (`KGAT_…`) need kaggle>=1.8, which needs Python 3.11+.** The project venv is 3.10, so the CLI lives in its own tool env (`uv tool install --python 3.12 kaggle`); the token goes in `~/.kaggle/access_token`, not `kaggle.json`.
+- **`kaggle datasets create -p <relative/path>` fails on Windows** (it builds an upload-cache filename from the path). Run it from inside the folder with `-p .`.
+- **Kaggle output is everything in `/kaggle/working`.** The kernel keeps harness state in `/tmp` and copies out only caches, dev labels and meta, so holdout labels and audio never come back.
 - **Faking a harness submodule needs the package attribute too.** Once the real module has
   been imported, `import soundthing.harness.x as m` resolves through the package
   attribute, so a fake placed only in `sys.modules` is silently bypassed (tests pass alone,

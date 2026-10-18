@@ -83,19 +83,36 @@ def test_slug_helpers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         kaggle_io.dataset_slug()
 
 
-def test_push_cache_kernel_missing_repo_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))
-    monkeypatch.delenv("SOUNDTHING_REPO_URL", raising=False)
-    with pytest.raises(RuntimeError, match="SOUNDTHING_REPO_URL"):
-        kaggle_io.push_cache_kernel(1.0, 0.5, "panns_cnn14")
+def test_code_bundle_has_package_and_config() -> None:
+    import base64
+    import hashlib
+    import io
+    import tarfile
+
+    b64, sha = kaggle_io.code_bundle()
+    raw = base64.b64decode(b64)
+    assert hashlib.sha256(raw).hexdigest() == sha
+    names = tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz").getnames()
+    assert "src/soundthing/harness/kaggle_io.py" in names
+    assert "config/vocabulary.yaml" in names
+    assert "pyproject.toml" in names
+    assert not any("__pycache__" in n for n in names)
+
+
+def test_cli_api_parses_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    api = kaggle_io.CliApi()
+    monkeypatch.setattr(api, "_run", lambda *a: 'user/k has status "KernelWorkerStatus.COMPLETE"')
+    assert kaggle_io.KaggleClient(api=api).kernel_status("user/k") == "complete"
+    monkeypatch.setattr(api, "_run", lambda *a: 'user/k has status "running"')
+    assert kaggle_io.KaggleClient(api=api).kernel_status("user/k") == "running"
 
 
 def test_push_cache_kernel(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))
-    monkeypatch.setenv("SOUNDTHING_REPO_URL", "https://github.com/example/repo.git")
     monkeypatch.setenv("KAGGLE_USERNAME", "mockuser")
     monkeypatch.delenv("SOUNDTHING_KAGGLE_KERNEL", raising=False)
     monkeypatch.delenv("SOUNDTHING_KAGGLE_ESC50", raising=False)
+    monkeypatch.delenv("SOUNDTHING_KAGGLE_AUDIOSET", raising=False)
 
     fake_ledger = types.ModuleType("soundthing.harness.ledger")
     fake_ledger.git_state = lambda cwd=None: {"sha": "sha_feedcafe", "dirty": False, "branch": "main"}
@@ -132,7 +149,8 @@ def test_push_cache_kernel(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     assert meta["enable_gpu"] is True
     assert meta["enable_internet"] is True
     assert meta["is_private"] is True
-    assert len(meta["dataset_sources"]) == 1
+    assert meta["dataset_sources"][0] == "mockuser/soundthing-audioset-eval"
+    assert len(meta["dataset_sources"]) == 2
     assert not any(k.startswith("_soundthing") for k in meta)
 
     code = recorded_files["cache_kernel.py"]
@@ -143,10 +161,13 @@ def test_push_cache_kernel(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     assert params["hop_sec"] == 0.75
     assert params["tagger_model"] == "panns_cnn14"
     assert params["git_sha"] == "sha_feedcafe"
-    assert params["repo_url"] == "https://github.com/example/repo.git"
     assert params["n_per_env"] == 15
     assert params["seed"] == 42
-    assert params["esc50_dataset"] == meta["dataset_sources"][0]
+    assert params["audioset_dataset"] == meta["dataset_sources"][0]
+    assert params["esc50_dataset"] == meta["dataset_sources"][1]
+    bundle = re.search(r'^BUNDLE = "([A-Za-z0-9+/=]+)"', code, flags=re.MULTILINE)
+    assert bundle is not None and len(bundle.group(1)) > 1000
+    compile(code, "cache_kernel.py", "exec")
     assert result["params"] == params
 
 
@@ -306,7 +327,6 @@ def test_install_cache_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
 def test_request_recache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))
-    monkeypatch.setenv("SOUNDTHING_REPO_URL", "https://github.com/example/repo.git")
     monkeypatch.setenv("KAGGLE_USERNAME", "mockuser")
 
     fake_cache = types.ModuleType("soundthing.events.cache")
@@ -358,6 +378,7 @@ def test_cache_kernel_script_compiles() -> None:
     )
     src = kernel_file.read_text(encoding="utf-8")
     assert "PARAMS = {}  # filled in by kaggle_io.push_cache_kernel" in src
+    assert 'BUNDLE = ""  # filled in by kaggle_io.push_cache_kernel' in src
     lines = src.splitlines()
     assert len(lines) < 120
     # Compiles cleanly

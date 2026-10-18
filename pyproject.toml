@@ -17,7 +17,7 @@ dependencies = [
 # Person 1: sound events
 events = ["torch>=2.1", "torchaudio>=2.1", "panns-inference>=0.1.1", "transformers>=4.40", "silero-vad>=5.1"]
 # Person 2: environment classifier
-environment = ["torch>=2.1", "transformers>=4.40", "pillow>=10", "scenedetect[opencv]>=0.6.4"]
+environment = ["torch>=2.1", "transformers>=4.40", "pillow>=10", "scenedetect[opencv]>=0.6.4", "sentencepiece>=0.2", "protobuf>=4"]
 # Person 1: evaluation harness (MCP server, sweeps, Kaggle cache builds)
 harness = ["mcp>=2", "optuna>=3.6", "kaggle>=1.6"]
 # Person 1: optional source separation before event tagging (events.separation)

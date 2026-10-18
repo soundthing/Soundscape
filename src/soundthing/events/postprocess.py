@@ -21,6 +21,22 @@ def _safe_coarse_of(class_id: str, cfg: Config) -> str | None:
         return None
 
 
+def _flags(class_id: str, cfg: Config) -> tuple[bool, bool]:
+    """(safety, sustained) for a fine class or a coarse group id.
+
+    A coarse group is safety if any member is (fallback only fires when unsure
+    between members, and safety sounds are never dropped for precision), and
+    sustained only if every member is."""
+    if class_id in cfg.coarse_groups:
+        members = [c for c in cfg.classes if c.coarse == class_id]
+        return any(c.safety for c in members), bool(members) and all(c.sustained for c in members)
+    try:
+        sc = cfg.sound_class(class_id)
+    except KeyError:
+        return False, False
+    return sc.safety, sc.sustained
+
+
 def smooth(scores: FrameScores, width_sec: float) -> FrameScores:
     """Two-sided running median filter along time, per class.
 
@@ -226,14 +242,7 @@ def priority_filter(events: list[CaptionEvent], cfg: Config) -> list[CaptionEven
     last_kept_start_by_class: dict[str, float] = {}
 
     for ev in events_sorted:
-        is_sustained = False
-        try:
-            sc = cfg.sound_class(ev.class_id)
-            is_sustained = sc.sustained
-        except KeyError:
-            is_sustained = False
-
-        if is_sustained:
+        if _flags(ev.class_id, cfg)[1]:
             if ev.class_id in last_kept_start_by_class:
                 last_start = last_kept_start_by_class[ev.class_id]
                 if (ev.start - last_start) < sustained_repeat_sec:
@@ -243,12 +252,9 @@ def priority_filter(events: list[CaptionEvent], cfg: Config) -> list[CaptionEven
         kept_sustained.append(ev)
 
     # b. On-screen cap
-    safety_ids = cfg.safety_ids()
-
     def priority_key(ev: CaptionEvent) -> tuple:
-        is_safety = ev.class_id in safety_ids
         return (
-            0 if is_safety else 1,
+            0 if _flags(ev.class_id, cfg)[0] else 1,
             -ev.confidence,
             ev.start,
             ev.end,

@@ -1,7 +1,8 @@
 """FastAPI demo backend — OWNER: Person 3.
 
 POST /api/videos                    upload a video; processing starts in background -> {video_id}
-GET  /api/videos/{id}               {status, error?}
+POST /api/youtube                   download/process a public or unlisted video -> {video_id}
+GET  /api/videos/{id}               {status, demo, error?}; includes downloading
 GET  /api/videos/{id}/video         the uploaded video
 GET  /api/videos/{id}/captions/{mode}.vtt   mode = baseline | conditioned
 GET  /api/videos/{id}/env_segments  env_segments.json payload (for an env timeline overlay)
@@ -11,26 +12,49 @@ GET  /                              demo player
 from __future__ import annotations
 
 import os
+import re
+from dataclasses import asdict
 import shutil
 import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from .. import contracts as C
 from ..config import load_config
 from ..extract import video_id_for
 from ..pipeline import MODES, run_video
+from .youtube import YouTubeJobs, complete_run
 
 RUNS = Path(os.environ.get("SOUNDTHING_RUNS", "runs"))
 UPLOADS = Path(os.environ.get("SOUNDTHING_UPLOADS", "uploads"))
 STATIC = Path(__file__).parent / "static"
 ALLOWED = {".mp4", ".mov", ".webm"}
 
-app = FastAPI(title="soundthing demo")
 cfg = load_config(os.environ.get("SOUNDTHING_CONFIG"))
 status: dict[str, dict] = {}
+youtube_jobs = YouTubeJobs(RUNS, UPLOADS, cfg, status)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    youtube_jobs.close()
+
+
+app = FastAPI(title="soundthing demo", lifespan=lifespan)
+
+
+class YouTubeRequest(BaseModel):
+    youtube_id: str = Field(pattern=r"^[A-Za-z0-9_-]{11}$")
+
+
+@app.post("/api/youtube", status_code=202)
+def submit_youtube(request: YouTubeRequest):
+    return {"video_id": youtube_jobs.submit(request.youtube_id)}
 
 
 def _process(video_path: Path, video_id: str) -> None:
@@ -60,10 +84,11 @@ async def upload(file: UploadFile, background: BackgroundTasks):
 
 @app.get("/api/videos/{video_id}")
 def get_status(video_id: str):
+    demo = any(cfg.pipeline[stage]["backend"] == "stub" for stage in ("events", "environment"))
     if video_id in status:
-        return status[video_id]
-    if (RUNS / video_id / "inputs.json").exists():
-        return {"status": "done"}
+        return {**status[video_id], "demo": demo}
+    if complete_run(RUNS / video_id):
+        return {"status": "done", "demo": demo}
     raise HTTPException(404)
 
 
@@ -73,6 +98,20 @@ def get_video(video_id: str):
     if not path.exists():
         raise HTTPException(404)
     return FileResponse(C.load_inputs(path).video_path)
+
+
+@app.get("/api/videos/{video_id}/direction")
+def get_direction(video_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", video_id):
+        raise HTTPException(404)
+    path = RUNS / video_id / "direction.json"
+    if not path.is_file():
+        youtube_jobs.queue_direction(video_id)
+        raise HTTPException(404)
+    try:
+        return asdict(C.load_direction(path))
+    except (OSError, ValueError, TypeError, KeyError):
+        raise HTTPException(500, "Direction track is invalid")
 
 
 @app.get("/api/videos/{video_id}/captions/{mode}.vtt")

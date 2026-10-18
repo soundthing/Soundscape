@@ -18,10 +18,23 @@ before editing anything. Then only edit that role's area:
 | Person 1 | `src/soundthing/events/`, `config/thresholds.yaml`, the `events:` section of `config/pipeline.yaml`, `tests/` for events |
 | Person 2 | `src/soundthing/environment/`, the `environment:` section of `config/pipeline.yaml`, `tests/` for environment |
 | Person 3 | `extract.py`, `captions.py`, `evaluate.py`, `pipeline.py`, `server/`, the `extract:`/`captions:`/`eval:` sections of `config/pipeline.yaml`, their `tests/` |
+| Person 3 (direction and extension) | `extension/`, `src/soundthing/direction.py`, and direction-analysis tests |
+| Person 1 (evaluation harness) | `src/soundthing/harness/`, `tests/test_harness_*.py`, `data/harness/` |
 | Anyone | `labels/*.json`, their own scratch files outside the repo |
 
 Editing another role's area needs the user's explicit OK. Tell them it belongs to
 someone else so they can coordinate.
+
+Person 3 owns soundtrack direction analysis and its caption-border visualization.
+Person 1 retains ownership of `events/`, including event detection and modifiers;
+Person 2 retains ownership of environment analysis. Direction analysis is independent
+of those components and must use documented shared contracts.
+
+The evaluation harness is its own component: it scores and tunes every stage (events,
+environment, captions, end to end), by config and by code changes in experiment
+worktrees. It may read any component, but it writes config only for its owner's areas.
+Winning changes for another role's area become proposals (under `data/harness/proposals/`)
+for that owner to apply.
 
 ## 2. Shared interfaces need confirmation every time
 

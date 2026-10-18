@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "kind": "direction",
+  "data": {
+    "duration": 0.15,
+    "mode": "surround51",
+    "channels": ["FL", "FR", "FC", "SL", "SR"],
+    "frames": [
+      {"time": 0, "levels": {"FL": 0.8, "FR": 0, "FC": 0, "SL": 0, "SR": 0}},
+      {"time": 0.05, "levels": {"FL": 0, "FR": 0, "FC": 0.6, "SL": 0, "SR": 0}},
+      {"time": 0.10, "levels": {"FL": 0, "FR": 0, "FC": 0, "SL": 0, "SR": 0.9}}
+    ]
+  }
+}

@@ -1,23 +1,29 @@
-# Kaggle Tuning Cache Runner
+# Kaggle cache runner
 
-Builds development audio feature caches on a free Kaggle GPU (T4/P100) for sound event tuning.
+Builds harness feature caches on a free Kaggle GPU (T4/P100). The kernel runs the code from
+your working tree (embedded in the script as a tarball), so nothing needs committing or pushing,
+and no GitHub token is needed.
 
-## Environment Variables and Credentials
+## Setup (once)
 
-- `KAGGLE_USERNAME` & `KAGGLE_KEY`: Kaggle API credentials (or configure `~/.kaggle/kaggle.json`).
-- `SOUNDTHING_REPO_URL`: Git remote URL of the repository (required for cloning on Kaggle).
-- `SOUNDTHING_KAGGLE_KERNEL`: Optional kernel slug override (defaults to `${KAGGLE_USERNAME}/soundthing-tuning-cache`).
-- `SOUNDTHING_KAGGLE_DATASET`: Optional cache dataset slug override (defaults to `${KAGGLE_USERNAME}/soundthing-tuning-cache-data`).
-- `SOUNDTHING_KAGGLE_ESC50`: Optional Kaggle ESC-50 dataset slug mirror.
-- Kaggle secret `GITHUB_TOKEN`: Add as a Kaggle User Secret (`GITHUB_TOKEN`) if cloning a private GitHub repository.
+- Kaggle CLI >= 1.8 in its own Python 3.11+ env: `uv tool install --python 3.12 kaggle`.
+  The harness finds it on `PATH`, in `~/.local/bin`, or via `SOUNDTHING_KAGGLE_CLI`.
+- API token (kaggle.com → Settings → API) saved as `~/.kaggle/access_token`; phone-verify the
+  account (GPU and internet need it).
+- `KAGGLE_USERNAME` set, or override slugs with `SOUNDTHING_KAGGLE_KERNEL`,
+  `SOUNDTHING_KAGGLE_DATASET`, `SOUNDTHING_KAGGLE_AUDIOSET`, `SOUNDTHING_KAGGLE_ESC50`.
+- AudioSet audio uploaded as the private dataset `<user>/soundthing-audioset-eval`:
+  `audio/<segment_id>.flac`, `audioset_eval_strong.tsv`, `class_labels_indices.csv`
+  (see `labels/README.md` for sources). Upload from inside the folder:
+  `kaggle datasets create -p . -r zip`.
 
-## Execution Loop
+## Loop
 
-1. **Request Recache**: Call `request_recache(window, hop, model)` to push the kernel script at the current git SHA.
-2. **Poll Status**: Wait until `kernel_status()` returns `"complete"`.
-3. **Save Dataset or Download Output**: Save the completed kernel run output as a private Kaggle dataset version, or download directly via `download_cache(from_kernel=True)`.
-4. **Install Cache**: Call `install_cache(download_dir, cfg)` to verify the cache key against the configuration hash, ensure disjoint dev/holdout IDs, and populate `data/harness/cache/` and `data/harness/dev/labels/`.
+1. `python -m soundthing.harness recache --window 1.0 --hop 0.25 --model panns_cnn14`
+   pushes the kernel.
+2. Poll `kernel_status()` until `complete` (about an hour for the full AudioSet set).
+3. `download_cache(from_kernel=True)`, then `install_cache(download_dir, cfg)`: checks the
+   cache key, refuses dev ids that are in the holdout, and installs caches + dev labels.
 
-## Important Note
-
-The kernel executes `git clone` and checkouts `git_sha`. Only committed and pushed code is built on Kaggle. Uncommitted local working tree changes will not be included in the remote build.
+Holdout labels never leave the kernel. Locally, the holdout split comes from running
+`import-audioset` (same deterministic split).
