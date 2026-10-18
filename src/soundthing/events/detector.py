@@ -11,6 +11,7 @@ import numpy as np
 from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs
 from . import postprocess as pp
+from . import separation
 from .clap import load_clap, text_embeddings
 from .core import EventModels
 from .tagger import build_tagger_map, load_tagger
@@ -37,7 +38,11 @@ def _models_cache_key(cfg: Config) -> tuple:
     clap_model = clap_cfg.get("model")
     clap_enabled = clap_cfg.get("enabled", True)
     calibration = _freeze(clap_cfg.get("calibration", {}))
-    return (tagger_model, clap_model, clap_enabled, calibration, tuple(cfg.class_ids))
+    key = (tagger_model, clap_model, clap_enabled, calibration, tuple(cfg.class_ids))
+    if separation.is_enabled(cfg):
+        sep_cfg = separation.sep_config(cfg)
+        return key + (True, sep_cfg.get("model"))
+    return key
 
 
 def get_models(cfg: Config) -> EventModels:
@@ -68,6 +73,10 @@ def load_models(cfg: Config) -> EventModels:
         clap = load_clap(cfg)
         clap_text_emb = text_embeddings(clap, cfg)
 
+    separator = None
+    if separation.is_enabled(cfg):
+        separator = separation.load_separator(cfg)
+
     return EventModels(
         tagger=tagger,
         clap=clap,
@@ -75,6 +84,7 @@ def load_models(cfg: Config) -> EventModels:
         tagger_map=tagger_map,
         clap_text_emb=clap_text_emb,
         audioset_names=audioset_names,
+        separator=separator,
     )
 
 
