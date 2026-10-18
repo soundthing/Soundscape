@@ -5,18 +5,15 @@ from __future__ import annotations
 import copy
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
 import soundfile as sf
 
 from soundthing.config import Config
-from soundthing.contracts import CaptionEvent, ExtractedInputs
-from soundthing.events.core import EventModels
+from soundthing.contracts import ExtractedInputs
 import soundthing.events.detector as detector
 import soundthing.events.separation as separation
-from soundthing.events.tagger import build_tagger_map
 from soundthing.events.tuning.cache import cache_key
 from soundthing.events import vad
 
