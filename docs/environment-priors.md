@@ -76,7 +76,7 @@ This tests prediction of *dataset annotations*, treating unannotated labels as a
 for the diagnostic. It is not an event-detection accuracy result: generated captions
 may misdescribe a location, omitted annotations can hide real sounds, and the corpus
 is selected rather than a random sample of real-world environments. The thresholds
-and CLAP calibration still need labeled-clip evaluation (fine/coarse F1, FP/min).
+still need labeled-clip evaluation (fine/coarse F1, FP/min). Event CLAP has been removed; environment CLAP remains.
 
 ## Reproduction
 

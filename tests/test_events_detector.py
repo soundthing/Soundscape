@@ -56,10 +56,8 @@ def fake_env(cfg: Config, monkeypatch):
         load_calls += 1
         return EventModels(
             tagger=tagger,
-            clap=None,
             class_ids=list(c.class_ids),
             tagger_map=tagger_map,
-            clap_text_emb=None,
         )
 
     monkeypatch.setattr(detector, "load_models", fake_load_models)

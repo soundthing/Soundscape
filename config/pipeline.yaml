@@ -31,12 +31,6 @@ events:             # Person 1
   hop_sec: 0.25
   tagger:
     model: panns_cnn14        # panns_cnn14 | beats | yamnet
-  clap:
-    enabled: true
-    model: laion/clap-htsat-unfused
-    calibration:              # placeholders until tuned on labeled clips
-      center: 0.2
-      scale: 20.0
   vad:
     model: silero
     # Speech labels must not be suppressed by the speech detector itself.

@@ -18,11 +18,8 @@ sounds can be boosted and unlikely ones downweighted, while strong enough audio
 can always qualify. Legacy configs retain multiplication. Low scene confidence
 still blends toward neutral `general`, and safety classes bypass the table.
 
-## Tagger and CLAP combine by max — events
-A class takes the higher of its tagger and CLAP scores. Simple, and lets either model
-detect a class on its own. Revisit if CLAP adds false positives on classes the tagger
-already covers well (options: CLAP only for classes without AudioSet labels, or per-class
-weights). Decide from eval numbers.
+## PANNs-only event classification — events, reverses max fusion
+Previously each class took the maximum of PANNs and an untuned CLAP sigmoid score. The user requested removing event CLAP after reviewing how ambiguous similarities could override PANNs or supply unsupported specific labels. Remove the event scorer rather than leave a flag that can reactivate it; environment CLAP is independent and retained. This is a requested simplification, not a measured accuracy improvement. The shared legacy unmapped ids remain silent until their separately approved cleanup.
 
 ## `score_window` stays a pure single-window function — agreed
 So a streaming wrapper can reuse it later. Offline speed comes from batching around it,
@@ -73,7 +70,7 @@ Readability padding must obey the same relationship or duplicate parents reappea
 ## Every PANNs output has an independent class — events
 A broad alias must not directly score a specific class: a high `Dog` score does not
 prove barking. Retain the original ids for primary labels, give remaining AudioSet
-labels machine-id-based ids, and preserve the five CLAP-only classes separately.
+labels machine-id-based ids. Five legacy CLAP-only classes were originally preserved separately; after event CLAP removal they remain configured but cannot fire pending shared-interface cleanup.
 This expands coverage without replacing the model or claiming new accuracy.
 
 ## Dataset enrichment is a weak association estimate — events

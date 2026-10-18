@@ -56,7 +56,7 @@ src/soundthing/
   config.py             config loading + cross-validation              (everyone)
   stages.py             stage interfaces, stub/real backend selection  (everyone)
   environment/          Person 2: segmentation, visual/audio branches, fusion
-  events/               Person 1: tagger, CLAP, VAD, conditioning, post-processing
+  events/               Person 1: PANNs tagger, VAD, conditioning, post-processing
   extract.py            Person 3: ffmpeg extraction
   captions.py           Person 3: VTT/SRT writer, speech subtitle merge
   evaluate.py           Person 3: event F1, FP/min, env accuracy

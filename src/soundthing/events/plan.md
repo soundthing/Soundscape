@@ -12,7 +12,7 @@ Background knowledge (stack details, decisions, pitfalls, tuning results) lives 
 2. **Speech masking:** turn down non-safety guesses where people are talking.
 3. **Conditioning:** reweight likely events by environment; the safety set bypasses this.
 4. **Post-processing:** turn raw scores into clean, display-ready captions.
-5. **Vocabulary and thresholds:** all 527 AudioSet labels plus five CLAP-only classes, hierarchy filtering, and per-class thresholds.
+5. **Vocabulary and thresholds:** all 527 AudioSet labels, hierarchy filtering, and per-class thresholds. Five legacy unmapped classes remain in shared configuration pending approved cleanup.
 6. **Baseline vs conditioned:** both outputs every run, to show the environment layer helps.
 
 Also: hand-label a share of the eval clips. Prior changes go through Person 2.
@@ -24,7 +24,6 @@ Also: hand-label a share of the eval clips. Prior changes go through Person 2.
 | Language / core | Python 3.10+, numpy, soundfile |
 | ML runtime | PyTorch + torchaudio (resampling) |
 | AudioSet tagger | PANNs CNN14 via `panns-inference` (BEATs / YAMNet as alternatives) |
-| Zero-shot scoring | LAION CLAP (`laion/clap-htsat-unfused`) via Hugging Face `transformers` |
 | Speech detection | Silero VAD via `silero-vad` |
 | Post-processing | plain numpy (no scipy) |
 | Testing / eval | pytest; `soundthing eval` against hand labels |
@@ -35,7 +34,7 @@ them. Details and rationale: [references/stack.md](references/stack.md).
 ## Status
 
 **Done (code, tested with fake models):** prior conditioning, AudioSet → vocabulary
-mapping, tagger (PANNs CNN14) and CLAP loading and window scoring, Silero VAD speech
+mapping, tagger (PANNs CNN14) loading and window scoring, Silero VAD speech
 masking, all post-processing steps, modifiers, the end-to-end `detect` flow with models
 and raw scores shared across both modes, and the wrong-environment experiment
 (`python -m soundthing.events.experiments`).
@@ -45,7 +44,7 @@ classes, with the 61 original ids retained. Hierarchy suppression and cue-paddin
 protection have synthetic integration tests. Real environment + PANNs + CLAP inference was run on a 63.616-second cached
 YouTube video: 34 baseline and 43 conditioned events. The 532 × 527 mapping,
 VTT output, ancestor suppression, and new AudioSet-class outputs were verified. There are still no labeled-clip F1 / FP-per-minute measurements.
-CLAP calibration and the default thresholds remain untuned placeholders.
+That run predates removal of event CLAP and does not validate PANNs-only caption quality. Default thresholds remain untuned placeholders. CLAP is now used only by environment detection.
 
 **Data-derived prior proposal:** Sound-VECaps context captions joined with AudioSet
 training annotations cover all 527 labels. Estimation excludes official evaluation
@@ -60,10 +59,8 @@ tuning thresholds. The expanded conditioned path has completed a real-video run.
 
 1. **Baseline detection:** load the tagger, score windows with it alone, threshold into
    events. Get the first event F1 and false-positives-per-minute numbers.
-   *Code done (`events.clap.enabled: false` gives tagger-only); numbers pending.*
-2. **CLAP:** add zero-shot scores so classes AudioSet covers poorly (or not at all) get
-   detected. Calibrate them to sit alongside tagger scores. Re-measure.
-   *Code done; calibration and measurement pending.*
+   *Code done; PANNs is now the sole event scorer. Labeled accuracy numbers pending.*
+2. **Event CLAP removed:** the user requested PANNs-only sound classification after reviewing the untuned zero-shot conversion and max-fusion behavior. Environment CLAP remains. The five legacy unmapped classes cannot fire in the real detector.
 3. **Speech masking:** add VAD so dialogue stops triggering false events. *Code done.*
 4. **Post-processing:** smoothing, merging, coarse fallback when unsure between similar
    sounds, once-only captions for sustained sounds, and a cap on captions on screen.
@@ -82,8 +79,7 @@ tuning thresholds. The expanded conditioned path has completed a real-video run.
 
 ## Approach
 
-- **Detection:** the tagger and CLAP each score every window; a class takes the higher of
-  the two. Models load once per run and are shared by both modes.
+- **Detection:** only PANNs scores sound-event windows. Models load once per run and are shared by both modes. Old local zero-shot settings cannot reactivate the removed scorer.
 - **Speech masking:** VAD finds speech spans; non-safety scores inside them are scaled
   down.
 - **Conditioning:** already implemented; applies Person 2's environment probabilities

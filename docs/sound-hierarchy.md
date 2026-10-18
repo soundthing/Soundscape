@@ -1,8 +1,10 @@
 # Full sound vocabulary and hierarchy
 
 PANNs still runs the same CNN14 checkpoint. Each of its 527 output labels now has
-an independent caption class. The existing five CLAP-only classes remain too,
-for 532 eligible classes. A class still needs its own threshold and minimum event
+an independent caption class, for 527 detectable classes. The shared vocabulary
+still contains five legacy classes with no AudioSet mapping; event CLAP has been
+removed, so these five cannot fire in real detection. A class still needs its own
+threshold and minimum event
 duration. Speech and music classes are included in this expanded vocabulary.
 
 Existing ids stay attached to their primary AudioSet label, preserving evaluation

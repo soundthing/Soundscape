@@ -65,7 +65,7 @@ video file
                 ▼
  ┌──────────── Person 1: sound events ──────────┐
  │ 3. Sliding windows (1 s / 0.25 s hop)          │
- │    AudioSet tagger → vocabulary + CLAP scores  │
+ │    PANNs tagger → vocabulary scores            │
  │    VAD speech masking                          │
  │ 4. Conditioning    soft priors P(event|env),   │
  │                    safety set bypasses         │
@@ -91,7 +91,7 @@ audio, because many important sounds come from off-screen.
 
 | | Owns | Code |
 |---|---|---|
-| **Person 1: sound events** | tagger, CLAP extra labels, AudioSet→vocabulary mapping, thresholds, safety set, VAD, post-processing, applying priors | `src/soundthing/events/`, `config/vocabulary.yaml`, `config/thresholds.yaml` |
+| **Person 1: sound events** | PANNs tagger, AudioSet→vocabulary mapping, thresholds, safety set, VAD, post-processing, applying priors | `src/soundthing/events/`, `config/vocabulary.yaml`, `config/thresholds.yaml` |
 | **Person 2: environment** | shot segmentation, visual and audio branches, fusion, confidence and `general` fallback, environment list, **priors table (single owner)** | `src/soundthing/environment/`, `config/environments.yaml`, `config/priors.yaml` |
 | **Person 3: pipeline, product, eval** | ffmpeg extraction, orchestration/CLI, VTT/SRT and subtitle merge, FastAPI and player, eval harness, baseline vs conditioned comparison, pitch | `extract.py`, `pipeline.py`, `captions.py`, `evaluate.py`, `server/` |
 | **Everyone** | labels about a third of the eval clips, ideally including clips outside their own component | `labels/` |
@@ -147,7 +147,7 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
 | File | Owner | Contents |
 |---|---|---|
 | `environments.yaml` | P2 | 7 environments (`general` + 6), each with CLIP visual prompts and CLAP audio prompts |
-| `vocabulary.yaml` | P1 | 61 classes (10 safety) with caption text, AudioSet label mapping, CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
+| `vocabulary.yaml` | P1 | 61 classes (10 safety) with caption text, AudioSet label mapping, legacy unused CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
 | `priors.yaml` | P2 | per-environment coefficients, `floor`, `application`, `max_gain` |
 | `thresholds.yaml` | P1 | default 0.5, safety default 0.6, per-class overrides (e.g. gunshot 0.75) |
 | `pipeline.yaml` | per section | backends, extraction rate/fps, segmentation, model names, fusion weights, window/hop, VAD suppression, post-processing params, caption cue limits, eval tolerance |
@@ -196,8 +196,7 @@ the AudioSet names against the checkpoint's label list.
 | Person | Where | Task |
 |---|---|---|
 | 1 | `events/tagger.py` `load_tagger` | load the PANNs/BEATs checkpoint and its label list |
-| 1 | `events/clap.py` | CLAP loading, per-class text embeddings, calibrated window scores |
-| 1 | `events/core.py` `score_window` | combine tagger and CLAP scores into one window score |
+| 1 | `events/core.py` `score_window` | map PANNs scores into vocabulary class scores |
 | 1 | `events/detector.py` `load_models` | build `EventModels` |
 | 1 | `events/vad.py` `speech_regions` | Silero VAD |
 | 1 | `events/postprocess.py` | `smooth`, `threshold_to_events`, `collapse_confusable`, `priority_filter`, `add_modifiers` |
@@ -251,7 +250,7 @@ src/soundthing/
   config.py        config loading + cross-validation
   stages.py        stage interfaces, stub/real selection
   environment/     Person 2: segmentation, visual, audio, fusion, classifier, stub
-  events/          Person 1: core, tagger, clap, vad, conditioning, postprocess, detector, stub
+  events/          Person 1: core, tagger, vad, conditioning, postprocess, detector, stub
   extract.py       Person 3: ffmpeg
   captions.py      Person 3: VTT/SRT
   evaluate.py      Person 3: metrics

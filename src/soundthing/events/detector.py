@@ -12,7 +12,6 @@ from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs
 from . import postprocess as pp
 from .conditioning import apply_priors
-from .clap import load_clap, text_embeddings
 from .core import EventModels, score_window
 from .tagger import build_tagger_map, load_tagger
 from .types import FrameScores
@@ -35,11 +34,7 @@ def _freeze(val: Any) -> Any:
 def _models_cache_key(cfg: Config) -> tuple:
     ecfg = cfg.pipeline.get("events", {})
     tagger_model = ecfg.get("tagger", {}).get("model")
-    clap_cfg = ecfg.get("clap", {})
-    clap_model = clap_cfg.get("model")
-    clap_enabled = clap_cfg.get("enabled", True)
-    calibration = _freeze(clap_cfg.get("calibration", {}))
-    return (tagger_model, clap_model, clap_enabled, calibration, tuple((c.id, tuple(c.audioset), tuple(c.clap)) for c in cfg.classes))
+    return (tagger_model, tuple((c.id, tuple(c.audioset)) for c in cfg.classes))
 
 
 def get_models(cfg: Config) -> EventModels:
@@ -61,21 +56,10 @@ def load_models(cfg: Config) -> EventModels:
     tagger, audioset_names = load_tagger(cfg)
     tagger_map = build_tagger_map(cfg, audioset_names)
 
-    clap_cfg = cfg.pipeline.get("events", {}).get("clap", {})
-    clap_enabled = clap_cfg.get("enabled", True)
-
-    clap = None
-    clap_text_emb = None
-    if clap_enabled:
-        clap = load_clap(cfg)
-        clap_text_emb = text_embeddings(clap, cfg)
-
     return EventModels(
         tagger=tagger,
-        clap=clap,
         class_ids=list(cfg.class_ids),
         tagger_map=tagger_map,
-        clap_text_emb=clap_text_emb,
     )
 
 
