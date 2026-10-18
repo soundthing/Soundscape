@@ -30,6 +30,11 @@ class ClipCache:
     clap_emb: np.ndarray | None  # (T, D) float16 L2-normalised CLAP audio embeddings; None if CLAP disabled
     vad_chunk_sec: float  # seconds per VAD prob (Silero 512 samples @16k = 0.032)
     vad_probs: np.ndarray  # (V,) float32 per-chunk speech probability
+    # Source separation (all None when separation is disabled). Rows where sep_mask is
+    # False are copies of the raw rows.
+    sep_mask: np.ndarray | None = None  # (T,) bool: window was rescored on the effects stem
+    tagger_sep: np.ndarray | None = None  # (T, A) float16 tagger probs on the effects stem
+    clap_emb_sep: np.ndarray | None = None  # (T, D) float16 CLAP embeddings on the effects stem
 
 
 def cache_key(cfg: Config) -> str:
@@ -158,6 +163,12 @@ def save_cache(c: ClipCache, path: Path) -> None:
     }
     if c.clap_emb is not None:
         arrays["clap_emb"] = c.clap_emb.astype(np.float16)
+    if c.sep_mask is not None:
+        arrays["sep_mask"] = c.sep_mask.astype(bool)
+    if c.tagger_sep is not None:
+        arrays["tagger_sep"] = c.tagger_sep.astype(np.float16)
+    if c.clap_emb_sep is not None:
+        arrays["clap_emb_sep"] = c.clap_emb_sep.astype(np.float16)
 
     np.savez_compressed(path, **arrays)
 
@@ -185,6 +196,9 @@ def load_cache(path: Path) -> ClipCache:
             if meta.get("has_clap", False) and "clap_emb" in data
             else None
         )
+        sep_mask = data["sep_mask"].astype(bool) if "sep_mask" in data else None
+        tagger_sep = data["tagger_sep"].astype(np.float16) if "tagger_sep" in data else None
+        clap_emb_sep = data["clap_emb_sep"].astype(np.float16) if "clap_emb_sep" in data else None
 
     return ClipCache(
         video_id=video_id,
@@ -198,6 +212,9 @@ def load_cache(path: Path) -> ClipCache:
         clap_emb=clap_emb,
         vad_chunk_sec=vad_chunk_sec,
         vad_probs=vad_probs,
+        sep_mask=sep_mask,
+        tagger_sep=tagger_sep,
+        clap_emb_sep=clap_emb_sep,
     )
 
 

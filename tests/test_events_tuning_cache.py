@@ -246,3 +246,40 @@ def test_save_load_cache_round_trip(cfg: Config, tmp_path: Path):
     )
     with pytest.raises(ValueError, match="Cache version mismatch"):
         load_cache(bad_path)
+
+
+def test_save_load_cache_separation_fields(cfg: Config, tmp_path: Path):
+    base = ClipCache(
+        video_id="clip_sep",
+        duration=2.0,
+        key=cache_key(cfg),
+        window_sec=1.0,
+        hop=0.5,
+        times=np.array([0.5, 1.0, 1.5]),
+        audioset_names=["Label_A", "Label_B"],
+        tagger_raw=np.zeros((3, 2), dtype=np.float16),
+        clap_emb=None,
+        vad_chunk_sec=vad.VAD_CHUNK_SEC,
+        vad_probs=np.zeros(4, dtype=np.float32),
+    )
+    assert base.sep_mask is None and base.tagger_sep is None and base.clap_emb_sep is None
+
+    path_plain = tmp_path / "plain.npz"
+    save_cache(base, path_plain)
+    plain = load_cache(path_plain)
+    assert plain.sep_mask is None and plain.tagger_sep is None and plain.clap_emb_sep is None
+
+    sep = replace(
+        base,
+        sep_mask=np.array([False, True, True]),
+        tagger_sep=np.array([[0.0, 0.0], [0.7, 0.1], [0.6, 0.2]], dtype=np.float16),
+        clap_emb_sep=np.array([[0.0, 1.0], [1.0, 0.0], [0.6, 0.8]], dtype=np.float16),
+    )
+    path_sep = tmp_path / "sep.npz"
+    save_cache(sep, path_sep)
+    loaded = load_cache(path_sep)
+    assert loaded.sep_mask.dtype == bool
+    assert np.array_equal(loaded.sep_mask, sep.sep_mask)
+    assert loaded.tagger_sep.dtype == np.float16
+    assert np.array_equal(loaded.tagger_sep, sep.tagger_sep)
+    assert np.array_equal(loaded.clap_emb_sep, sep.clap_emb_sep)
