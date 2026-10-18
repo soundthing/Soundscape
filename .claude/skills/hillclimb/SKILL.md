@@ -8,7 +8,8 @@ description: Start, check or stop the soundthing hillclimb, a looping pool of ag
 A detached driver process (`hc.py drive`) starts an orchestrator, `claude -p --model
 claude-opus-5-5 --effort medium`, about once a minute, whenever something changed. Each run is
 one tick of [orchestrator.md](orchestrator.md):
-- verify and land accepted experiments on a `hillclimb/<timestamp>` branch;
+- verify accepted experiments: a dev re-run against the current best, plus a holdout
+  pass/fail on the cached holdout clips. Then land them on `main`;
 - end workers whose experiment failed, and spawn replacements;
 - clean up worktrees.
 
@@ -44,7 +45,7 @@ goes through `hc.py`. Run it from the main checkout:
 2. **Preflight.** Stop and report anything that fails:
    - `.venv/Scripts/python.exe` exists;
    - `agy --version` and `claude --version` work, for the kinds in the roster;
-   - `git status --porcelain --untracked-files=no` is empty;
+   - `git branch --show-current` is `main`;
    - `.venv/Scripts/python.exe -m soundthing.harness rebaseline --status` shows cached clips > 0;
    - `data/hillclimb/STOP` is absent, or the user wants a fresh start;
    - no driver is already running (`driver_pid` in `data/hillclimb/state.json` is alive).
@@ -52,25 +53,19 @@ goes through `hc.py`. Run it from the main checkout:
    ```bash
    .venv/Scripts/python.exe .claude/skills/hillclimb/hc.py start --roster '[{"kind":"agy","count":5,"model":null,"effort":null},{"kind":"claude","count":5,"model":null,"effort":null}]'
    ```
-   This switches the main checkout to a new `hillclimb/<timestamp>` branch, unless it's
-   already on one. It rebaselines the best on the clips cached so far and launches the
-   driver, detached, so it survives this session. Workers start on the orchestrator's
-   first tick.
+   The main checkout must be on `main`, because wins are committed to the checked-out
+   branch. `start` rebaselines the best on the clips cached so far and launches the driver,
+   detached, so it survives this session. Workers start on the orchestrator's first tick.
 4. **Tell the user:**
-   - the branch;
+   - that wins land on `main` and are never pushed;
    - how to watch: `/hillclimb status`, `data/hillclimb/journal.md`, `data/hillclimb/driver.log`;
    - that it loops until `/hillclimb stop`.
 
 ## When it's stopped
 
-Wins are commits on the `hillclimb/...` branch, never on `main`. They were checked on the
-dev clips cached at the time, not on the holdout, because promotion is the holdout gate.
-Tell the user to:
-- review the branch;
-- once the holdout caches are built, check it against the holdout before merging to main
-  (`promote`/`promote-code`, or an equivalent trusted holdout score of the branch vs `main`).
-
-Merging into `main` is the user's call.
+Wins are `hillclimb: ...` commits on `main`. Each one was re-verified on dev and passed the
+holdout check on the holdout clips cached at the time. Nothing is pushed. List them for the
+user from `applied` in `hc.py stop`'s output, or with `git log --oneline --grep "^hillclimb:"`.
 
 ## agy and claude quirks (tested)
 
@@ -95,6 +90,6 @@ These are what `hc.py` and the briefs rely on. Keep them in mind when changing e
   `status`, `conversation_id`, `response` and claude's `result`, `session_id`.
 - **Killing a worker:** `taskkill /T /F /PID <pid>` takes down agy or claude and its children,
   with nothing left over.
-- **Trusted scoring runs the committed harness.** `run-experiment` scores the base branch's
-  HEAD with the patch on top, so wins only count once they're committed to the base
-  branch. `hc.py apply` does that.
+- **Trusted scoring runs the committed harness.** `run-experiment` scores `main`'s HEAD with
+  the patch on top, so wins only count once they're committed. `hc.py apply` commits only the
+  paths a win touches, so other people's uncommitted work in the checkout is left alone.

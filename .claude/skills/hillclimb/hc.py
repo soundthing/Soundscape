@@ -35,6 +35,7 @@ STATE = HOME / "state.json"
 JOURNAL = HOME / "journal.md"
 STOP = HOME / "STOP"
 REVIEWED = HOME / "reviewed.json"
+MIN_HOLDOUT = 100  # holdout clips cached before wins can land
 VENV_PY = MAIN / ".venv" / "Scripts" / "python.exe"
 WT_ROOT = paths.experiments_root()
 COMPONENT = "events"
@@ -313,58 +314,94 @@ def _rebaseline() -> dict:
     return clipset.rebaseline(COMPONENT, force=True)
 
 
+def _holdout_ready() -> tuple[bool, str]:
+    from soundthing.config import load_config
+    from soundthing.harness import clipset
+
+    done, total = clipset.cached_holdout_ids(load_config(MAIN / "config"), COMPONENT)
+    if len(done) >= min(MIN_HOLDOUT, total):
+        return True, f"{len(done)}/{total}"
+    return False, f"only {len(done)}/{total} holdout clips cached (need {MIN_HOLDOUT})"
+
+
+def _clean(*pathspecs: str) -> bool:
+    return not git("status", "--porcelain", "--untracked-files=no", "--", *pathspecs)
+
+
+def _land(paths_: list[str], msg: str) -> str:
+    """Commit only these paths, so other people's uncommitted work in the checkout is untouched."""
+    git("add", "-A", "--", *paths_)
+    git("-c", "user.name=hillclimb", "-c", "user.email=hillclimb@soundthing.local", "commit", "-q",
+        "-m", msg + "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>", "--", *paths_)
+    return git("rev-parse", "--short", "HEAD")
+
+
+def _fail(wid: str, run_id: str, r: dict, stage: str, v: dict) -> dict:
+    if v.get("branch"):
+        git("branch", "-D", v["branch"], check=False)
+    _mark_reviewed(wid, run_id, f"rejected-on-{stage}")
+    journal(f"{stage} FAILED {wid}/{run_id}: {r['hypothesis']}")
+    return {"applied": False, "failed": stage, "verify": v}
+
+
 def apply(wid: str, run_id: str) -> dict:
-    """Re-run a win against the current best on the current base; if it holds, land it on
-    the base branch and rebaseline."""
+    """Land a win on the base branch (main) if it holds up: re-run it against the current best
+    on the current base (dev), then pass/fail it on the cached holdout clips. Then commit only
+    the files it changes and rebaseline. Returns deferred (and leaves the win unreviewed) when
+    it can't be checked yet."""
     os.chdir(MAIN)
     st = load_state()
     base = st["base_branch"]
     if git("branch", "--show-current") != base:
         raise SystemExit(f"main checkout is not on {base}")
-    if git("status", "--porcelain", "--untracked-files=no"):
-        raise SystemExit("main checkout has uncommitted changes; resolve them first")
     r = _find(wid, run_id)
+    ready, why = _holdout_ready()
+    if not ready:
+        return {"applied": False, "deferred": why}
+    touched = ["config"] if r["kind"] == "params" else ["src/soundthing/events", "config"]
+    if not _clean(*touched):
+        return {"applied": False, "deferred": f"uncommitted changes in {touched} of the main checkout"}
     hyp = f"[verify {wid}/{run_id}] {r['hypothesis']}"
+    overrides = r.get("overrides") or {}
     if r["kind"] == "params":
-        v = run_params(r["overrides"], hyp)
-        if not v["accept"]:
-            _mark_reviewed(wid, run_id, "rejected-on-verify")
-            journal(f"verify FAILED {wid}/{run_id}: {r['hypothesis']}")
-            return {"applied": False, "verify": v}
-        from soundthing.harness.promote import write_overrides
+        from soundthing.harness.promote import holdout_check, write_overrides
 
-        files = write_overrides(r["overrides"], MAIN / "config")
-        git("add", *[str(p) for p in files])
-        msg = f"hillclimb: {r['hypothesis']}\n\nParameters {json.dumps(r['overrides'])} from worker {wid}, run {run_id}, verified as {v['run_id']}."
-    else:
-        patch = Path(r["patch_file"]).read_text(encoding="utf-8")
-        v = run_code(patch, r.get("overrides") or {}, hyp)
+        v = run_params(overrides, hyp)
         if not v["accept"]:
-            _mark_reviewed(wid, run_id, "rejected-on-verify")
-            journal(f"verify FAILED {wid}/{run_id}: {r['hypothesis']}")
-            return {"applied": False, "verify": v}
+            return _fail(wid, run_id, r, "verify", v)
+        if not holdout_check(overrides):
+            return _fail(wid, run_id, r, "holdout", v)
+        write_overrides(overrides, MAIN / "config")
+        msg = (f"hillclimb: {r['hypothesis']}\n\nParameters {json.dumps(overrides)} from worker {wid}, "
+               f"run {run_id}; verified on dev as {v['run_id']}, holdout pass ({why} clips cached).")
+    else:
+        from soundthing.harness.runner import _code_holdout_check
+
+        patch = Path(r["patch_file"]).read_text(encoding="utf-8")
+        v = run_code(patch, overrides, hyp)
+        if not v["accept"]:
+            return _fail(wid, run_id, r, "verify", v)
+        if not _code_holdout_check(MAIN, {"branch": v["branch"], "run_id": v["run_id"], "overrides": overrides}):
+            return _fail(wid, run_id, r, "holdout", v)
         git("apply", "--whitespace=nowarn", r["patch_file"])
-        git("add", "-A", "src/soundthing/events", "config")
-        if r.get("overrides"):
+        if overrides:
             from soundthing.harness.promote import write_overrides
 
-            files = write_overrides(r["overrides"], MAIN / "config")
-            git("add", *[str(p) for p in files])
-        msg = f"hillclimb: {r['hypothesis']}\n\nCode change from worker {wid}, run {run_id}, verified as {v['run_id']}."
+            write_overrides(overrides, MAIN / "config")
+        msg = (f"hillclimb: {r['hypothesis']}\n\nCode change from worker {wid}, run {run_id}; verified on dev "
+               f"as {v['run_id']}, holdout pass ({why} clips cached).")
         for b in (r.get("branch"), v.get("branch")):
             if b:
                 git("branch", "-D", b, check=False)
-    git("-c", "user.name=hillclimb", "-c", "user.email=hillclimb@soundthing.local", "commit", "-q", "-m",
-        msg + "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")
-    sha = git("rev-parse", "--short", "HEAD")
+    sha = _land(touched, msg)
     rb = _rebaseline()
     _mark_reviewed(wid, run_id, "applied")
     st = load_state()
     st.setdefault("applied", []).append({"ts": now(), "worker": wid, "run_id": run_id, "sha": sha,
                                          "hypothesis": r["hypothesis"], "objective": rb.get("objective")})
     save_state(st)
-    journal(f"APPLIED {wid}/{run_id} as {sha}: {r['hypothesis']} -> best {rb.get('objective')}")
-    return {"applied": True, "sha": sha, "verify": v, "rebaseline": rb}
+    journal(f"APPLIED {wid}/{run_id} as {sha} on {base}: {r['hypothesis']} -> best {rb.get('objective')}")
+    return {"applied": True, "sha": sha, "verify": v, "holdout": "pass", "rebaseline": rb}
 
 
 def reject(wid: str, run_id: str, reason: str) -> dict:
@@ -411,17 +448,15 @@ def gc() -> dict:
 # ------------------------------------------------------------------ start / drive / stop
 
 
-def start(roster: list[dict], orch_model: str, orch_effort: str, interval: int) -> dict:
+def start(roster: list[dict], orch_model: str, orch_effort: str, interval: int,
+          allow_branch: bool = False) -> dict:
     HOME.mkdir(parents=True, exist_ok=True)
     STOP.unlink(missing_ok=True)
     st = load_state()
     cur = git("branch", "--show-current")
-    if not cur.startswith("hillclimb/"):
-        if git("status", "--porcelain", "--untracked-files=no"):
-            raise SystemExit("main checkout has uncommitted changes; commit or stash them first")
-        base = f"hillclimb/{datetime.now().strftime('%Y%m%d-%H%M')}"
-        git("switch", "-c", base)
-        cur = base
+    if cur != "main" and not allow_branch:
+        raise SystemExit(f"main checkout is on {cur!r}; wins land on the checked-out branch, so switch to main "
+                         "(or pass --allow-branch)")
     st.update({"base_branch": cur, "started_from": git("rev-parse", "HEAD"), "roster": roster,
                "orchestrator": {"model": orch_model, "effort": orch_effort}, "interval": interval})
     save_state(st)
@@ -511,6 +546,7 @@ def main() -> None:
     s.add_argument("--orchestrator-model", default="claude-opus-5-5")
     s.add_argument("--orchestrator-effort", default="medium")
     s.add_argument("--interval", type=int, default=60)
+    s.add_argument("--allow-branch", action="store_true", help="land wins on a branch other than main")
     sub.add_parser("drive")
     sub.add_parser("stop")
     s = sub.add_parser("status")
@@ -541,7 +577,7 @@ def main() -> None:
 
     a = p.parse_args()
     if a.cmd == "start":
-        out(start(json.loads(a.roster), a.orchestrator_model, a.orchestrator_effort, a.interval))
+        out(start(json.loads(a.roster), a.orchestrator_model, a.orchestrator_effort, a.interval, a.allow_branch))
     elif a.cmd == "drive":
         drive()
     elif a.cmd == "stop":

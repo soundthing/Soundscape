@@ -23,7 +23,7 @@ silently delete); a surprise → `pitfalls.md`. Record the why, not the code. Ke
 3. Change parameters via overrides, or write a patch against the component being tuned (`code_paths` only).
 4. For parameter changes, `score` with that hypothesis. For code experiments, call `run_experiment` with one hypothesis and the patch; never edit the harness, objective, or eval settings in an experiment. Every attempt is logged to the shared ledger either way.
 5. Keep a candidate only if limit checks `passed` AND bootstrap `accept` is true. Unaccepted experiment worktrees and branches are automatically removed.
-6. `promote` only an accepted parameter run. Only `promote_code` accepted code experiment runs; review branches (`harness/review/<run_id>`) are created for human review and must be merged by a human (never auto-merge or push).
+6. `promote` only an accepted parameter run. Only `promote_code` accepted code experiment runs; review branches (`harness/review/<run_id>`) are created for human review and must be merged by a human (never auto-merge or push). The one exception is the `/hillclimb` orchestrator (`.claude/skills/hillclimb/`): `hc.py apply` lands a win directly on `main`, after re-verifying it on dev against the current best and passing the holdout check. It never pushes.
 
 ## Tunable vs fixed
 - **Tunable:** parameters in each component's `describe_space` (`events:`, `environment:`, `captions:` in `pipeline.yaml`, `thresholds.yaml`; per-class thresholds only for classes with >= 20 dev events), and code in the component's `code_paths`.

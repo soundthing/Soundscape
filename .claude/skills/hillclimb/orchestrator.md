@@ -31,10 +31,16 @@ For each unreviewed win (`verdict: ACCEPTED`, no `reviewed`):
    - games the objective instead of improving detection;
    - is broken or nonsense.
    For parameters, check that the values are sane.
-2. **Verify and land it:** `$PY $HC apply <worker> <run_id>`. This re-runs the experiment
-   against the current best on the current base. Only if it's accepted again does it commit
-   the change to the base branch and rebaseline the best. A win that fails verification is
-   marked rejected; that's normal when another win landed first.
+2. **Verify and land it:** `$PY $HC apply <worker> <run_id>`. This runs two checks:
+   - it re-runs the experiment on dev against the current best;
+   - it passes or fails the experiment on the cached holdout clips.
+   Only if both pass does it commit the change to `main` (just the files it changes) and
+   rebaseline the best.
+   A win that fails either check is marked rejected. That's normal when another win landed
+   first.
+   If the result says `deferred`, leave the win as it is and retry it next tick. That happens
+   when fewer than 100 holdout clips are cached, or someone has uncommitted edits in those
+   files.
 3. Only one `apply` at a time, and never edit or commit in the main checkout yourself.
 
 ## 3. Replace workers
@@ -83,7 +89,7 @@ echo "- $(date -u +%FT%TZ) tick: <applied/rejected/spawned/killed, best=...>" >>
 
 ## Never
 
-- push, merge into `main`, switch branches, or force anything in git;
+- push, switch branches, or force anything in git (`hc.py apply` is the only way changes reach `main`);
 - touch `data/harness/holdout/` or read holdout numbers;
 - edit the harness, objective or eval settings;
 - run more than two `apply`s in one tick;
