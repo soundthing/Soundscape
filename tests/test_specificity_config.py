@@ -19,9 +19,9 @@ def test_every_scored_label_has_an_explicit_specificity_assignment(cfg):
     assert set(cfg.class_ids) <= cfg.thresholds.class_tiers.keys()
     assert set(cfg.thresholds.class_tiers) == set(cfg.class_ids) | set(cfg.coarse_groups)
     assert cfg.priors.floor == .25
-    assert cfg.threshold('microwave_beep') == .65
-    assert cfg.threshold('typing') == .55
-    assert cfg.threshold('audioset_m_04rlf') == .45  # Music
+    assert cfg.threshold('microwave_beep') == .55
+    assert cfg.threshold('typing') == .50
+    assert cfg.threshold('audioset_m_04rlf') == .40  # Music
 
 
 def test_one_tier_setting_changes_all_its_labels_but_preserves_scores(cfg):
