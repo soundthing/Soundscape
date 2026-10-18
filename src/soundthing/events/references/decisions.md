@@ -108,3 +108,13 @@ Independently scored parents still need their own evidence. Existing safety
 thresholds remain exact, and non-safety overrides remain minimums. These initial
 settings are a policy proposal, not measured precision; labeled evaluation is
 still needed before calling any tier reliable.
+
+## Generic inference uses maximum support and an activity gate — events
+
+Without new model outputs, a broad fallback can only summarize existing evidence.
+Taking the maximum descendant score avoids adding correlated predictions and
+inventing higher confidence. Restrict inference to explicitly configured coarse
+groups; independently scored parents keep their own outputs. A recording-level
+RMS gate prevents sound guesses in digital silence but does not establish listener
+loudness or source accuracy. Missing settings disable this optional path. The
+proposed new groups and group-parent contract remain subject to shared approval.

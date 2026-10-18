@@ -17,6 +17,8 @@ from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs, env_probs_at
 from .conditioning import prior_weights, adjust_scores
 from .hierarchy import suppress_ancestors
+from .fallbacks import add_generic_scores
+from .types import FrameScores
 
 
 def detect_stub(
@@ -36,10 +38,16 @@ def detect_stub(
                                         application=cfg.priors.application,
                                         max_gain=cfg.priors.max_gain))
         end = min(inputs.duration, t + float(rng.uniform(0.4, 2.5)))
-        if score >= cfg.threshold(c.id) and end > t:
-            events.append(
-                CaptionEvent(start=round(t, 2), end=round(end, 2), label=c.caption, class_id=c.id,
-                             confidence=round(score, 3))
-            )
+        # Stub activity is synthetic too: nominal 0 dBFS, not measured input audio.
+        # Reuse the real generic support/exclusion rule, without loading models.
+        probe = FrameScores(np.array([(t + end) / 2]), [c.id], np.array([[score]]), end - t)
+        probe = add_generic_scores(probe, np.array([0.]), cfg)
+        for i, cid in enumerate(probe.class_ids):
+            value = float(probe.scores[0, i])
+            if value >= cfg.threshold(cid) and end > t:
+                events.append(
+                    CaptionEvent(start=round(t, 2), end=round(end, 2), label=cfg.caption_for(cid), class_id=cid,
+                                 confidence=round(value, 3))
+                )
         t = end + float(rng.uniform(0.5, 3.0))
     return suppress_ancestors(events, cfg.hierarchy())

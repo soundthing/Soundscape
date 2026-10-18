@@ -69,6 +69,12 @@ are preserved and per-class overrides remain minimums. Legacy configs without
 tiers keep their lookup. Scores are unchanged; precision/recall effects have not
 been measured on labeled clips. Generic fallback groups are a separate proposal.
 
+**Generic fallback preparation:** optional inference is implemented and tested
+against fake groups under the current contract. It takes maximum descendant
+support, uses a measured activity gate on real audio, and leaves native model
+scores unchanged. Default config leaves this disabled. Exact new live group ids
+and optional coarse-group ancestry await their separate interface approval.
+
 **Next:** label clips and measure precision/recall and false positives before
 tuning thresholds. The expanded conditioned path has completed a real-video run.
 

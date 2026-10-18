@@ -14,6 +14,22 @@ Conditioned: F1 fine x.xx / coarse x.xx, FP/min x.x
 Outcome: <kept / reverted, and why>
 ```
 
+## 2026-10-18 — specificity policy runtime verification
+
+Clip: first 24 seconds of cached YouTube `_ZsEyMpvbCk`, using real PANNs and
+Silero VAD, plus the already computed environment segments. Priors remain at
+floor 0.25; no model scores or original cached outputs were changed. Baseline and
+conditioned modes share a 93-window × 527-class raw-score cache.
+
+Legacy thresholds: 3 baseline and 3 conditioned events (biting, chewing,
+chopping). Tiered thresholds: 1 baseline and 1 conditioned event (chopping).
+Baseline chopping score remains 0.953; lower-scoring biting (0.645) and chewing
+(0.556) miss their new 0.80/0.65 requirements. JSON and VTT outputs validate.
+
+Outcome: confirms real execution and unchanged scores, not accuracy improvement.
+There are no human labels, fine/coarse F1 or FP/min measurements for this check.
+The initial specificity settings remain tunable policy values.
+
 ## 2026-10-17 — remove event CLAP at user request
 
 The event scorer now uses PANNs alone; environment CLAP remains. The user also

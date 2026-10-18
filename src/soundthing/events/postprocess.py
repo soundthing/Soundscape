@@ -145,7 +145,8 @@ def collapse_confusable(
             own_peak = float(peaks[own_idx])
 
             other_indices = [idx for idx, cid in enumerate(scores.class_ids)
-                             if idx != own_idx and cid not in hierarchy.get(ev.class_id, ())
+                             if idx != own_idx and cid not in cfg.coarse_groups
+                             and cid not in hierarchy.get(ev.class_id, ())
                              and ev.class_id not in hierarchy.get(cid, ())]
             if other_indices:
                 runner_up_idx = max(

@@ -16,10 +16,11 @@ from .core import EventModels, score_window
 from .tagger import build_tagger_map, load_tagger
 from .types import FrameScores
 from .hierarchy import suppress_ancestors
+from .fallbacks import add_generic_scores, window_rms_dbfs
 from .vad import speech_mask, speech_regions
 
 _models_cache: dict[tuple, EventModels] = {}
-_raw_scores_cache: tuple[tuple, FrameScores] | None = None
+_raw_scores_cache: tuple[tuple, FrameScores, np.ndarray] | None = None
 
 
 def _freeze(val: Any) -> Any:
@@ -95,6 +96,7 @@ def detect(
 
     if _raw_scores_cache is not None and _raw_scores_cache[0] == raw_key:
         scores = _raw_scores_cache[1].copy_with(_raw_scores_cache[1].scores.copy())
+        rms_dbfs = _raw_scores_cache[2]
     else:
         models = get_models(cfg)
         audio, sr = sf.read(inputs.audio_path, dtype="float32")
@@ -105,6 +107,7 @@ def detect(
         audio = np.ascontiguousarray(audio, dtype=np.float32)
 
         scores = score_audio(audio, sr, models, cfg)
+        rms_dbfs = window_rms_dbfs(audio, sr, scores.times, ecfg['window_sec'])
 
         # Speech masking: suppress non-safety classes under dialogue.
         mask = speech_mask(scores.times, speech_regions(audio, sr, cfg))
@@ -118,7 +121,7 @@ def detect(
         s[mask] *= factor
         masked_scores = scores.copy_with(s)
 
-        _raw_scores_cache = (raw_key, masked_scores)
+        _raw_scores_cache = (raw_key, masked_scores, rms_dbfs)
         scores = masked_scores.copy_with(masked_scores.scores.copy())
 
     if segments is not None:  # None = unconditioned baseline
@@ -126,6 +129,7 @@ def detect(
 
     pcfg = ecfg["postprocess"]
     scores = pp.smooth(scores, pcfg["smoothing_sec"])
+    scores = add_generic_scores(scores, rms_dbfs, cfg)
     events = pp.threshold_to_events(scores, cfg)
     events = pp.collapse_confusable(events, scores, cfg)
     events = suppress_ancestors(events, cfg.hierarchy())
