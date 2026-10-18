@@ -38,3 +38,13 @@ All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) und
 
 ## Kaggle kernel ships the working tree instead of cloning — harness
 The kernel used to clone the (private) repo at a pushed sha, which needed a GitHub token as a Kaggle secret and a commit+push before every recache. Cache building needs only `src/soundthing`, `config/` and `pyproject.toml` (~160 KB base64), so the pusher embeds them in the script and records their sha256 in the cache meta. Trade-off: provenance is a bundle hash rather than a commit.
+
+## End-to-end pipeline objective is caption-cue F0.5 with predicted environment — pipeline
+The pipeline component evaluates end-to-end performance using the same caption-cue micro F0.5 (with coarse half-credit) as the captions component, but conditioning events replay on the predicted environment (`predict_segments`) rather than ground truth labels. Baseline metric evaluates unconditioned events, and environment time accuracy (`env_time_acc`) is tracked as a diagnostic.
+
+## Cue matching evaluates onset tolerance and duration-scaled offset tolerance — captions
+Captions and pipeline evaluation match predicted caption cues against labeled events using greedy nearest-onset matching order (identical to events evaluation), requiring matching class (fine or coarse group for half-credit), onset error <= `eval.onset_tolerance_sec`, and offset error <= `max(eval.onset_tolerance_sec, 0.5 * event.duration)`. Diagnostics include a 5-bin signed offset error histogram.
+
+## Pipeline search space is the de-duplicated union of constituent components — pipeline
+The pipeline component search space aggregates parameters from the events, environment, and captions stages by querying `space()` on each component and dropping duplicate parameter entries.
+

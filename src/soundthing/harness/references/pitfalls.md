@@ -17,3 +17,5 @@ cause is gone.
   fail in the full suite). Patch both.
 - **MCP 2.x server import path.** MCP 2.x renamed `FastMCP` to `mcp.server.mcpserver.MCPServer`; importing from `mcp.server.fastmcp` fails. Use `from mcp.server.mcpserver import MCPServer`.
 - **YAML line endings may be CRLF.** Config YAML files checked out on Windows may have CRLF line endings, so line edits must preserve the existing newline style to avoid corrupting git diffs.
+- **Cue matching must pair with event class IDs, not parse caption text.** Rendered cues do not contain raw class IDs, and different classes may map to identical or modifier-altered caption text. The harness pairs cues with sorted events to retain ground-truth class IDs without text parsing.
+
