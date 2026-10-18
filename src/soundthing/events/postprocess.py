@@ -20,13 +20,21 @@ def _safe_coarse_of(class_id: str, cfg: Config) -> str | None:
         return None
 
 
-def threshold_to_events(scores: FrameScores, cfg: Config) -> list[CaptionEvent]:
+def threshold_to_events(
+    scores: FrameScores, cfg: Config, evidence: FrameScores | None = None
+) -> list[CaptionEvent]:
     """Per-class thresholds (cfg.threshold), merge same-class events separated by
     < merge_gap_sec, then drop events < min_event_sec (merge before drop, so
-    fragments of one sound survive). confidence = peak score inside final span."""
+    fragments of one sound survive). confidence = peak score inside final span.
+
+    Classes in postprocess.evidence_thresholds must also reach that score in
+    `evidence` (the pre-prior scores), so the stricter bar judges acoustic
+    evidence and environment priors don't move it."""
     pcfg = cfg.pipeline.get("events", {}).get("postprocess", {})
     min_event_sec = float(pcfg.get("min_event_sec", 0.3))
     merge_gap_sec = float(pcfg.get("merge_gap_sec", 0.5))
+    evidence_thr = pcfg.get("evidence_thresholds") or {}
+    ev_index = {cid: i for i, cid in enumerate(evidence.class_ids)} if evidence is not None else {}
 
     events: list[CaptionEvent] = []
     if scores.scores.shape[0] == 0:
@@ -37,6 +45,9 @@ def threshold_to_events(scores: FrameScores, cfg: Config) -> list[CaptionEvent]:
         col = scores.scores[:, c]
         thr = cfg.threshold(class_id)
         active = col >= thr
+        if class_id in evidence_thr and class_id not in safety:
+            ev_col = evidence.scores[:, ev_index[class_id]] if class_id in ev_index else col
+            active &= ev_col >= float(evidence_thr[class_id])
         if not np.any(active):
             continue
         if class_id in safety:

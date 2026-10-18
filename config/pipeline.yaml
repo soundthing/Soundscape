@@ -65,6 +65,23 @@ events:             # Person 1
     merge_gap_sec: 0.5
     coarse_margin: 0.1          # top-2 within this margin and same coarse group -> coarse label
     onset_shift_sec: 0.0        # seconds added to every event's start/end; positive = later
+    evidence_thresholds:        # class -> minimum pre-prior score, on top of thresholds.yaml
+      audioset_m_07yv9: 0.95
+      audioset_m_09x0r: 0.7
+      audioset_m_04rlf: 0.7
+      audioset_m_01g50p: 0.95
+      audioset_m_0jbk: 0.65
+      audioset_m_0k4j: 0.95
+      audioset_m_019jd: 0.85
+      audioset_m_02mk9: 0.6
+      aircraft: 0.8
+      audioset_m_068hy: 0.7
+      audioset_m_015p6: 0.7
+      train: 0.65
+      audioset_m_01yrx: 0.8
+      audioset_m_025rv6n: 0.7
+      rain: 0.8
+      audioset_m_03j1ly: 0.65
   prior_estimation:
     alpha: 200.0
     min_class: 20

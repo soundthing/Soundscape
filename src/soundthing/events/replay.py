@@ -117,6 +117,7 @@ def replay(
 ) -> list[CaptionEvent]:
     """Replay post-model pipeline from a ClipCache."""
     scores = class_scores(cache, cfg)
+    evidence = scores
 
     if segments is not None:  # None = unconditioned baseline
         scores = apply_priors(scores, segments, cfg)
@@ -125,7 +126,7 @@ def replay(
     if rms_dbfs is None:  # cache built without RMS: treat every window as active
         rms_dbfs = np.zeros(len(cache.times), dtype=np.float32)
     scores = add_generic_scores(scores, rms_dbfs, cfg)
-    events = pp.threshold_to_events(scores, cfg)
+    events = pp.threshold_to_events(scores, cfg, evidence)
     events = pp.collapse_confusable(events, scores, cfg)
     events = suppress_ancestors(events, cfg.hierarchy(), keep=frozenset(cfg.safety_ids()), drop_tails=True)
 
