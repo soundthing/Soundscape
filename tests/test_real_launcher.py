@@ -20,7 +20,7 @@ def test_local_config_enables_both_models_without_changing_shared_files(tmp_path
 
 
 def test_server_gets_real_config_and_separate_output_root(tmp_path, monkeypatch):
-    import uvicorn
+    uvicorn = pytest.importorskip("uvicorn")
     captured = []
     monkeypatch.setattr(real, "REAL_CONFIG", tmp_path / "config")
     monkeypatch.setattr(real, "REAL_RUNS", tmp_path / "real")
@@ -60,7 +60,7 @@ def test_reusing_demo_extraction_still_writes_into_real_run(tmp_path, fake_input
 
 
 def test_missing_ml_dependencies_prevent_server_start(tmp_path, monkeypatch):
-    import uvicorn
+    uvicorn = pytest.importorskip("uvicorn")
     monkeypatch.setattr(real, "REAL_CONFIG", tmp_path / "config")
     monkeypatch.setattr(real, "model_doctor", lambda directory: 1)
     monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: pytest.fail("server started with incomplete real setup"))
@@ -68,7 +68,7 @@ def test_missing_ml_dependencies_prevent_server_start(tmp_path, monkeypatch):
 
 
 def test_serve_cookie_argument_overrides_old_environment_before_diagnostics(tmp_path, monkeypatch):
-    import uvicorn
+    uvicorn = pytest.importorskip("uvicorn")
     cookie = tmp_path / "export.txt"
     cookie.write_text("# Netscape HTTP Cookie File\n")
     monkeypatch.setattr(real, "REAL_CONFIG", tmp_path / "config")
