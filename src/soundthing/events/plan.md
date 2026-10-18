@@ -94,4 +94,4 @@ the AudioSet dev/holdout splits, then milestones 5–7.
 
 - Verify the AudioSet names in `vocabulary.yaml` against the tagger's label list
   (`soundthing check-config --audioset <csv>`).
-- `vocabulary.yaml` is a shared interface file: each edit needs explicit confirmation.
+- `vocabulary.yaml` is a shared interface file: follow AGENTS.md §1 when changing it.
