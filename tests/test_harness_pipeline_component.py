@@ -56,7 +56,6 @@ def test_pipeline_component_protocol(cfg: Config, monkeypatch: pytest.MonkeyPatc
     """COMPONENT implements the Component protocol with correct metadata."""
     assert isinstance(COMPONENT, Component)
     assert COMPONENT.name == "pipeline"
-    assert COMPONENT.owner == "person3"
     assert COMPONENT.sections == ("events.", "thresholds.", "environment.", "captions.")
     assert COMPONENT.code_paths == (
         "src/soundthing/events",

@@ -71,10 +71,6 @@ def best_path(component: str = "events") -> Path:
     return harness_home() / f"best-{component}.json"
 
 
-def harness_role() -> str:
-    return os.environ.get("SOUNDTHING_ROLE", "person1")
-
-
 def proposals_dir() -> Path:
     return harness_home() / "proposals"
 

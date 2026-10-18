@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-from soundthing.harness.components.base import Clip, Component, Evaluation, key_owner
+from soundthing.harness.components.base import Clip, Component, Evaluation, is_config_key
 
 # name -> "module:attribute" of a Component instance
 REGISTRY: dict[str, str] = {
@@ -29,4 +29,4 @@ def get(name: str | None = None) -> Component:
     return getattr(importlib.import_module(module), attr)
 
 
-__all__ = ["Clip", "Component", "Evaluation", "DEFAULT", "REGISTRY", "get", "key_owner", "names"]
+__all__ = ["Clip", "Component", "Evaluation", "DEFAULT", "REGISTRY", "get", "is_config_key", "names"]

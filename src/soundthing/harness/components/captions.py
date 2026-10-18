@@ -199,7 +199,6 @@ def _vectorized_f_beta(totals: np.ndarray, beta: float = 0.5) -> np.ndarray:
 
 class CaptionsComponent:
     name: str = "captions"
-    owner: str = "person3"
     sections: tuple[str, ...] = ("captions.",)
     code_paths: tuple[str, ...] = ("src/soundthing/captions.py",)
     tuning_log: str = "src/soundthing/harness/references/captions-tuning-log.md"

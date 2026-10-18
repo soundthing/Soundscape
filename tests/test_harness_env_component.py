@@ -42,7 +42,6 @@ from soundthing.harness.components.environment import (
 def test_component_protocol(cfg):
     assert isinstance(COMPONENT, Component)
     assert COMPONENT.name == "environment"
-    assert COMPONENT.owner == "person2"
     assert COMPONENT.sections == ("environment.",)
     assert COMPONENT.code_paths == ("src/soundthing/environment",)
     assert COMPONENT.tuning_log == "src/soundthing/environment/tuning-log.md"

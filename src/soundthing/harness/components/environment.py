@@ -560,7 +560,6 @@ def build_env_caches(labels_dir: Path, audio_dir: Path, cfg: Config) -> int:
 
 class EnvironmentComponent:
     name: str = "environment"
-    owner: str = "person2"
     sections: tuple[str, ...] = ("environment.",)
     code_paths: tuple[str, ...] = ("src/soundthing/environment",)
     tuning_log: str = "src/soundthing/environment/tuning-log.md"

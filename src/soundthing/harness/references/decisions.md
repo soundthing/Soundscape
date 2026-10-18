@@ -45,8 +45,12 @@ The harness core is decoupled from event-specific logic via a runtime_checkable 
 ## Component ledger separation and backward compatibility — harness
 Best runs for the legacy `events` component remain stored at `data/harness/best.json`, while other components write to `best-<component>.json`. Entries in `ledger.jsonl` record their `component`, and reading/filtering defaults to `events` to preserve behavior for existing tools and tests.
 
-## Promotion ownership routing and proposals — harness
-Promotion enforces role boundaries from `AGENTS.md` using `SOUNDTHING_ROLE` (`harness_role()`). When a candidate run touches configuration sections owned by another role (such as Person 2's `environment:` or Person 3's `captions:` when run by Person 1), promotion refuses direct config modification and instead generates a structured proposal in `data/harness/proposals/`.
+## Promotion writes every component's config; no role routing — harness
+Reversed 2026-10-18. Promotion used to write only keys owned by the current role
+(`SOUNDTHING_ROLE`) and turn the rest into proposals. The repo dropped role ownership, so
+promotion now writes any tunable key in `pipeline.yaml` / `thresholds.yaml`. Proposals
+remain only for the shared contract files (`vocabulary.yaml`, `priors.yaml`), which still
+need explicit confirmation under root AGENTS.md §1.
 
 ## Environment tuning uses raw logits caching with pure replay function — environment
 `environment.classifier.classify` was refactored to extract `segments_from_logits`, separating slow inference (audio CLAP embeddings, visual SigLIP embeddings, PySceneDetect) from fast post-processing (temperature scaling, late fusion, visual similarity floor, thresholding, and adjacent same-env segment merging). `EnvCache` stores pre-softmax logits per shot span. Replay evaluates candidates in milliseconds without model re-runs.

@@ -116,7 +116,6 @@ def _handle_list_components(args: argparse.Namespace, tools: Any) -> int:
             comp = components.get(name)
             output.append({
                 "name": comp.name,
-                "owner": comp.owner,
                 "sections": list(comp.sections),
                 "code_paths": list(comp.code_paths),
                 "available": True,

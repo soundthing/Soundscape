@@ -135,7 +135,6 @@ class DummyClipCache:
 
 class FakeComponent:
     name: str = "fake"
-    owner: str = "person2"
     sections: tuple[str, ...] = ("environment.",)
     code_paths: tuple[str, ...] = ("src/soundthing/environment",)
     tuning_log: str = "src/soundthing/environment/references/tuning-log.md"
@@ -178,7 +177,7 @@ class FakeComponent:
     def space(self, cfg: Config, labels_dir: Path | None = None) -> list[dict[str, Any]]:
         return [
             {
-                "name": "environment.threshold",
+                "name": "environment.confidence_threshold",
                 "type": "float",
                 "bounds": [0.0, 1.0],
                 "current": 0.5,
@@ -209,7 +208,6 @@ def test_registry_get_events_is_component():
     comp = components.get("events")
     assert isinstance(comp, Component)
     assert comp.name == "events"
-    assert comp.owner == "person1"
     assert comp.sections == ("events.", "thresholds.")
     assert comp.tuning_log == "src/soundthing/events/references/tuning-log.md"
     assert comp.n_stats == 4
@@ -231,7 +229,7 @@ def test_fake_component_end_to_end_score_bootstrap_ledger(
     # 1. Score fake component
     cfg = load_config(DEFAULT_CONFIG_DIR)
     res = score(
-        overrides={"environment.threshold": 0.7},
+        overrides={"environment.confidence_threshold": 0.7},
         component="fake",
         labels_dir=labels_dir,
         cfg=cfg,
@@ -287,7 +285,7 @@ def test_override_keys_outside_comp_sections_raise_value_error(
         score(overrides={"events.postprocess.smoothing_sec": 0.5}, component="fake", labels_dir=labels_dir)
 
 
-def test_promote_keys_belonging_to_another_role_writes_proposal(
+def test_promote_writes_any_component_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     root = tmp_path / "repo"
@@ -302,14 +300,13 @@ def test_promote_keys_belonging_to_another_role_writes_proposal(
     thr_orig_bytes = (config_dir / "thresholds.yaml").read_bytes()
 
     monkeypatch.setitem(components.REGISTRY, "fake", "tests.test_harness_components:FAKE_COMPONENT")
-    monkeypatch.setenv("SOUNDTHING_ROLE", "person1")
 
-    # Candidate whose overrides belong to person2 (environment.)
+    # Environment overrides are written like any other config key
     cand_entry = {
         "run_id": "cand_fake_p2",
         "kind": "score",
         "component": "fake",
-        "overrides": {"environment.threshold": 0.7},
+        "overrides": {"environment.confidence_threshold": 0.7},
         "objective": 0.85,
         "accuracy": 0.85,
         "passed": True,
@@ -349,20 +346,13 @@ def test_promote_keys_belonging_to_another_role_writes_proposal(
     assert res["promoted"] is True
     assert res["holdout"] == "n/a"
 
-    # 2. No config file was changed
-    assert res["files"] == []
-    assert (config_dir / "pipeline.yaml").read_bytes() == pipe_orig_bytes
+    # 2. pipeline.yaml was edited in place; thresholds.yaml untouched; no proposal
+    assert res["files"] == ["config/pipeline.yaml"]
+    assert (config_dir / "pipeline.yaml").read_bytes() != pipe_orig_bytes
+    assert "confidence_threshold: 0.7" in (config_dir / "pipeline.yaml").read_text(encoding="utf-8")
     assert (config_dir / "thresholds.yaml").read_bytes() == thr_orig_bytes
-
-    # 3. Proposal was written under proposals dir
-    assert "proposal" in res
-    prop_path = Path(res["proposal"])
-    assert prop_path.exists()
-    assert prop_path.parent == paths.proposals_dir()
-    prop_text = prop_path.read_text(encoding="utf-8")
-    assert "environment.threshold" in prop_text
-    assert "cand_fake_p2" in prop_text
-
+    assert "proposal" not in res
+    assert not paths.proposals_dir().exists() or not any(paths.proposals_dir().iterdir())
 
 def test_events_equivalence(
     cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -415,10 +405,7 @@ def test_list_components_cli(monkeypatch: pytest.MonkeyPatch):
     assert set(comp_map.keys()) == {"events", "environment", "captions", "pipeline"}
 
     assert comp_map["events"]["available"] is True
-    assert comp_map["events"]["owner"] == "person1"
     assert "events." in comp_map["events"]["sections"]
 
-    owners = {"environment": "person2", "captions": "person3", "pipeline": "person3"}
-    for name, owner in owners.items():
+    for name in ("environment", "captions", "pipeline"):
         assert comp_map[name]["available"] is True
-        assert comp_map[name]["owner"] == owner

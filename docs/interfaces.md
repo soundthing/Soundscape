@@ -113,13 +113,13 @@ streaming wrapper can reuse it.
 
 ## Shared config ([`config/`](../config/))
 
-| file | owner | what |
-|---|---|---|
-| `environments.yaml` | P2 | environment ids + CLIP/CLAP prompts; must include `general` |
-| `vocabulary.yaml` | P1 | caption classes, AudioSet mapping, CLAP prompts, coarse groups, `safety`, `sustained` |
-| `priors.yaml` | **P2 (single owner)** | `P(event \| env)` weights; semantics below |
-| `thresholds.yaml` | P1 | per-class thresholds |
-| `pipeline.yaml` | per section | window/hop, models, fusion weights, post-processing, eval tolerance |
+| file | what |
+|---|---|
+| `environments.yaml` | environment ids + CLIP/CLAP prompts; must include `general` |
+| `vocabulary.yaml` | caption classes, AudioSet mapping, CLAP prompts, coarse groups, `safety`, `sustained` |
+| `priors.yaml` | `P(event \| env)` weights; semantics below |
+| `thresholds.yaml` | per-class thresholds |
+| `pipeline.yaml` | window/hop, models, fusion weights, post-processing, eval tolerance |
 
 Run `soundthing check-config` after any edit (add `--audioset class_labels_indices.csv`
 to verify AudioSet names).

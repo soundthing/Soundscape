@@ -77,7 +77,6 @@ def _vectorized_f_beta(totals: np.ndarray, beta: float = 0.5) -> np.ndarray:
 
 class PipelineComponent:
     name: str = "pipeline"
-    owner: str = "person3"
     sections: tuple[str, ...] = ("events.", "thresholds.", "environment.", "captions.")
     code_paths: tuple[str, ...] = ("src/soundthing/events", "src/soundthing/environment", "src/soundthing/captions.py")
     tuning_log: str = "src/soundthing/harness/references/pipeline-tuning-log.md"

@@ -16,23 +16,13 @@ import numpy as np
 from soundthing.config import Config
 from soundthing.contracts import ClipLabels
 
-# Owner of each override-key prefix. Promotion writes config only for keys owned by the
-# current role (see `harness_role`); other keys become proposals for their owner.
-SECTION_OWNERS: dict[str, str] = {
-    "events.": "person1",
-    "thresholds.": "person1",
-    "environment.": "person2",
-    "captions.": "person3",
-    "extract.": "person3",
-}
+# Override-key prefixes promotion may write to config/pipeline.yaml or thresholds.yaml.
+CONFIG_PREFIXES: tuple[str, ...] = ("events.", "thresholds.", "environment.", "captions.", "extract.")
 
 
-def key_owner(key: str) -> str | None:
-    """Role that owns an override key, or None for shared/unknown keys."""
-    for prefix, owner in SECTION_OWNERS.items():
-        if key.startswith(prefix):
-            return owner
-    return None
+def is_config_key(key: str) -> bool:
+    """True for override keys that live in pipeline.yaml / thresholds.yaml."""
+    return key.startswith(CONFIG_PREFIXES)
 
 
 @dataclass
@@ -63,7 +53,6 @@ class Evaluation:
 @runtime_checkable
 class Component(Protocol):
     name: str  # "events" | "environment" | "captions" | "pipeline"
-    owner: str  # "person1" | "person2" | "person3"
     sections: tuple[str, ...]  # override-key prefixes it may tune, e.g. ("events.", "thresholds.")
     code_paths: tuple[str, ...]  # repo-relative code an experiment may change
     tuning_log: str  # repo-relative markdown file promotion appends to

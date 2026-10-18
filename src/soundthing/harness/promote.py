@@ -2,7 +2,7 @@
 
 Applies tuned overrides to `config/pipeline.yaml` and `config/thresholds.yaml`
 with minimal line edits that preserve comments, blank lines, key order, and
-every untouched line byte-for-byte. If keys belong to another role, drafts a proposal.
+every untouched line byte-for-byte.
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ from typing import Any
 import yaml
 
 from soundthing.config import load_config
-from soundthing.harness import bootstrap, components, holdout, paths, proposals, space
+from soundthing.harness import bootstrap, components, holdout, paths, space
 from soundthing.harness import ledger as ledger_module
-from soundthing.harness.components.base import key_owner
+from soundthing.harness.components.base import is_config_key
 from soundthing.harness.score import score as score_func
 
 
@@ -681,10 +681,10 @@ def promote(
                 reason = f"Refusing to override {k}: {k!r}"
                 break
 
-    # Check key prefixes against known owners / non-writable prefixes
+    # Every key must map to a writable config file
     if reason is None:
         for k in sorted(overrides.keys()):
-            if key_owner(k) is None:
+            if not is_config_key(k):
                 try:
                     split_target(k)
                 except PromoteError as e:
@@ -745,30 +745,11 @@ def promote(
         holdout_status = "n/a"
         holdout_pass_val = None
 
-    # 6. Promotion ownership routing
-    role = paths.harness_role()
-    owned_overrides = {k: v for k, v in overrides.items() if key_owner(k) == role}
-    other_overrides = {k: v for k, v in overrides.items() if key_owner(k) != role}
-
-    prop_path: Path | None = None
-    if other_overrides:
-        other_owners = sorted(set(key_owner(k) or "unknown" for k in other_overrides))
-        prop_note = f"Promoted run {run_id} contains overrides owned by {', '.join(other_owners)}"
-        prop_path = proposals.propose_shared_change(
-            other_overrides,
-            candidate,
-            prop_note,
-            cfg=cfg,
-            out_dir=paths.proposals_dir(),
-            allow_role_keys=True,
-        )
-
-    changed: list[Path] = []
-    if owned_overrides:
-        try:
-            changed = write_overrides(owned_overrides, config_dir)
-        except PromoteError as e:
-            return _refuse(ledger, run_id, f"write failed: {e}", git_info, holdout_pass=holdout_pass_val, ci=ci, component=cand_comp)
+    # 6. Write config
+    try:
+        changed = write_overrides(overrides, config_dir)
+    except PromoteError as e:
+        return _refuse(ledger, run_id, f"write failed: {e}", git_info, holdout_pass=holdout_pass_val, ci=ci, component=cand_comp)
 
     space_idx = space.space_index(comp.space(cfg, None))
     old: dict[str, Any] = {}
@@ -799,7 +780,5 @@ def promote(
         "bootstrap": ci,
         "objective": candidate["objective"],
     }
-    if prop_path is not None:
-        reply["proposal"] = str(prop_path)
 
     return reply

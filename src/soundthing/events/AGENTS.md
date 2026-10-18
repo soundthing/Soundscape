@@ -1,6 +1,6 @@
 # Agent rules for `events/`
 
-This directory is Person 1's sound event detection stage. The root
+This directory is the sound event detection stage. The root
 [AGENTS.md](../../../AGENTS.md) still applies in full; these rules add to it.
 
 ## Before you start

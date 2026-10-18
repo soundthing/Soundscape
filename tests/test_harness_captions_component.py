@@ -65,7 +65,6 @@ def test_captions_component_protocol(cfg: Config) -> None:
     """COMPONENT implements the Component protocol with correct metadata."""
     assert isinstance(COMPONENT, Component)
     assert COMPONENT.name == "captions"
-    assert COMPONENT.owner == "person3"
     assert COMPONENT.sections == ("captions.",)
     assert COMPONENT.code_paths == ("src/soundthing/captions.py",)
     assert COMPONENT.tuning_log == "src/soundthing/harness/references/captions-tuning-log.md"

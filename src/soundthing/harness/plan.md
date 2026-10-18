@@ -19,7 +19,7 @@ vs best, bootstrap, hidden holdout, ledger, MCP) still holds.
 
 ## Component protocol
 
-Each component declares: `name`, owning role, the config keys it owns, `cache_key(cfg)`,
+Each component declares: `name`, the config keys it tunes, `cache_key(cfg)`,
 `build_cache(clip, cfg)` (slow model stage), `predict(cache, cfg, context)` (fast replay),
 `objective(preds, labels) -> per-clip counts + scalar`, `limits(candidate, best)` and
 `space(cfg, dev_stats)`. Core score/sweep/bootstrap/promote/ledger work on any component.
@@ -31,12 +31,10 @@ Each component declares: `name`, owning role, the config keys it owns, `cache_ke
 | captions | cue-level F0.5 on rendered cues vs labeled events | none (cheap) | min/max cue durations, merge rules |
 | pipeline | caption F0.5 with predicted (not labeled) environment | union of the above | everything, jointly |
 
-## Ownership and safety
+## Safety
 
-- **Owner:** the harness becomes its own row in root AGENTS.md (needs confirmation; see below).
-- **Cross-role promotion:** promote writes config only for components owned by the
-  current user's role. A winner for another role's component becomes a proposal for that
-  owner (same path as `vocabulary.yaml`/`priors.yaml` today).
+- **Promotion:** writes any tuned config key (`pipeline.yaml`, `thresholds.yaml`). Shared
+  files (`vocabulary.yaml`, `priors.yaml`, `environments.yaml`) only get proposals.
 - **Trusted scorer:** scoring always runs the harness from a pinned commit of the main
   checkout and imports only the candidate's stage code from the experiment worktree, so
   an agent can't improve its number by editing the objective.
@@ -46,7 +44,7 @@ Each component declares: `name`, owning role, the config keys it owns, `cache_ke
 
 Done (2026-10-18): component protocol + registry (`components/`), events/environment/
 captions/pipeline components, generic score/sweep/bootstrap/promote/ledger with
-`--component`, per-component best, cross-role promotion as proposals (`SOUNDTHING_ROLE`),
+`--component`, per-component best, promotion writes any component's config keys,
 trusted scorer (`trusted.py`), experiment runner and code promotion to review branches
 (`runner.py`), MCP tools `list_components`, `run_experiment`, `promote_code`.
 
@@ -72,6 +70,5 @@ Reproduce: `build-dev --esc50 data/esc50 --n-per-env 3 --out data/harness/dev-es
 
 ## Open decisions
 
-1. ~~Who owns `harness/`~~ Person 1 (root AGENTS.md row).
-2. ~~Cross-role writes~~ Proposals only.
-3. ~~End-to-end objective~~ Caption-cue F0.5 with predicted environment; env accuracy is a diagnostic.
+1. ~~Ownership~~ Dropped (2026-10-18): no role ownership; anyone edits anything, harness writes all config keys.
+2. ~~End-to-end objective~~ Caption-cue F0.5 with predicted environment; env accuracy is a diagnostic.

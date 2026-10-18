@@ -1,7 +1,7 @@
-"""Generate human-review proposals for shared or cross-role configuration changes.
+"""Generate human-review proposals for shared configuration changes.
 
 Shared configuration files (config/vocabulary.yaml and config/priors.yaml)
-belong to the whole team / other roles and cannot be written automatically
+are shared contracts and cannot be written automatically
 by tuning scripts. This module drafts markdown proposals for review.
 """
 
@@ -14,7 +14,6 @@ from typing import Any
 
 from soundthing.config import load_config
 from soundthing.harness import paths
-from soundthing.harness.components.base import key_owner
 
 
 def _format_diff_val(val: Any) -> str:
@@ -44,19 +43,17 @@ def propose_shared_change(
     *,
     cfg: Any = None,
     out_dir: Path | None = None,
-    allow_role_keys: bool = False,
 ) -> Path:
-    """Create a markdown proposal for shared or cross-role configuration overrides.
+    """Create a markdown proposal for shared configuration overrides.
 
     Args:
         overrides: Non-empty dict of overrides with keys starting with
-            'vocabulary.' or 'priors.', or role-owned keys if allow_role_keys=True.
+            'vocabulary.' or 'priors.'.
         result: ScoreResult object, dict of score metrics, or None.
         note: Explanation of the change.
         cfg: Optional Config instance; defaults to load_config().
         out_dir: Directory where the proposal is written; defaults to
             paths.proposals_dir().
-        allow_role_keys: Allow keys owned by other roles.
 
     Returns:
         Path to the created proposal markdown file.
@@ -67,10 +64,9 @@ def propose_shared_change(
     for key in overrides:
         is_shared = key.startswith("vocabulary.") or key.startswith("priors.")
         if not is_shared:
-            if not (allow_role_keys and key_owner(key) is not None):
-                raise ValueError(
-                    f"Key {key!r} is not a shared configuration key (must start with 'vocabulary.' or 'priors.')"
-                )
+            raise ValueError(
+                f"Key {key!r} is not a shared configuration key (must start with 'vocabulary.' or 'priors.')"
+            )
 
     if cfg is None:
         cfg = load_config()
@@ -121,25 +117,6 @@ def propose_shared_change(
                 curr_val = cfg.priors.environments[env].classes.get(cid, None)
             else:
                 raise ValueError(f"Invalid priors key: {key!r}")
-        elif key_owner(key) is not None:
-            curr_val = None
-            if cfg is not None:
-                if key.startswith("thresholds."):
-                    if len(parts) == 2 and parts[1] == "default":
-                        curr_val = cfg.thresholds.default
-                    elif len(parts) == 2 and parts[1] == "safety_default":
-                        curr_val = cfg.thresholds.safety_default
-                    elif len(parts) == 3 and parts[1] == "classes":
-                        curr_val = cfg.threshold(parts[2])
-                else:
-                    curr = cfg.pipeline
-                    for p in parts:
-                        if isinstance(curr, dict) and p in curr:
-                            curr = curr[p]
-                        else:
-                            curr = None
-                            break
-                    curr_val = curr
         else:
             raise ValueError(f"Unknown prefix: {key!r}")
 

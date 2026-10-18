@@ -179,7 +179,6 @@ def event_counts(matches: list[ClipMatch]) -> dict[str, Any]:
 
 class EventsComponent:
     name: str = "events"
-    owner: str = "person1"
     sections: tuple[str, ...] = ("events.", "thresholds.")
     code_paths: tuple[str, ...] = ("src/soundthing/events",)
     tuning_log: str = "src/soundthing/events/references/tuning-log.md"
