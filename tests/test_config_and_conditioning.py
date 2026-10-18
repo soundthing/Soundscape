@@ -21,8 +21,9 @@ def test_general_means_no_conditioning(cfg):
 
 def test_safety_bypasses_priors(cfg):
     w = prior_weights(cfg, {"kitchen": 1.0}, ["siren", "car_horn", "microwave_beep", "train_horn"])
-    assert list(w[:3]) == [1.0, 1.0, 1.0]
-    assert w[3] == cfg.priors.environments["kitchen"].default
+    assert list(w[:2]) == [1.0, 1.0]
+    assert w[2] == cfg.priors.environments["kitchen"].weight("microwave_beep")
+    assert w[3] == cfg.priors.environments["kitchen"].weight("train_horn")
 
 
 def test_fusion_and_fallback():

@@ -45,6 +45,6 @@ def apply_priors(scores: FrameScores, segments: list[EnvSegment], cfg: Config) -
     for t_idx, t in enumerate(scores.times):
         w = prior_weights(cfg, env_probs_at(segments, float(t)), scores.class_ids)
         out[t_idx] = adjust_scores(out[t_idx], w, floor=floor,
-                                   application=getattr(cfg.priors, "application", "multiplicative"),
-                                   max_gain=getattr(cfg.priors, "max_gain", 4.))
+                                   application=cfg.priors.application,
+                                   max_gain=cfg.priors.max_gain)
     return scores.copy_with(out)

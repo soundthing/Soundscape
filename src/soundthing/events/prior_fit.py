@@ -9,7 +9,6 @@ import argparse
 import csv
 import hashlib
 import json
-import math
 from pathlib import Path
 import re
 
@@ -155,7 +154,8 @@ def fit(cfg: Config, data: Path, settings: dict, labels_path: Path, *, progress=
     params = {k: settings[k] for k in ['alpha','min_class','min_environment','floor','max_gain']}
     priors = {'application': 'odds', 'floor': settings['floor'], 'max_gain': settings['max_gain'],
               'environments': {GENERAL_ENV: {'default': 1., 'classes': {}}}}
-    report = {'dataset': 'Sound-VECaps 1.0 + AudioSet training annotations',
+    report = {'coefficient_representation': 'Safety classes use neutral default=1; all classes were considered in estimation.',
+              'dataset': 'Sound-VECaps 1.0 + AudioSet training annotations',
               'source_url': 'https://zenodo.org/records/12606207',
               'limitations': ['Environment captions are generated, not human scene ground truth.',
                              'AudioSet labels are incomplete positives; missing labels are not verified negatives.',
@@ -171,7 +171,7 @@ def fit(cfg: Config, data: Path, settings: dict, labels_path: Path, *, progress=
             continue
         weights, base, conditional = estimate_coefficients(global_counts, total, counts.get(env,np.zeros(width)), sizes.get(env,0),
                                                           safety=safety, **params)
-        priors['environments'][env] = {'default': 1., 'classes': {cid: round(float(w),6) for cid,w in zip(cfg.class_ids,weights)}}
+        priors['environments'][env] = {'default': 1., 'classes': {cid: round(float(w),6) for cid,w in zip(cfg.class_ids,weights) if cid not in cfg.safety_ids()}}
         n = test_sizes.get(env,0); positives = test_counts.get(env,np.zeros(width))
         adjusted = base * weights / (1-base+base*weights)
         def logloss(probs):

@@ -1,0 +1,12 @@
+# Illustrative fragment; a full config needs a block for every environment.
+application: odds
+floor: 0.25
+max_gain: 4.0
+environments:
+  general: {default: 1.0, classes: {}}
+  kitchen:
+    default: 1.0
+    classes:
+      sizzling: 4.0
+      train_horn: 0.25
+# Safety sounds such as siren use effective weight 1.0 in every environment.

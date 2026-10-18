@@ -143,7 +143,7 @@ def env_probs_at(segments: list[EnvSegment], t: float) -> dict[str, float]:
 
 @dataclass
 class CaptionEvent:
-    """Final caption event; ids may be curated or AudioSet-based. Ancestry lives in config."""
+    """Final event; ids may be curated or AudioSet-based. Confidence is a score, not calibrated probability."""
     """A final, display-ready non-speech caption."""
 
     start: float

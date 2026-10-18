@@ -11,10 +11,12 @@ Visuals only inform the environment. Many important sounds happen off-screen.
 A wrong caption is worse than a missed one. Safety classes get their own, separately tuned
 thresholds because they bypass conditioning and would otherwise false-alarm more.
 
-## Conditioning weakens, never deletes — agreed
-The priors floor (0.25) means a misclassified environment lowers a score instead of
-zeroing it. Low environment confidence blends toward `general`, which weakens conditioning
-smoothly.
+## Conditioning keeps every sound possible — agreed, revised with user approval
+The old multiplicative floor could prevent unlikely classes reaching threshold.
+The fitted table instead uses positive bounded odds coefficients (0.25–4): relevant
+sounds can be boosted and unlikely ones downweighted, while strong enough audio
+can always qualify. Legacy configs retain multiplication. Low scene confidence
+still blends toward neutral `general`, and safety classes bypass the table.
 
 ## Tagger and CLAP combine by max — events
 A class takes the higher of its tagger and CLAP scores. Simple, and lets either model

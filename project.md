@@ -131,8 +131,11 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
   `conf·p + (1−conf)·onehot(general)`. Conditioning reads `probs`, so low confidence
   smoothly weakens conditioning toward none.
 - **Priors.** `weight(c,t) = Σ_e probs_t[e]·w[e][c]`, and safety classes always get 1.
-  The conditioned score is `raw · (floor + (1−floor)·weight)`. The floor (0.25) means a
-  misclassified environment weakens events instead of deleting them.
+  The current fitted table uses positive odds coefficients: `raw·weight / (1−raw+raw·weight)`.
+  Weights are bounded to 0.25–4, so relevance can raise or lower confidence while
+  every sound remains possible in every environment. Old configs retain their
+  multiplicative rule unless they select `application: odds`. See
+  [environment priors](docs/environment-priors.md) for the dataset and limitations.
 - **`class_id` vs `label`.** `label` is the caption text and `class_id` is the vocabulary
   id, or a coarse group id such as `impact` when the detector isn't sure. Eval uses
   `class_id`.
@@ -145,7 +148,7 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
 |---|---|---|
 | `environments.yaml` | P2 | 7 environments (`general` + 6), each with CLIP visual prompts and CLAP audio prompts |
 | `vocabulary.yaml` | P1 | 61 classes (10 safety) with caption text, AudioSet label mapping, CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
-| `priors.yaml` | P2 | per-environment `default` + class weights, plus `floor` |
+| `priors.yaml` | P2 | per-environment coefficients, `floor`, `application`, `max_gain` |
 | `thresholds.yaml` | P1 | default 0.5, safety default 0.6, per-class overrides (e.g. gunshot 0.75) |
 | `pipeline.yaml` | per section | backends, extraction rate/fps, segmentation, model names, fusion weights, window/hop, VAD suppression, post-processing params, caption cue limits, eval tolerance |
 

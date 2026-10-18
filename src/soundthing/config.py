@@ -7,6 +7,7 @@ Run `soundthing check-config` after editing any config file.
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,8 @@ class EnvPriors:
 class Priors:
     floor: float
     environments: dict[str, EnvPriors]
+    application: str = "multiplicative"
+    max_gain: float = 4.0
 
 
 @dataclass
@@ -189,21 +192,37 @@ class Config:
             except ConfigError as exc:
                 errors.append(str(exc))
 
+        if self.priors.application not in {"multiplicative", "odds"}:
+            errors.append("priors.yaml: application must be multiplicative or odds")
+        odds = self.priors.application == "odds"
+        if not math.isfinite(self.priors.max_gain) or self.priors.max_gain < 1:
+            errors.append("priors.yaml: max_gain must be finite and >= 1")
+        if odds and not 0 < self.priors.floor <= 1:
+            errors.append("priors.yaml: odds floor must be in (0, 1]")
+        lower, upper = (self.priors.floor, self.priors.max_gain) if odds else (0., 1.)
+
+        def valid_prior(value):
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and lower <= value <= upper
+
         for env_id in env_ids:
             if env_id not in self.priors.environments:
                 errors.append(f"priors.yaml: missing block for environment {env_id!r}")
         for env_id, ep in self.priors.environments.items():
             if env_id not in env_ids:
                 errors.append(f"priors.yaml: unknown environment {env_id!r}")
-            if not 0 <= ep.default <= 1:
-                errors.append(f"priors.yaml: {env_id}.default not in [0, 1]")
+            if not valid_prior(ep.default):
+                errors.append(f"priors.yaml: {env_id}.default not in [{lower}, {upper}]")
             for cid, w in ep.classes.items():
                 if cid not in class_ids:
                     errors.append(f"priors.yaml: {env_id}: unknown class {cid!r}")
-                if not 0 <= w <= 1:
-                    errors.append(f"priors.yaml: {env_id}.{cid}={w} not in [0, 1]")
+                if not valid_prior(w):
+                    errors.append(f"priors.yaml: {env_id}.{cid}={w} not in [{lower}, {upper}]")
                 if cid in self.safety_ids():
                     warnings.append(f"priors.yaml: {env_id}.{cid} is a safety class; prior is ignored")
+        if odds:
+            general = self.priors.environments.get(GENERAL_ENV)
+            if general and (general.default != 1 or any(w != 1 for w in general.classes.values())):
+                errors.append("priors.yaml: general must be neutral in odds mode")
         if not 0 <= self.priors.floor <= 1:
             errors.append("priors.yaml: floor not in [0, 1]")
 
@@ -244,6 +263,8 @@ def load_config(config_dir: str | Path | None = None, validate: bool = True) -> 
         },
         priors=Priors(
             floor=float(priors_raw.get("floor", 0.0)),
+            application=priors_raw.get("application", "multiplicative"),
+            max_gain=float(priors_raw.get("max_gain", 4.0)),
             environments={
                 k: EnvPriors(default=float(v.get("default", 1.0)), classes=dict(v.get("classes") or {}))
                 for k, v in (priors_raw.get("environments") or {}).items()

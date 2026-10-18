@@ -124,7 +124,7 @@ streaming wrapper can reuse it.
 Run `soundthing check-config` after any edit (add `--audioset class_labels_indices.csv`
 to verify AudioSet names).
 
-### Prior semantics ([`events/conditioning.py`](../src/soundthing/events/conditioning.py))
+### Legacy prior semantics ([`events/conditioning.py`](../src/soundthing/events/conditioning.py))
 
 ```
 w[e][c]          = priors.environments[e].classes[c]  or  priors.environments[e].default
@@ -132,7 +132,9 @@ weight(c, t)     = Σ_e probs_t[e] · w[e][c]          (safety classes: 1)
 conditioned(c,t) = raw(c,t) · (floor + (1 − floor) · weight(c,t))
 ```
 
-Then per-class thresholds from `thresholds.yaml` apply to the conditioned score.
+This is the backward-compatible `multiplicative` mode. The current fitted table
+selects `odds`; see “Prior application modes” below. In either mode, per-class
+thresholds from `thresholds.yaml` apply to the conditioned score.
 
 ## Evaluation ([`evaluate.py`](../src/soundthing/evaluate.py))
 
@@ -172,3 +174,29 @@ from directly scoring the existing `dog_bark` class. New ids are
 unscored intermediate nodes to the nearest scored ancestors. Multiple inheritance
 is retained. Existing labels and stored JSON stay loadable; regenerating runs is
 necessary to see expanded detection and hierarchy filtering.
+
+## Prior application modes
+
+`priors.yaml` optionally selects `application: multiplicative | odds` and
+`max_gain: float >= 1` (default 4). Old configurations omit these fields and keep
+their existing multiplication behavior and coefficient range `[0,1]`.
+In `odds` mode `floor` must be positive, coefficients/defaults must be finite and
+in `[floor, max_gain]`, and the general environment must have neutral weight 1.
+Safety classes always have effective weight 1 regardless of the table.
+
+Person 1 mixes coefficients with Person 2's existing `probs` distribution:
+`w = sum_e probs[e] * coefficient[e][class]`. Odds mode applies
+`adjusted = score*w / (1-score+score*w)`, with `w` bounded by `floor`/`max_gain`.
+Unlike multiplying a probability by a small coefficient, positive odds weights
+permit every class to meet its threshold when acoustic evidence is strong enough.
+A score of 0 stays 0 and a score of 1 stays 1. General leaves scores unchanged.
+The resulting unit-range score is not a calibrated real-world probability.
+
+The fitted table replaces manually chosen scene coefficients. It estimates weak
+annotation enrichment from Sound-VECaps context descriptions joined with AudioSet
+training annotations, with video-id holdout, excluded evaluation ids, shrinkage and
+neutral unsupported cases. It covers all 527 PANNs labels; the five CLAP-only
+classes have no dataset label mapping and remain neutral. Person 2 owns this table;
+Person 1 consumes it, and Person 3 receives the same schema-version-1 event JSON.
+No environment id or stored JSON field changes. See `docs/environment-priors.md`,
+`docs/research/sound-priors-report.json`, and `docs/examples/priors-odds.yaml`.

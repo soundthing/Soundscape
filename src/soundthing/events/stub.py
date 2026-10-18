@@ -1,6 +1,6 @@
 """Fake event detector: valid output, no models. Deterministic per video_id.
 
-When env segments are given, applies the real prior weights so baseline vs
+When env segments are given, applies the configured multiplicative/odds priors so baseline vs
 conditioned output differ visibly in the demo even before real models exist.
 """
 
@@ -29,8 +29,8 @@ def detect_stub(
         if segments is not None:
             w = prior_weights(cfg, env_probs_at(segments, t), [c.id])[0]
             score = float(adjust_scores(score, w, floor=cfg.priors.floor,
-                                        application=getattr(cfg.priors, "application", "multiplicative"),
-                                        max_gain=getattr(cfg.priors, "max_gain", 4.)))
+                                        application=cfg.priors.application,
+                                        max_gain=cfg.priors.max_gain))
         end = min(inputs.duration, t + float(rng.uniform(0.4, 2.5)))
         if score >= cfg.threshold(c.id) and end > t:
             events.append(
