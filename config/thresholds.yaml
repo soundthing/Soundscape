@@ -23,6 +23,15 @@ classes:
   thud: 0.6
   crash: 0.6
   footsteps: 0.55
+  audioset_m_014yck: 0.9
+  audioset_m_06d_3: 0.9
+  audioset_m_07p9k1k: 0.85
+  audioset_m_07pdjhy: 0.85
+  audioset_m_07rc7d9: 0.9
+  audioset_m_0cmf2: 0.9
+  audioset_t_dd00038: 0.9
+  insects: 0.85
+  waves: 0.85
 
 # All 527 PANNs labels are assigned explicitly, independent of graph depth.
 # Broad: general categories/acoustics. Specific: named sources/actions.
