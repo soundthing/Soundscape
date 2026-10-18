@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -9,6 +10,9 @@ import pytest
 
 from soundthing.harness import paths
 from soundthing.harness.sweep import log_result, result_as_dict, sweep
+
+
+requires_optuna = pytest.mark.skipif(importlib.util.find_spec("optuna") is None, reason="needs optuna")
 
 
 @dataclass
@@ -40,13 +44,13 @@ class FakeLedger:
     def append(self, entry: dict[str, Any]) -> None:
         self.entries.append(dict(entry))
 
-    def read(self) -> list[dict[str, Any]]:
+    def read(self, component: str | None = None) -> list[dict[str, Any]]:
         return list(self.entries)
 
-    def best(self) -> dict[str, Any] | None:
+    def best(self, component: str | None = None) -> dict[str, Any] | None:
         return self._best
 
-    def set_best(self, entry: dict[str, Any]) -> None:
+    def set_best(self, entry: dict[str, Any], component: str = "events") -> None:
         self._best = dict(entry)
 
     def git_state(self, cwd: Any = None) -> dict[str, Any]:
@@ -73,6 +77,8 @@ class FakeScoreFn:
         overrides: dict[str, Any] | None = None,
         split: str = "dev",
         cfg: Any = None,
+        component: str = "events",
+        **kwargs: Any,
     ) -> FakeResult:
         self._counter += 1
         run_id = f"run_{self._counter:04d}"
@@ -229,6 +235,7 @@ def test_acceptance_2_coordinate_two_params_stops_when_no_improvement(cfg, tmp_p
     assert res["best_objective"] == pytest.approx(0.5)
 
 
+@requires_optuna
 def test_acceptance_3_unpassed_candidates_never_adopted(cfg, tmp_path, monkeypatch):
     """Check 3: candidates that do not pass limits are never adopted even if objective is higher."""
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
@@ -273,6 +280,7 @@ def test_acceptance_3_unpassed_candidates_never_adopted(cfg, tmp_path, monkeypat
     assert res_optuna["best_overrides"] == {}
 
 
+@requires_optuna
 def test_acceptance_4_int_param_max_on_screen(cfg, tmp_path, monkeypatch):
     """Check 4: int param events.postprocess.max_on_screen suggested/linspace values are ints, deduped."""
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
@@ -315,6 +323,7 @@ def test_acceptance_4_int_param_max_on_screen(cfg, tmp_path, monkeypatch):
             assert type(val) is int
 
 
+@requires_optuna
 def test_acceptance_5_optuna_budget_and_determinism(cfg, tmp_path, monkeypatch):
     """Check 5: optuna with budget 8 and seed 0: exactly 8 score calls, values within bounds, deterministic."""
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
@@ -418,6 +427,7 @@ def test_acceptance_6_error_cases(cfg, tmp_path, monkeypatch):
         )
 
 
+@requires_optuna
 def test_acceptance_7_budget_1(cfg, tmp_path, monkeypatch):
     """Check 7: budget 1 -> only the base evaluation, improved False."""
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))

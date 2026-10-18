@@ -38,3 +38,39 @@ All tool and CLI operations are logged to the shared ledger (`ledger.jsonl`) und
 
 ## Kaggle kernel ships the working tree instead of cloning — harness
 The kernel used to clone the (private) repo at a pushed sha, which needed a GitHub token as a Kaggle secret and a commit+push before every recache. Cache building needs only `src/soundthing`, `config/` and `pyproject.toml` (~160 KB base64), so the pusher embeds them in the script and records their sha256 in the cache meta. Trade-off: provenance is a bundle hash rather than a commit.
+
+## Component protocol and dynamic registry — harness
+The harness core is decoupled from event-specific logic via a runtime_checkable `Component` protocol (`base.py`) and dynamic string-based registry (`REGISTRY`). Components (`events`, `environment`, `captions`, `pipeline`) implement their own search spaces, stat objectives, limits, and scoring routines. Unimplemented components are reported as unavailable by `list-components` without failing imports.
+
+## Component ledger separation and backward compatibility — harness
+Best runs for the legacy `events` component remain stored at `data/harness/best.json`, while other components write to `best-<component>.json`. Entries in `ledger.jsonl` record their `component`, and reading/filtering defaults to `events` to preserve behavior for existing tools and tests.
+
+## Promotion writes every component's config; no role routing — harness
+Reversed 2026-10-18. Promotion used to write only keys owned by the current role
+(`SOUNDTHING_ROLE`) and turn the rest into proposals. The repo dropped role ownership, so
+promotion now writes any tunable key in `pipeline.yaml` / `thresholds.yaml`. Proposals
+remain only for the shared contract files (`vocabulary.yaml`, `priors.yaml`), which still
+need explicit confirmation under root AGENTS.md §1.
+
+## Environment tuning uses raw logits caching with pure replay function — environment
+`environment.classifier.classify` was refactored to extract `segments_from_logits`, separating slow inference (audio CLAP embeddings, visual SigLIP embeddings, PySceneDetect) from fast post-processing (temperature scaling, late fusion, visual similarity floor, thresholding, and adjacent same-env segment merging). `EnvCache` stores pre-softmax logits per shot span. Replay evaluates candidates in milliseconds without model re-runs.
+
+## Environment objective balances time accuracy with macro accuracy — environment
+The fixed environment objective is `0.5 * time_acc + 0.5 * macro_acc`. Time accuracy pools total matching seconds across all clips against total labeled seconds, prioritizing dominant scenes. Macro accuracy averages per-environment accuracy across only those environments present in the ground truth labels, preventing frequent background environments from completely overshadowing rarer scenes. Per-clip stats store `[correct_sec, total_sec]` for each environment in config order, enabling exact objective recomputation in paired bootstrap resampling.
+## End-to-end pipeline objective is caption-cue F0.5 with predicted environment — pipeline
+The pipeline component evaluates end-to-end performance using the same caption-cue micro F0.5 (with coarse half-credit) as the captions component, but conditioning events replay on the predicted environment (`predict_segments`) rather than ground truth labels. Baseline metric evaluates unconditioned events, and environment time accuracy (`env_time_acc`) is tracked as a diagnostic.
+
+## Cue matching evaluates onset tolerance and duration-scaled offset tolerance — captions
+Captions and pipeline evaluation match predicted caption cues against labeled events using greedy nearest-onset matching order (identical to events evaluation), requiring matching class (fine or coarse group for half-credit), onset error <= `eval.onset_tolerance_sec`, and offset error <= `max(eval.onset_tolerance_sec, 0.5 * event.duration)`. Diagnostics include a 5-bin signed offset error histogram.
+
+## Pipeline search space is the de-duplicated union of constituent components — pipeline
+The pipeline component search space aggregates parameters from the events, environment, and captions stages by querying `space()` on each component and dropping duplicate parameter entries.
+
+## Trusted scorer overlay isolates candidate code — harness
+Scoring candidate code changes uses an overlay directory created by archiving the pinned commit (default HEAD of main checkout) for `src`, `config`, and `pyproject.toml`. Only the component's declared `code_paths` and non-shared `config/` files are copied from the candidate worktree, with the `eval:` section in `pipeline.yaml` strictly restored from the pinned commit and shared yaml files (`environments.yaml`, `vocabulary.yaml`, `priors.yaml`) preserved from pinned. This guarantees that candidate code cannot alter the objective, harness, or evaluation parameters.
+
+## Code experiments run in short worktrees and prune unaccepted branches — harness
+Code experiments run in dedicated git worktrees located under `<main_checkout parent>/.wt/soundthing-exp-<id>` to mitigate Windows MAX_PATH limitations. If the candidate fails limit checks or paired bootstrap acceptance against current best, its worktree and branch are automatically removed to prevent repo clutter. Accepted runs keep their branch for promotion.
+
+## Code promotion targets review branches with tamper verification — harness
+`promote_code` verifies that the experiment was accepted, validates the patch SHA against the recorded ledger entry to detect any tampering, enforces holdout gating on events, and creates a local `harness/review/<run_id>` branch. It never automatically merges into user branches or pushes to remotes, keeping human review as the final gate for code promotion.

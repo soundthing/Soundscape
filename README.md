@@ -47,7 +47,7 @@ whole path works with fake output until the real models land.
 ## Layout
 
 ```
-config/                 shared config — see docs/interfaces.md for owners
+config/                 shared config — see docs/interfaces.md
   environments.yaml  vocabulary.yaml  priors.yaml  thresholds.yaml  pipeline.yaml
 docs/interfaces.md      the JSON contracts between components  (+ docs/examples/)
 labels/                 optional clip labels for pipeline runs (eval data: labels/README.md)

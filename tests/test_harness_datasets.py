@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import csv
+import importlib.util
 import json
 import sys
 import types
@@ -84,6 +85,9 @@ ALL_50_ESC50_CATEGORIES = {
     "water_drops",
     "wind",
 }
+
+
+requires_torch = pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs torch")
 
 
 def test_datasets_yaml_structure_and_vocabulary():
@@ -197,6 +201,7 @@ def fake_esc50(tmp_path: Path) -> Path:
     return esc50_dir
 
 
+@requires_torch
 def test_esc50_mixes_generation(fake_esc50: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """End-to-end synthetic dev mix creation, determinism, audio quality, and labels."""
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))
@@ -311,6 +316,7 @@ def test_invalid_mapped_id_raises_value_error(fake_esc50: Path, tmp_path: Path, 
         esc50_mixes(fake_esc50, cfg, n_per_env=1, seed=1, out_dir=tmp_path / "out")
 
 
+@requires_torch
 def test_prior_weighted_sampling(fake_esc50: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Sampling uses prior weights: weight given only to one candidate forces all events to that class."""
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))
@@ -433,6 +439,7 @@ def fake_fsd50k(tmp_path: Path) -> Path:
     return fsd_dir
 
 
+@requires_torch
 def test_fsd50k_mixes_generation(fake_fsd50k: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """FSD50K mixes: single fold per mix, multi-label exclusion, validation, determinism."""
     monkeypatch.setenv("SOUNDTHING_HARNESS_HOME", str(tmp_path))

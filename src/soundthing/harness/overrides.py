@@ -95,6 +95,21 @@ def apply_overrides(cfg: Config, overrides: dict[str, Any]) -> Config:
             else:
                 raise KeyError(f"Unknown priors key: {key!r}")
 
+        elif section in ("environment", "captions", "extract"):
+            if len(parts) < 2:
+                raise KeyError(f"{section} key path too short: {key!r}")
+            if section not in new_cfg.pipeline or not isinstance(new_cfg.pipeline[section], dict):
+                new_cfg.pipeline[section] = {}
+            cur = new_cfg.pipeline[section]
+            for p in parts[1:-1]:
+                if not isinstance(cur, dict):
+                    raise KeyError(f"Path does not exist in pipeline[{section!r}]: {key!r}")
+                if p not in cur:
+                    cur[p] = {}
+                cur = cur[p]
+            leaf = parts[-1]
+            cur[leaf] = val
+
         else:
             raise KeyError(f"Unknown top-level section in key: {key!r}")
 

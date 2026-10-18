@@ -12,26 +12,20 @@ from .segmentation import detect_spans
 from .visual import visual_env_logits
 
 
-def classify(
-    inputs: ExtractedInputs,
+def segments_from_logits(
+    spans: list[tuple[float, float]],
+    audio_logits: np.ndarray | None,
+    visual_logits: np.ndarray | None,
+    env_ids: list[str],
     cfg: Config,
-    use_audio: bool = True,
-    use_visual: bool = True,
+    duration: float,
 ) -> list[EnvSegment]:
-    if not use_audio and not use_visual:
+    if audio_logits is None and visual_logits is None:
         raise ValueError("need at least one environment modality")
     ecfg = cfg.pipeline["environment"]
-    envs = [e for e in cfg.environments if e.id != GENERAL_ENV]
-    env_ids = [e.id for e in envs]
     temp = ecfg["fusion"]["temperature"]
 
-    spans = detect_spans(inputs.video_path, inputs.duration, cfg)
-    a = softmax(audio_env_logits(inputs, spans, envs, cfg), temp) if use_audio else None
-    if use_visual and not inputs.frame_paths():
-        if not use_audio:
-            raise FileNotFoundError(f"no extracted frames in {inputs.frames_dir}")
-        use_visual = False
-    visual_logits = visual_env_logits(inputs, spans, envs, cfg) if use_visual else None
+    a = softmax(audio_logits, temp) if audio_logits is not None else None
     v = softmax(visual_logits, temp) if visual_logits is not None else None
     probs = fuse(a, v, ecfg["fusion"]["audio_weight"], ecfg["fusion"]["visual_weight"])
 
@@ -54,16 +48,37 @@ def classify(
     merged_probs = []
     merged_envs = []
     for (start, end), row, candidate in zip(spans, probs, candidates):
-        duration = end - start
+        span_duration = end - start
         if merged_spans and candidate.env == merged_envs[-1]:
             previous_start, previous_end = merged_spans[-1]
             previous_duration = previous_end - previous_start
-            merged_probs[-1] = (merged_probs[-1] * previous_duration + row * duration) / (previous_duration + duration)
+            merged_probs[-1] = (merged_probs[-1] * previous_duration + row * span_duration) / (previous_duration + span_duration)
             merged_spans[-1] = (previous_start, end)
         else:
             merged_spans.append((start, end))
             merged_probs.append(row.copy())
             merged_envs.append(candidate.env)
     segments = to_segments(merged_spans, np.stack(merged_probs), env_ids, ecfg["confidence_threshold"])
-    validate_segments(segments, inputs.duration)
+    validate_segments(segments, duration)
     return segments
+
+
+def classify(
+    inputs: ExtractedInputs,
+    cfg: Config,
+    use_audio: bool = True,
+    use_visual: bool = True,
+) -> list[EnvSegment]:
+    if not use_audio and not use_visual:
+        raise ValueError("need at least one environment modality")
+    envs = [e for e in cfg.environments if e.id != GENERAL_ENV]
+    env_ids = [e.id for e in envs]
+
+    spans = detect_spans(inputs.video_path, inputs.duration, cfg)
+    audio_logits = audio_env_logits(inputs, spans, envs, cfg) if use_audio else None
+    if use_visual and not inputs.frame_paths():
+        if not use_audio:
+            raise FileNotFoundError(f"no extracted frames in {inputs.frames_dir}")
+        use_visual = False
+    visual_logits = visual_env_logits(inputs, spans, envs, cfg) if use_visual else None
+    return segments_from_logits(spans, audio_logits, visual_logits, env_ids, cfg, inputs.duration)

@@ -1,4 +1,4 @@
-# Tuning harness plan (Person 1)
+# Tuning harness plan (events)
 
 A harness that scores the events stage with one number, so agents can hill-climb it:
 change something, re-score, keep the change only if it really helps.
@@ -40,9 +40,9 @@ checks that replay matches `detect` exactly. The cache is about 1 MB per minute 
 
 ## Metrics
 
-The harness imports `match_events`/`score_events` from `evaluate.py` (Person 3), so its
+The harness imports `match_events`/`score_events` from `evaluate.py`, so its
 numbers agree with `soundthing eval`. F0.5 and grid-based F1 (1 s slices) live in the
-harness, not in `evaluate.py`; they can be offered to Person 3 later.
+harness, not in `evaluate.py`; they can be moved into `evaluate.py` later.
 
 Diagnostics (shown, not optimized): per-class TP/FP/FN, signed onset error, grid F1, and
 top false positives with timestamps.

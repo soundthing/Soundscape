@@ -277,13 +277,13 @@ class FakeLedger:
     def append(self, entry: dict) -> None:
         self.entries.append(dict(entry))
 
-    def read(self) -> list[dict]:
+    def read(self, component: str | None = None) -> list[dict]:
         return list(self.entries)
 
-    def best(self) -> dict | None:
+    def best(self, component: str | None = None) -> dict | None:
         return self._best
 
-    def set_best(self, entry: dict) -> None:
+    def set_best(self, entry: dict, component: str = "events") -> None:
         self._best = dict(entry)
         self.set_best_called = dict(entry)
 

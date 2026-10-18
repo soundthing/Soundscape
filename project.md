@@ -87,14 +87,14 @@ audio, because many important sounds come from off-screen.
 
 ---
 
-## Team and ownership
+## Components
 
-| | Owns | Code |
+| | Covers | Code |
 |---|---|---|
 | **Person 1: sound events** | tagger, CLAP extra labels, AudioSet→vocabulary mapping, thresholds, safety set, VAD, post-processing, applying priors | `src/soundthing/events/`, `config/vocabulary.yaml`, `config/thresholds.yaml` |
-| **Person 2: environment** | shot segmentation, visual and audio branches, fusion, confidence and `general` fallback, environment list, **priors table (single owner)** | `src/soundthing/environment/`, `config/environments.yaml`, `config/priors.yaml` |
+| **Person 2: environment** | shot segmentation, visual and audio branches, fusion, confidence and `general` fallback, environment list, priors table | `src/soundthing/environment/`, `config/environments.yaml`, `config/priors.yaml` |
 | **Person 3: pipeline, product, eval** | ffmpeg extraction, orchestration/CLI, VTT/SRT and subtitle merge, FastAPI and player, eval harness, baseline vs conditioned comparison, pitch | `extract.py`, `pipeline.py`, `captions.py`, `evaluate.py`, `server/` |
-| **Everyone** | labels about a third of the eval clips, ideally including clips outside their own component | `labels/` |
+| **Labels** | hand-labeled eval clips | `labels/` |
 
 Shared and changed only by agreement: `contracts.py`, `config.py`, `stages.py`,
 `docs/interfaces.md`.
@@ -141,13 +141,13 @@ EventDetector(inputs, segments | None, cfg) -> list[CaptionEvent]       # Person
 
 ## Shared config (`config/`)
 
-| File | Owner | Contents |
-|---|---|---|
-| `environments.yaml` | P2 | 7 environments (`general` + 6), each with CLIP visual prompts and CLAP audio prompts |
-| `vocabulary.yaml` | P1 | 61 classes (10 safety) with caption text, AudioSet label mapping, CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
-| `priors.yaml` | P2 | per-environment `default` + class weights, plus `floor` |
-| `thresholds.yaml` | P1 | default 0.5, safety default 0.6, per-class overrides (e.g. gunshot 0.75) |
-| `pipeline.yaml` | per section | backends, extraction rate/fps, segmentation, model names, fusion weights, window/hop, VAD suppression, post-processing params, caption cue limits, eval tolerance |
+| File | Contents |
+|---|---|
+| `environments.yaml` | 7 environments (`general` + 6), each with CLIP visual prompts and CLAP audio prompts |
+| `vocabulary.yaml` | 61 classes (10 safety) with caption text, AudioSet label mapping, CLAP prompts, coarse group, `safety` and `sustained` flags; 7 coarse groups |
+| `priors.yaml` | per-environment `default` + class weights, plus `floor` |
+| `thresholds.yaml` | default 0.5, safety default 0.6, per-class overrides (e.g. gunshot 0.75) |
+| `pipeline.yaml` | backends, extraction rate/fps, segmentation, model names, fusion weights, window/hop, VAD suppression, post-processing params, caption cue limits, eval tolerance |
 
 Adding an environment means one entry in `environments.yaml` plus one block in
 `priors.yaml`, with no code changes. Run `soundthing check-config` after any edit. It
@@ -229,8 +229,7 @@ the AudioSet names against the checkpoint's label list.
   time, so it's the fallback if a model component runs late.
 - **Integration and tuning:** run `soundthing eval` early and often. It settles "did this
   change help?" quickly.
-- **Priors table** is the shared hotspot. P2 is its single owner, and P1 sends changes
-  through them.
+- **Priors table** is the shared hotspot: change it only with confirmation (AGENTS.md §1).
 
 ---
 

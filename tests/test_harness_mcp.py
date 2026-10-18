@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,9 @@ from typing import Any
 import pytest
 
 from soundthing.harness.mcp_server import TuningTools, build_server
+
+
+requires_mcp = pytest.mark.skipif(importlib.util.find_spec("mcp") is None, reason="needs mcp")
 
 
 def make_fake_per_clip(n: int = 10, tp: int = 5) -> dict[str, Any]:
@@ -81,13 +85,13 @@ class FakeLedger:
     def append(self, entry: dict[str, Any]) -> None:
         self.entries.append(dict(entry))
 
-    def read(self) -> list[dict[str, Any]]:
+    def read(self, component: str | None = None) -> list[dict[str, Any]]:
         return list(self.entries)
 
-    def best(self) -> dict[str, Any] | None:
+    def best(self, component: str | None = None) -> dict[str, Any] | None:
         return self._best
 
-    def set_best(self, entry: dict[str, Any] | None) -> None:
+    def set_best(self, entry: dict[str, Any] | None, component: str = "events") -> None:
         self._best = dict(entry) if entry is not None else None
 
     def git_state(self, cwd: Any = None) -> dict[str, Any]:
@@ -107,6 +111,7 @@ class FakeScoreFn:
         cfg: Any = None,
         best: Any = None,
         labels_dir: Any = None,
+        component: str = "events",
     ) -> FakeResult:
         self._counter += 1
         self.calls.append({
@@ -243,8 +248,9 @@ def tuning_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Any):
     }
 
 
+@requires_mcp
 def test_1_list_tools_names(tuning_env: dict[str, Any]):
-    """1. asyncio.run(build_server(tools).list_tools()) names == the 8 tool names exactly."""
+    """1. asyncio.run(build_server(tools).list_tools()) names == the 11 tool names exactly."""
     tools = tuning_env["tools"]
     server = build_server(tools)
     tool_list = asyncio.run(server.list_tools())
@@ -253,14 +259,17 @@ def test_1_list_tools_names(tuning_env: dict[str, Any]):
         "describe_space",
         "get_best",
         "get_ledger",
+        "list_components",
         "score",
         "sweep",
         "promote",
         "propose_shared_change",
         "request_recache",
+        "run_experiment",
+        "promote_code",
     ]
     assert sorted(names) == sorted(expected)
-    assert len(names) == 8
+    assert len(names) == 11
 
 
 def test_2_every_tool_call_logs_mcp_call(tuning_env: dict[str, Any]):

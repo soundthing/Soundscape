@@ -1,6 +1,6 @@
 """Paired bootstrap acceptance test for candidate configurations.
 
-Computes pooled F_beta objective and runs paired bootstrap resampling over clips
+Computes pooled objective and runs paired bootstrap resampling over clips
 to determine if a candidate's gain over the best known result is statistically
 significant (lower confidence bound > 0).
 """
@@ -46,7 +46,9 @@ def _get_counts(entry: Any, mode: str) -> tuple[float, float, float, float]:
     )
 
 
-def _vectorized_f_beta(totals: np.ndarray, beta: float) -> np.ndarray:
+def _vectorized_f_beta(totals: np.ndarray, beta: float = 0.5) -> np.ndarray:
+    if totals.ndim == 1:
+        totals = totals[None, :]
     tp_fine = totals[:, 0]
     tp_coarse = totals[:, 1]
     fp = totals[:, 2]
@@ -78,22 +80,68 @@ def _vectorized_f_beta(totals: np.ndarray, beta: float) -> np.ndarray:
 def paired_bootstrap(
     cand_per_clip: dict[str, Any],
     best_per_clip: dict[str, Any],
-    n: int = 1000,
+    n: int | None = None,
     seed: int = 0,
     beta: float = 0.5,
     mode: str = "conditioned",
+    component: str = "events",
+    n_boot: int = 1000,
 ) -> dict[str, float]:
     """Paired bootstrap test over common clips.
 
     Resamples clips with replacement n times for both candidate and best,
-    computing the pooled F_beta difference for each resample.
+    computing the pooled difference for each resample.
     Returns: {"gain": float, "lo": float, "hi": float}
     """
+    iterations = n if n is not None else n_boot
     clips = sorted(set(cand_per_clip.keys()) & set(best_per_clip.keys()))
     if not clips:
         raise ValueError("No common clips between candidate and best")
 
     c_count = len(clips)
+
+    has_stats = all(
+        isinstance(cand_per_clip[vid], dict) and "stats" in cand_per_clip[vid]
+        for vid in clips
+    ) and all(
+        isinstance(best_per_clip[vid], dict) and "stats" in best_per_clip[vid]
+        for vid in clips
+    )
+
+    if has_stats:
+        from soundthing.harness import components
+
+        comp = components.get(component)
+        stat_obj = comp.stat_objective
+
+        cand_arr = np.array([cand_per_clip[vid]["stats"] for vid in clips], dtype=np.float64)
+        best_arr = np.array([best_per_clip[vid]["stats"] for vid in clips], dtype=np.float64)
+
+        cand_sum = cand_arr.sum(axis=0, keepdims=True)
+        best_sum = best_arr.sum(axis=0, keepdims=True)
+        f_cand = float(stat_obj(cand_sum)[0])
+        f_best = float(stat_obj(best_sum)[0])
+        gain = float(f_cand - f_best)
+
+        rng = np.random.default_rng(seed)
+        idx = rng.integers(0, c_count, size=(iterations, c_count))
+
+        cand_samples = cand_arr[idx]
+        best_samples = best_arr[idx]
+
+        cand_totals = cand_samples.sum(axis=1)
+        best_totals = best_samples.sum(axis=1)
+
+        f_cand_resampled = stat_obj(cand_totals)
+        f_best_resampled = stat_obj(best_totals)
+
+        diffs = f_cand_resampled - f_best_resampled
+        lo = float(np.percentile(diffs, 2.5))
+        hi = float(np.percentile(diffs, 97.5))
+
+        return {"gain": gain, "lo": lo, "hi": hi}
+
+    # Back-compat: fall back to mode counts (events)
     cand_arr = np.array([_get_counts(cand_per_clip[vid], mode) for vid in clips], dtype=np.float64)
     best_arr = np.array([_get_counts(best_per_clip[vid], mode) for vid in clips], dtype=np.float64)
 
@@ -104,7 +152,7 @@ def paired_bootstrap(
     gain = float(f_cand - f_best)
 
     rng = np.random.default_rng(seed)
-    idx = rng.integers(0, c_count, size=(n, c_count))
+    idx = rng.integers(0, c_count, size=(iterations, c_count))
 
     cand_samples = cand_arr[idx]
     best_samples = best_arr[idx]

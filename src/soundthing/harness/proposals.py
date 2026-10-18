@@ -1,7 +1,7 @@
 """Generate human-review proposals for shared configuration changes.
 
 Shared configuration files (config/vocabulary.yaml and config/priors.yaml)
-belong to the whole team / other roles and cannot be written automatically
+are shared contracts and cannot be written automatically
 by tuning scripts. This module drafts markdown proposals for review.
 """
 
@@ -62,7 +62,8 @@ def propose_shared_change(
         raise ValueError("overrides must be a non-empty dict")
 
     for key in overrides:
-        if not (key.startswith("vocabulary.") or key.startswith("priors.")):
+        is_shared = key.startswith("vocabulary.") or key.startswith("priors.")
+        if not is_shared:
             raise ValueError(
                 f"Key {key!r} is not a shared configuration key (must start with 'vocabulary.' or 'priors.')"
             )
@@ -71,12 +72,20 @@ def propose_shared_change(
         cfg = load_config()
 
     target_files: list[str] = []
-    has_vocab = any(k.startswith("vocabulary.") for k in overrides)
-    has_priors = any(k.startswith("priors.") for k in overrides)
-    if has_vocab:
+    if any(k.startswith("vocabulary.") for k in overrides):
         target_files.append("config/vocabulary.yaml")
-    if has_priors:
+    if any(k.startswith("priors.") for k in overrides):
         target_files.append("config/priors.yaml")
+    if any(k.startswith("thresholds.") for k in overrides):
+        target_files.append("config/thresholds.yaml")
+    if any(
+        k.startswith("events.")
+        or k.startswith("environment.")
+        or k.startswith("captions.")
+        or k.startswith("extract.")
+        for k in overrides
+    ):
+        target_files.append("config/pipeline.yaml")
 
     diff_lines: list[str] = []
     for key in sorted(overrides.keys()):

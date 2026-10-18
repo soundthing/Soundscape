@@ -1,4 +1,4 @@
-"""CLI entry point for soundthing events tuning harness."""
+"""CLI entry point for soundthing tuning harness."""
 
 from __future__ import annotations
 
@@ -43,8 +43,24 @@ def _parse_overrides_and_sets(
 
 def _handle_score(args: argparse.Namespace, tools: Any) -> int:
     overrides = _parse_overrides_and_sets(args.overrides, args.set_items)
-    res = tools.score(overrides, args.hypothesis or "")
-    print(json.dumps(res, indent=2, default=str))
+    if args.no_log:
+        from soundthing.harness.score import score as raw_score
+
+        cfg = load_config()
+        res = raw_score(overrides, split=args.split, cfg=cfg, component=args.component, labels_dir=args.labels)
+        res_dict = res.to_dict()
+    else:
+        if args.split != "dev":
+            raise ValueError("only dev scores are logged; use --no-log for other splits")
+        res_dict = tools.score(overrides, args.hypothesis or "", component=args.component, labels_dir=args.labels
+        )
+
+    if args.json_out:
+        out_p = Path(args.json_out)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(json.dumps(res_dict, indent=2, default=str), encoding="utf-8")
+
+    print(json.dumps(res_dict, indent=2, default=str))
     return 0
 
 
@@ -52,13 +68,13 @@ def _handle_sweep(args: argparse.Namespace, tools: Any) -> int:
     params = [p.strip() for p in args.params.split(",") if p.strip()]
     if not params:
         raise ValueError("--params cannot be empty")
-    res = tools.sweep(params, args.strategy, args.budget)
+    res = tools.sweep(params, args.strategy, args.budget, component=args.component)
     print(json.dumps(res, indent=2, default=str))
     return 0
 
 
 def _handle_promote(args: argparse.Namespace, tools: Any) -> int:
-    res = tools.promote(args.run_id)
+    res = tools.promote(args.run_id, component=args.component)
     print(json.dumps(res, indent=2, default=str))
     promoted = res.get("promoted", False) if isinstance(res, dict) else False
     return 0 if promoted else 1
@@ -74,20 +90,42 @@ def _handle_propose(args: argparse.Namespace, tools: Any) -> int:
 
 
 def _handle_space(args: argparse.Namespace, tools: Any) -> int:
-    res = tools.describe_space()
+    res = tools.describe_space(component=args.component)
     print(json.dumps(res, indent=2, default=str))
     return 0
 
 
 def _handle_best(args: argparse.Namespace, tools: Any) -> int:
-    res = tools.get_best()
+    res = tools.get_best(component=args.component)
     print(json.dumps(res, indent=2, default=str))
     return 0
 
 
 def _handle_ledger(args: argparse.Namespace, tools: Any) -> int:
-    res = tools.get_ledger(args.limit)
+    res = tools.get_ledger(args.limit, component=args.component)
     print(json.dumps(res, indent=2, default=str))
+    return 0
+
+
+def _handle_list_components(args: argparse.Namespace, tools: Any) -> int:
+    from soundthing.harness import components
+
+    output: list[dict[str, Any]] = []
+    for name in components.names():
+        try:
+            comp = components.get(name)
+            output.append({
+                "name": comp.name,
+                "sections": list(comp.sections),
+                "code_paths": list(comp.code_paths),
+                "available": True,
+            })
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            output.append({
+                "name": name,
+                "available": False,
+            })
+    print(json.dumps(output, indent=2))
     return 0
 
 
@@ -134,7 +172,6 @@ def _handle_import_audioset(args: argparse.Namespace, tools: Any) -> int:
     from soundthing.harness import datasets
 
     cfg = load_config()
-    # Convert into a temp dir so no copy of the holdout labels is left outside the split.
     with tempfile.TemporaryDirectory() as tmp:
         datasets.audioset_strong_labels(Path(args.tsv), cfg, Path(tmp), Path(args.class_csv))
         split = datasets.split_audioset(
@@ -150,13 +187,32 @@ def _handle_import_audioset(args: argparse.Namespace, tools: Any) -> int:
     return 0
 
 
+
+def _handle_build_cache(args: argparse.Namespace, tools: Any) -> int:
+    cfg = load_config()
+    labels, audio = Path(args.labels), Path(args.audio)
+    if args.component == "environment":
+        from soundthing.harness.components.environment import build_env_caches
+
+        n = build_env_caches(labels, audio, cfg)
+    elif args.component == "events":
+        from soundthing.harness import datasets
+
+        n = len(datasets.build_dev_caches(audio, labels, cfg) or [])
+    else:
+        print(f"{args.component} reuses the events and environment caches; nothing to build")
+        return 0
+    print(json.dumps({"component": args.component, "caches": n}))
+    return 0
+
+
 def main(argv: list[str] | None = None, tools: Any = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(
         prog="soundthing.harness",
-        description="Soundthing events tuning CLI",
+        description="Soundthing tuning harness CLI",
     )
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
@@ -165,6 +221,11 @@ def main(argv: list[str] | None = None, tools: Any = None) -> int:
     p_score.add_argument("--set", dest="set_items", action="append", default=[], help="Override parameter KEY=VALUE")
     p_score.add_argument("--overrides", type=str, default=None, help="JSON object of overrides")
     p_score.add_argument("--hypothesis", type=str, default="", help="Hypothesis for this run")
+    p_score.add_argument("--component", type=str, default="events", help="Component to score")
+    p_score.add_argument("--json-out", type=str, default=None, help="Path to write ScoreResult JSON")
+    p_score.add_argument("--no-log", action="store_true", help="Skip writing to experiment ledger")
+    p_score.add_argument("--split", type=str, default="dev", choices=["dev", "holdout"], help="Split to score")
+    p_score.add_argument("--labels", type=str, default=None, help="Score this labels dir instead of the split's")
     p_score.set_defaults(func=_handle_score)
 
     # sweep
@@ -178,11 +239,13 @@ def main(argv: list[str] | None = None, tools: Any = None) -> int:
         help="Search strategy",
     )
     p_sweep.add_argument("--budget", type=int, default=20, help="Search budget")
+    p_sweep.add_argument("--component", type=str, default="events", help="Component to sweep")
     p_sweep.set_defaults(func=_handle_sweep)
 
     # promote
     p_promote = subparsers.add_parser("promote", help="Promote candidate run to config")
     p_promote.add_argument("run_id", type=str, help="Ledger run_id to promote")
+    p_promote.add_argument("--component", type=str, default="events", help="Component to promote")
     p_promote.set_defaults(func=_handle_promote)
 
     # propose
@@ -194,16 +257,23 @@ def main(argv: list[str] | None = None, tools: Any = None) -> int:
 
     # space
     p_space = subparsers.add_parser("space", help="Describe tunable parameter space")
+    p_space.add_argument("--component", type=str, default="events", help="Component to describe")
     p_space.set_defaults(func=_handle_space)
 
     # best
     p_best = subparsers.add_parser("best", help="Get current best result from ledger")
+    p_best.add_argument("--component", type=str, default="events", help="Component to get best")
     p_best.set_defaults(func=_handle_best)
 
     # ledger
     p_ledger = subparsers.add_parser("ledger", help="Get recent ledger entries")
     p_ledger.add_argument("--limit", type=int, default=20, help="Number of entries to return")
+    p_ledger.add_argument("--component", type=str, default="events", help="Component to filter ledger")
     p_ledger.set_defaults(func=_handle_ledger)
+
+    # list-components
+    p_list = subparsers.add_parser("list-components", help="List registered harness components")
+    p_list.set_defaults(func=_handle_list_components)
 
     # recache
     p_recache = subparsers.add_parser("recache", help="Request cache build on Kaggle")
@@ -234,6 +304,18 @@ def main(argv: list[str] | None = None, tools: Any = None) -> int:
     p_as.add_argument("--holdout-frac", type=float, default=0.2, help="Share of clips held out")
     p_as.add_argument("--build-caches", action="store_true", help="Also build feature caches (slow on CPU)")
     p_as.set_defaults(func=_handle_import_audioset)
+
+    from soundthing.harness import runner
+
+    runner.cli_register(subparsers)
+    for name in ("run-experiment", "promote-code"):
+        subparsers.choices[name].set_defaults(func=lambda a, _tools: runner.cli_handle(a))
+
+    p_bc = subparsers.add_parser("build-cache", help="Build a component's caches for a labels dir")
+    p_bc.add_argument("--component", type=str, default="events", help="Component")
+    p_bc.add_argument("--labels", required=True, type=str, help="Labels directory")
+    p_bc.add_argument("--audio", required=True, type=str, help="Audio directory (<video_id>.wav)")
+    p_bc.set_defaults(func=_handle_build_cache)
 
     if not argv:
         parser.print_help(sys.stderr)
