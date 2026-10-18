@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,9 @@ from typing import Any
 import pytest
 
 from soundthing.harness.mcp_server import TuningTools, build_server
+
+
+requires_mcp = pytest.mark.skipif(importlib.util.find_spec("mcp") is None, reason="needs mcp")
 
 
 def make_fake_per_clip(n: int = 10, tp: int = 5) -> dict[str, Any]:
@@ -243,6 +247,7 @@ def tuning_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Any):
     }
 
 
+@requires_mcp
 def test_1_list_tools_names(tuning_env: dict[str, Any]):
     """1. asyncio.run(build_server(tools).list_tools()) names == the 8 tool names exactly."""
     tools = tuning_env["tools"]
