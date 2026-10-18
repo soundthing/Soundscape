@@ -60,3 +60,31 @@ weight vector over vocabulary classes has lowest cosine similarity to the true e
 Sharing masked scores across baseline and conditioned modes halves scoring and VAD cost.
 Caching only the most recent entry bounded by audio path, mtime, size, and config keys
 prevents unbounded memory growth during batch runs.
+
+## Keep the deepest qualified sound during overlap — events
+AudioSet parent/child predictions often describe one source. Keep qualified
+specific labels and subtract their intervals from qualifying ancestors, preserving
+unrelated sounds and the general label's remaining intervals. Use all ontology
+paths rather than only one parent. This does not separate two physical sources.
+Readability padding must obey the same relationship or duplicate parents reappear.
+
+## Every PANNs output has an independent class — events
+A broad alias must not directly score a specific class: a high `Dog` score does not
+prove barking. Retain the original ids for primary labels, give remaining AudioSet
+labels machine-id-based ids, and preserve the five CLAP-only classes separately.
+This expands coverage without replacing the model or claiming new accuracy.
+
+## Dataset enrichment is a weak association estimate — events
+Sound-VECaps provides visual context for AudioSet records, allowing scene-word
+matching without downloading another audio corpus or treating event labels as scene
+labels. Its generated descriptions and AudioSet's incomplete positive annotations
+limit what can be inferred. Exclude uncertain/multiple scene matches, hold out video
+ids, smooth toward global frequencies, bound relative enrichment, and keep
+unsupported cases neutral. Held-out annotation loss is not sound-event F1.
+
+## Positive odds coefficients keep unlikely sounds possible — events
+Multiplying by a small environment weight can make a class unable to reach its
+threshold even with perfect acoustic evidence. Positive bounded odds adjustment
+preserves scores at 0 and 1, changes the evidence required in between, and supports
+both enrichment and downweighting. Existing configurations retain multiplication
+unless they explicitly select the new application. Safety and general remain neutral.

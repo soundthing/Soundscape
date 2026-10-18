@@ -39,6 +39,8 @@ events:             # Person 1
       scale: 20.0
   vad:
     model: silero
+    # Speech labels must not be suppressed by the speech detector itself.
+    exempt_classes: [audioset_m_09x0r, audioset_m_05zppz, audioset_m_02zsn, audioset_m_0ytgt, audioset_m_01h8n0, audioset_m_02qldy, audioset_m_0261r1, audioset_m_0brhx]
     suppress_under_speech: 0.3  # multiply non-safety scores by this inside speech regions
     threshold: 0.5
     min_speech_sec: 0.25
@@ -51,6 +53,41 @@ events:             # Person 1
     coarse_margin: 0.1          # top-2 within this margin and same coarse group -> coarse label
     sustained_repeat_sec: 60.0  # re-caption a sustained sound at most this often
     max_on_screen: 2
+  prior_estimation:
+    alpha: 200.0
+    min_class: 20
+    min_environment: 50
+    floor: 0.25
+    max_gain: 4.0
+    uncertainty_pattern: \b(?:possibly|perhaps|might|could|such as|seems|likely|probably)\b
+    environment_patterns:
+      street:
+      - \b(?:city street|busy street|street corner|sidewalk|intersection|urban street|roadside)\b
+      kitchen:
+      - \bkitchen\b
+      office:
+      - \b(?:office|workplace|meeting room|conference room)\b
+      nature:
+      - \b(?:forest|woodland|beach|riverbank|countryside|rural landscape|wilderness|nature reserve)\b
+      sports_venue:
+      - \b(?:stadium|sports arena|basketball court|tennis court|soccer field|football field|baseball field|sports venue)\b
+      vehicle_interior:
+      - \b(?:inside (?:a |the )?(?:car|truck|private vehicle)|car interior|truck interior|dashboard|driver.s seat)\b
+      lecture_hall:
+      - \b(?:lecture hall|lecture theatre|lecture theater|university auditorium)\b
+      restaurant:
+      - \b(?:restaurant|dining room)\b
+      cafe:
+      - \b(?:cafe|café|coffee shop|coffeehouse)\b
+      public_transportation:
+      - \b(?:inside (?:a |the )?(?:bus|train|subway|tram)|bus interior|train interior|subway car|passenger (?:train|bus)|metro
+        station|subway station)\b
+      factory:
+      - \b(?:factory|industrial plant|manufacturing plant|manufacturing facility)\b
+      construction:
+      - \b(?:construction site|building site|construction zone)\b
+      classroom:
+      - \b(?:classroom|school room)\b
   modifiers:
     enabled: true
     side_balance: 0.35

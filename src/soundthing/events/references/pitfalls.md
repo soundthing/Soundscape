@@ -40,3 +40,11 @@ cause is gone.
   boundaries or at the clip edge can produce detections ending after `inputs.duration`
   or starting at/after it. Dropping start >= duration and clipping ends to duration
   ensures all events satisfy contract validation.
+
+- **The full label set contains speech.** Speech-label outputs must be exempt from
+  VAD suppression; otherwise the speech detector suppresses speech's own captions.
+- **Ontology nodes and model outputs differ.** Unscored intermediate nodes may connect
+  scored ancestors and children. Project through them, and retain multiple parents.
+- **AudioSet label absence is not a verified negative.** Derived environment
+  coefficients describe annotated co-occurrence in a selected corpus, not calibrated
+  real-world event rates. Generated context captions can also be wrong.

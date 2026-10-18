@@ -127,6 +127,7 @@ def collapse_confusable(
     pcfg = cfg.pipeline.get("events", {}).get("postprocess", {})
     coarse_margin = float(pcfg.get("coarse_margin", 0.1))
 
+    hierarchy = cfg.hierarchy()
     relabeled: list[CaptionEvent] = []
     for ev in events:
         group_id = _safe_coarse_of(ev.class_id, cfg)
@@ -143,7 +144,9 @@ def collapse_confusable(
             own_idx = scores.class_ids.index(ev.class_id)
             own_peak = float(peaks[own_idx])
 
-            other_indices = [idx for idx in range(len(scores.class_ids)) if idx != own_idx]
+            other_indices = [idx for idx, cid in enumerate(scores.class_ids)
+                             if idx != own_idx and cid not in hierarchy.get(ev.class_id, ())
+                             and ev.class_id not in hierarchy.get(cid, ())]
             if other_indices:
                 runner_up_idx = max(
                     other_indices,

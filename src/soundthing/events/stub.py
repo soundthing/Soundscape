@@ -12,7 +12,8 @@ import numpy as np
 
 from ..config import Config
 from ..contracts import CaptionEvent, EnvSegment, ExtractedInputs, env_probs_at
-from .conditioning import prior_weights
+from .conditioning import prior_weights, adjust_scores
+from .hierarchy import suppress_ancestors
 
 
 def detect_stub(
@@ -27,7 +28,9 @@ def detect_stub(
         score = float(rng.uniform(0.5, 0.95))
         if segments is not None:
             w = prior_weights(cfg, env_probs_at(segments, t), [c.id])[0]
-            score *= cfg.priors.floor + (1 - cfg.priors.floor) * w
+            score = float(adjust_scores(score, w, floor=cfg.priors.floor,
+                                        application=getattr(cfg.priors, "application", "multiplicative"),
+                                        max_gain=getattr(cfg.priors, "max_gain", 4.)))
         end = min(inputs.duration, t + float(rng.uniform(0.4, 2.5)))
         if score >= cfg.threshold(c.id) and end > t:
             events.append(
@@ -35,4 +38,4 @@ def detect_stub(
                              confidence=round(score, 3))
             )
         t = end + float(rng.uniform(0.5, 3.0))
-    return events
+    return suppress_ancestors(events, cfg.hierarchy())

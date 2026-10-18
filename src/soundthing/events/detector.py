@@ -16,6 +16,7 @@ from .clap import load_clap, text_embeddings
 from .core import EventModels, score_window
 from .tagger import build_tagger_map, load_tagger
 from .types import FrameScores
+from .hierarchy import suppress_ancestors
 from .vad import speech_mask, speech_regions
 
 _models_cache: dict[tuple, EventModels] = {}
@@ -38,7 +39,7 @@ def _models_cache_key(cfg: Config) -> tuple:
     clap_model = clap_cfg.get("model")
     clap_enabled = clap_cfg.get("enabled", True)
     calibration = _freeze(clap_cfg.get("calibration", {}))
-    return (tagger_model, clap_model, clap_enabled, calibration, tuple(cfg.class_ids))
+    return (tagger_model, clap_model, clap_enabled, calibration, tuple((c.id, tuple(c.audioset), tuple(c.clap)) for c in cfg.classes))
 
 
 def get_models(cfg: Config) -> EventModels:
@@ -124,8 +125,9 @@ def detect(
         # Speech masking: suppress non-safety classes under dialogue.
         mask = speech_mask(scores.times, speech_regions(audio, sr, cfg))
         safety = cfg.safety_ids()
+        exempt = set(ecfg.get("vad", {}).get("exempt_classes", []))
         factor = np.array(
-            [1.0 if c in safety else ecfg["vad"]["suppress_under_speech"] for c in scores.class_ids],
+            [1.0 if c in safety or c in exempt else ecfg["vad"]["suppress_under_speech"] for c in scores.class_ids],
             dtype=np.float32,
         )
         s = scores.scores.copy()
@@ -142,6 +144,7 @@ def detect(
     scores = pp.smooth(scores, pcfg["smoothing_sec"])
     events = pp.threshold_to_events(scores, cfg)
     events = pp.collapse_confusable(events, scores, cfg)
+    events = suppress_ancestors(events, cfg.hierarchy())
     events = pp.priority_filter(events, cfg)
 
     stereo_sr = getattr(inputs, "sample_rate", 16000)

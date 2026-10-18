@@ -12,7 +12,7 @@ Background knowledge (stack details, decisions, pitfalls, tuning results) lives 
 2. **Speech masking:** turn down non-safety guesses where people are talking.
 3. **Conditioning:** reweight likely events by environment; the safety set bypasses this.
 4. **Post-processing:** turn raw scores into clean, display-ready captions.
-5. **Vocabulary and thresholds:** the ~60-class vocabulary and per-class thresholds.
+5. **Vocabulary and thresholds:** all 527 AudioSet labels plus five CLAP-only classes, hierarchy filtering, and per-class thresholds.
 6. **Baseline vs conditioned:** both outputs every run, to show the environment layer helps.
 
 Also: hand-label a share of the eval clips. Prior changes go through Person 2.
@@ -40,13 +40,21 @@ masking, all post-processing steps, modifiers, the end-to-end `detect` flow with
 and raw scores shared across both modes, and the wrong-environment experiment
 (`python -m soundthing.events.experiments`).
 
-**Not done:** nothing has run on real models yet (the `events` extra isn't installed),
-and there are no labeled clips, so there are no F1 / FP-per-minute numbers. CLAP
-calibration and all thresholds are untuned placeholders.
+**Expanded detection:** all 527 PANNs labels map independently into 532 caption
+classes, with the 61 original ids retained. Hierarchy suppression and cue-padding
+protection have synthetic integration tests. Real PANNs + CLAP inference was run on
+a 12-second segment of a cached YouTube video; the 532 × 527 mapping and produced
+VTT were verified. There are still no labeled-clip F1 / FP-per-minute measurements.
+CLAP calibration and the default thresholds remain untuned placeholders.
 
-**Next:** install the `events` extra, run the real backend end to end via a local
-`--config` copy, verify AudioSet names (`check-config --audioset`), label clips, then
-milestones 5–7.
+**Data-derived prior proposal:** Sound-VECaps context captions joined with AudioSet
+training annotations cover all 527 labels. Estimation excludes official evaluation
+and AudioCaps validation/test ids, splits remaining records by video id, and shrinks
+sparse cases toward neutral. These are weak annotation associations, not measured
+real-world occurrence probabilities or detector-accuracy improvements.
+
+**Next:** validate the expanded conditioned path on real audio, then label clips
+and measure precision/recall and false positives before tuning thresholds.
 
 ## Milestones
 
@@ -59,7 +67,7 @@ milestones 5–7.
 3. **Speech masking:** add VAD so dialogue stops triggering false events. *Code done.*
 4. **Post-processing:** smoothing, merging, coarse fallback when unsure between similar
    sounds, once-only captions for sustained sounds, and a cap on captions on screen.
-   *Done.*
+   *Done; hierarchy-aware ancestor suppression and cue-padding protection added.*
 5. **Conditioned vs baseline:** compare both modes on the eval clips, including clips
    where the environment is deliberately wrong. *Tooling done (`soundthing eval` plus the
    wrong-env experiment); needs labeled clips.*

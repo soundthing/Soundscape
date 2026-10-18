@@ -60,7 +60,7 @@ def run_video(source: str | Path, runs_dir: str | Path, cfg: Config, modes=MODES
         events = detect(inputs, segments if mode == "conditioned" else None, cfg)
         C.save_events(events, run_dir / f"events.{mode}.json")
         caption_path = run_dir / f"captions.{mode}.vtt"
-        write_captions(events, caption_path, ccfg["min_cue_sec"], ccfg["max_cue_sec"])
+        write_captions(events, caption_path, ccfg["min_cue_sec"], ccfg["max_cue_sec"], hierarchy=cfg.hierarchy())
         if speech_subtitles is not None:
             # Keep canonical sound-only captions intact for the YouTube overlay.
             merge_subtitle_files(caption_path, speech_subtitles, run_dir / f"captions.{mode}.merged.vtt")
