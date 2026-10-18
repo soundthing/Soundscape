@@ -289,11 +289,11 @@ def fetch_audioset() -> None:
     if _count(audioset_dir() / "audio") and (audioset_dir() / "audioset_eval_strong.tsv").is_file():
         print("OK      AudioSet already in data/audioset_strong")
         return
-    from .harness.kaggle_io import KaggleIO, audioset_dataset_slug
+    from .harness.kaggle_io import KaggleClient, audioset_dataset_slug
 
     slug = audioset_dataset_slug() or AUDIOSET_DATASET
     print(f"downloading Kaggle dataset {slug} (~1.3 GB) ...", flush=True)
-    KaggleIO().download_dataset(slug, audioset_dir())
+    KaggleClient().download_dataset(slug, audioset_dir())
     print(f"OK      AudioSet ({_count(audioset_dir() / 'audio')} clips) in data/audioset_strong")
 
 
