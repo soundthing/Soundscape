@@ -1,0 +1,13 @@
+# Illustrative configuration records; no synthetic class ids are added to live config.
+classes:
+  - id: example_animal
+    caption: animal sounds
+    audioset: [Animal]
+  - id: example_dog
+    caption: dog sounds
+    audioset: [Dog]
+    parents: [example_animal]
+  - id: example_bark
+    caption: barking
+    audioset: [Bark]
+    parents: [example_dog]

@@ -18,6 +18,7 @@ from .conditioning import prior_weights
 def detect_stub(
     inputs: ExtractedInputs, segments: list[EnvSegment] | None, cfg: Config
 ) -> list[CaptionEvent]:
+    cfg.hierarchy()  # Exercise the same optional hierarchy contract as real configs.
     rng = np.random.default_rng(zlib.crc32(inputs.video_id.encode()))
     events: list[CaptionEvent] = []
     t = float(rng.uniform(0.5, 2.0))

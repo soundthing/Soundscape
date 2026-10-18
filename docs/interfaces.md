@@ -140,3 +140,21 @@ Then per-class thresholds from `thresholds.yaml` apply to the conditioned score.
   Reported `fine` (exact class) and `coarse` (both sides mapped to coarse group).
 - False positives per minute of labeled audio.
 - Environment accuracy: time-weighted agreement of `env` with labeled `env`.
+
+## Optional sound hierarchy
+
+A sound class in `vocabulary.yaml` may include `parents: [class_id, ...]`.
+The default is `[]`, so existing config and schema-version-1 artifacts remain valid.
+Parents must reference vocabulary classes or coarse groups. Multiple parents are
+allowed; unknown ids, duplicate parents and cycles are rejected by `check-config`.
+Existing `coarse` membership also makes that group an ancestor for display purposes.
+`Config.hierarchy()` resolves all ancestors through intermediate nodes.
+
+Person 1 suppresses a qualifying ancestor only during intervals covered by a
+qualifying descendant. Parent and child meet their own thresholds independently;
+siblings and unrelated simultaneous events remain eligible. Apply this after
+thresholds/minimum event duration and before the concurrent-caption limit.
+Person 3 uses the same hierarchy when extending cue durations, so readability
+padding cannot reintroduce parent/child duplicates. The event JSON fields and
+schema version do not change; Person 2's environment outputs are unchanged.
+See `docs/examples/hierarchy.yaml` for a configuration-only example.

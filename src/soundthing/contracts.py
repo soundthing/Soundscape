@@ -143,6 +143,7 @@ def env_probs_at(segments: list[EnvSegment], t: float) -> dict[str, float]:
 
 @dataclass
 class CaptionEvent:
+    """Final caption event; hierarchy ancestry lives in vocabulary config, not this payload."""
     """A final, display-ready non-speech caption."""
 
     start: float

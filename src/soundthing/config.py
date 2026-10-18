@@ -39,6 +39,7 @@ class SoundClass:
     coarse: str | None = None
     safety: bool = False
     sustained: bool = False
+    parents: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -114,6 +115,27 @@ class Config:
     def coarse_of(self, class_id: str) -> str | None:
         return self.sound_class(class_id).coarse
 
+    def hierarchy(self) -> dict[str, frozenset[str]]:
+        """All ancestors per id, including existing coarse fallback groups."""
+        parents = {c.id: set(c.parents) | ({c.coarse} if c.coarse else set()) for c in self.classes}
+        parents.update({group: set() for group in self.coarse_groups})
+        result: dict[str, frozenset[str]] = {}
+        visiting: set[str] = set()
+
+        def visit(cid: str) -> frozenset[str]:
+            if cid in visiting:
+                raise ConfigError(f"vocabulary.yaml: hierarchy cycle at {cid!r}")
+            if cid not in result:
+                visiting.add(cid)
+                direct = parents.get(cid, set())
+                result[cid] = frozenset(direct | {ancestor for parent in direct for ancestor in visit(parent)})
+                visiting.remove(cid)
+            return result[cid]
+
+        for cid in parents:
+            visit(cid)
+        return result
+
     # -- validation ----------------------------------------------------------
 
     def validate(self, audioset_labels: set[str] | None = None) -> list[str]:
@@ -147,6 +169,25 @@ class Config:
                 for name in c.audioset:
                     if name not in audioset_labels:
                         errors.append(f"class {c.id}: AudioSet label {name!r} not in label list")
+
+        hierarchy_valid = True
+        hierarchy_ids = set(class_ids) | set(self.coarse_groups)
+        for c in self.classes:
+            if not isinstance(c.parents, list) or not all(isinstance(p, str) for p in c.parents):
+                errors.append(f"class {c.id}: parents must be a list of ids")
+                hierarchy_valid = False
+                continue
+            if len(set(c.parents)) != len(c.parents):
+                errors.append(f"class {c.id}: duplicate parent ids")
+            for parent in c.parents:
+                if parent not in hierarchy_ids:
+                    errors.append(f"class {c.id}: unknown parent {parent!r}")
+                    hierarchy_valid = False
+        if hierarchy_valid:
+            try:
+                self.hierarchy()
+            except ConfigError as exc:
+                errors.append(str(exc))
 
         for env_id in env_ids:
             if env_id not in self.priors.environments:
